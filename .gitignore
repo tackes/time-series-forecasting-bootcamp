@@ -218,3 +218,66 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+
+# ==========================================
+# Packt Forecasting Cohort - Additional Rules
+# ==========================================
+
+# Jupyter and local development
+.jupyter/
+.ipython/
+*.ipynb_checkpoints/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local environment and credentials
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Machine learning model artifacts
+*.pkl
+*.pickle
+*.joblib
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.h5
+
+# ML experiment tracking
+lightning_logs/
+mlruns/
+wandb/
+runs/
+checkpoints/
+
+# Temporary forecasting outputs
+results/local/
+results/cache/
+results/tmp/
+outputs/
+artifacts/
+predictions/
+
+# Temporary data and processing
+data/raw/
+data/temp/
+data/cache/
+*.parquet.tmp
+*.feather
+
+# Temporary or scratch files
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*.swo
