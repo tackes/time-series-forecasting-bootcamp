@@ -1,0 +1,220 @@
+# ---
+# jupyter:
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#   kernelspec:
+#     display_name: Python 3
+#     language: python
+#     name: python3
+# ---
+
+# %% [markdown]
+# # Day 2 · 04 — Lab: foundation models, fine-tune or not? (30 min)
+#
+# We run pretrained time-series foundation models through `timecopilot` and decide, **on the validation
+# window**, whether fine-tuning is worth it:
+#
+# | Variant | What it uses |
+# |---|---|
+# | `Chronos2_zs` | Chronos-2, zero-shot, target history only |
+# | `Chronos2_zs_cov` | Chronos-2, zero-shot, with planned price and promotion as future covariates (in-context) |
+# | `Chronos2_ft` | Chronos-2 fine-tuned on our training windows (LoRA), then forecast with covariates |
+# | `TabPFN_TS` (optional) | TabPFN-TS: a tabular foundation model on calendar + running-index features |
+#
+# Reference points on the same series: SeasonalNaive and a default NHITS.
+#
+# **Hardware.** Everything runs on a CPU, but slowly. With no GPU the lab uses `FM_N_SERIES = 300` series; with
+# a GPU set it to `None` to use the full workshop sample. Weights download from Hugging Face on first use
+# (Chronos-2 ≈ 0.5 GB): **run the first two cells before the break.**
+
+# %%
+import logging
+import os
+import warnings
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import polars as pl
+import torch
+
+import bootcamp as bc
+
+warnings.filterwarnings("ignore")
+logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+logging.getLogger("lightning").setLevel(logging.ERROR)
+palette = ["#000000", "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#56B4E9", "#E69F00"]
+plt.rcParams.update({"figure.figsize": (12, 5), "axes.prop_cycle": plt.cycler(color=palette)})
+
+GPU = torch.cuda.is_available()
+FM_N_SERIES = None if GPU else 300     # subset of the workshop sample for CPU runs
+FT_STEPS = 1000 if GPU else 150        # fine-tuning steps
+RUN_TABPFN = GPU                       # TabPFN-TS needs a GPU (or a Prior Labs API token for cloud mode)
+CHRONOS_REPO = "amazon/chronos-2"      # "autogluon/chronos-2-small" (28M) is ~4x faster on CPU
+print(f"GPU: {GPU} | series: {FM_N_SERIES or 'all'} | fine-tune steps: {FT_STEPS}")
+
+# %%
+from huggingface_hub import snapshot_download
+
+snapshot_download(CHRONOS_REPO)        # pre-fetch the weights
+
+# %% [markdown]
+# ## Intuition: the well-travelled forecaster
+#
+# * **Zero-shot**: a consultant who has seen millions of series from every industry, but never your shop. You
+#   show them the last 93 weeks and ask for the next 14. No training, minutes to the first forecast.
+# * **Fine-tuned**: the same consultant after a week of induction on your data. Better on your quirks
+#   (intermittency, promo spikes), but now you pay for training and can overfit.
+# * **Covariates in context**: Chronos-2 reads the planned price and promotion calendar like notes in the
+#   margin, without retraining.
+#
+# **How to read your results.** Compare against the noise floor (Lab 01) and the leaderboard: if zero-shot is
+# within a few percent of NHITSx / LightGBM, it is a strong baseline for almost no effort. Fine-tune only if the
+# validation gain is clearly bigger than the fold-to-fold noise and worth the GPU time.
+#
+# *This lab was not executed for the reference run (model downloads were blocked on the build machine), so
+# there are no reference numbers: fill in the decision table with the room's results.*
+
+# %% [markdown]
+# ## Data: validation split first, test split last
+
+# %%
+panel = bc.load_panel()
+if FM_N_SERIES:
+    ids = (panel.select("unique_id", "sale_class").unique().sort("unique_id")
+           .sample(n=FM_N_SERIES, seed=bc.RANDOM_SEED)["unique_id"])
+    panel = panel.filter(pl.col("unique_id").is_in(ids.implode()))
+X = bc.FUTR_EXOG_COLS          # promo, discount_depth, price_index
+
+train, test = bc.split(panel)
+fit_part, valid = bc.split(train, cutoff=bc.VALID_START)
+n = panel["unique_id"].n_unique()
+print(f"{n} series")
+
+
+def frames(hist: pl.DataFrame, future: pl.DataFrame):
+    """History with covariates, and the known-future covariates for the next H weeks."""
+    return bc.to_nixtla(hist, X), bc.to_nixtla(future, X).drop(columns="y")
+
+# %% [markdown]
+# ## 1. Zero-shot vs fine-tuned, scored on the validation window
+
+# %%
+from timecopilot.models.foundation.chronos import Chronos, ChronosFinetuningConfig
+
+zs = Chronos(repo_id=CHRONOS_REPO, alias="Chronos2_zs", batch_size=64)
+zs_cov = Chronos(repo_id=CHRONOS_REPO, alias="Chronos2_zs_cov", batch_size=64)
+ft = Chronos(repo_id=CHRONOS_REPO, alias="Chronos2_ft", batch_size=64,
+             finetuning_config=ChronosFinetuningConfig(finetune_steps=FT_STEPS, finetune_mode="lora",
+                                                       learning_rate=1e-5, batch_size=64))
+
+
+def run_fms(hist: pl.DataFrame, future: pl.DataFrame) -> tuple[pd.DataFrame, dict]:
+    df_x, X_df = frames(hist, future)
+    secs, out = {}, []
+    for model, kwargs in [(zs, dict(df=df_x[["unique_id", "ds", "y"]])),
+                          (zs_cov, dict(df=df_x, X_df=X_df)),
+                          (ft, dict(df=df_x, X_df=X_df))]:
+        with bc.Timer() as t:
+            out.append(model.forecast(h=bc.H, freq=bc.FREQ, **kwargs).set_index(["unique_id", "ds"]))
+        secs[model.alias] = t.seconds
+        print(f"{model.alias:16s} {t.seconds:7.1f}s  ({1000 * t.seconds / n:6.1f}s per 1k series)")
+    if RUN_TABPFN:
+        from timecopilot.models.foundation.tabpfn import TabPFN
+        tab = TabPFN(alias="TabPFN_TS")
+        with bc.Timer() as t:
+            out.append(tab.forecast(df=df_x, X_df=X_df, h=bc.H, freq=bc.FREQ).set_index(["unique_id", "ds"]))
+        secs["TabPFN_TS"] = t.seconds
+    return pd.concat(out, axis=1).reset_index(), secs
+
+# %%
+_ = zs.forecast(df=bc.to_nixtla(fit_part.filter(pl.col("unique_id") == panel["unique_id"][0])), h=bc.H, freq=bc.FREQ)  # warm-up / load
+fm_valid, secs_valid = run_fms(fit_part, valid)
+
+# %% [markdown]
+# References on the **same** series and window: SeasonalNaive and a default NHITS (as in Lab 01, but with a
+# 56-week lookback).
+
+# %%
+from neuralforecast import NeuralForecast
+from neuralforecast.models import NHITS
+from statsforecast import StatsForecast
+from statsforecast.models import SeasonalNaive
+
+
+def references(hist: pl.DataFrame) -> tuple[pd.DataFrame, dict]:
+    Y = bc.to_nixtla(hist)
+    with bc.Timer() as t_sn:
+        sn = StatsForecast(models=[SeasonalNaive(season_length=bc.SEASON)], freq=bc.FREQ).forecast(df=Y, h=bc.H)
+    nf = NeuralForecast(models=[NHITS(h=bc.H, input_size=4 * bc.H, scaler_type="robust", max_steps=bc.MAX_STEPS,
+                                      random_seed=bc.RANDOM_SEED, **bc.trainer_kwargs())], freq=bc.FREQ)
+    with bc.Timer() as t_nh:
+        nf.fit(df=Y, val_size=bc.H)
+        nh = nf.predict()
+    return sn.merge(nh, on=["unique_id", "ds"]), {"SeasonalNaive": t_sn.seconds, "NHITS": t_nh.seconds}
+
+
+ref_valid, secs_ref = references(fit_part)
+valid_fc = fm_valid.merge(ref_valid, on=["unique_id", "ds"])
+valid_summary = bc.summarise(bc.score(valid_fc, valid, fit_part), valid_fc, valid)
+valid_summary["seconds"] = valid_summary["model"].map({**secs_valid, **secs_ref})
+valid_summary["seconds_per_1k_series"] = 1000 * valid_summary["seconds"] / n
+valid_summary[["model", "mean_rmsse", "median_rmsse", "wape", "seconds", "seconds_per_1k_series"]].round(3)
+
+# %% [markdown]
+# ### Where does fine-tuning change things?
+
+# %%
+m = bc.score(valid_fc, valid, fit_part)
+m = m[m.metric == "rmsse"].merge(bc.series_info(panel).to_pandas(), on="unique_id")
+cols = ["Chronos2_zs", "Chronos2_zs_cov", "Chronos2_ft", "NHITS", "SeasonalNaive"]
+m.groupby("demand_type")[cols].mean().round(3).assign(n=m.groupby("demand_type").size())
+
+# %% [markdown]
+# ## 2. Decision
+#
+# Fill in from the validation table above (not the test window):
+#
+# | Question | Answer |
+# |---|---|
+# | Does zero-shot Chronos-2 beat SeasonalNaive? NHITS? | |
+# | Do the covariates help (`zs_cov` vs `zs`)? On which demand types? | |
+# | Does fine-tuning beat zero-shot by more than the noise (Lab 01 fold spread)? | |
+# | Extra cost of fine-tuning, in seconds per 1k series, and on what hardware? | |
+# | **Decision**: zero-shot, fine-tune, or stay with the tuned global model? | |
+#
+# Things that push towards **fine-tuning**: many series, a stable domain, a GPU, a gain on validation that
+# survives a second fold. Towards **zero-shot**: few or new series, no GPU, frequent re-training, and a small or
+# noisy validation gain.
+
+# %%
+decision = valid_summary.set_index("model")[["mean_rmsse", "seconds_per_1k_series"]]
+gain_ft = decision.loc["Chronos2_zs_cov", "mean_rmsse"] - decision.loc["Chronos2_ft", "mean_rmsse"]
+extra_cost = decision.loc["Chronos2_ft", "seconds_per_1k_series"] - decision.loc["Chronos2_zs_cov", "seconds_per_1k_series"]
+print(f"fine-tuning: RMSSE gain {gain_ft:+.4f} for {extra_cost:+.0f}s per 1k series")
+
+# %% [markdown]
+# ## 3. Final run on the test window
+#
+# Refit (fine-tune) on the full training period and forecast the test window. If you ran a subset, the
+# leaderboard row is computed on that subset only (see `n_series`), so compare it with the reference rows below
+# rather than with the full leaderboard.
+
+# %%
+fm_test, secs_test = run_fms(train, test)
+ref_test, secs_ref_test = references(train)
+bc.save_forecasts(fm_test, "04_foundation")
+bc.record(fm_test, test, train, lab="04 foundation", fit_seconds=secs_test,
+          notes=f"{n} series; {CHRONOS_REPO}; ft steps {FT_STEPS}; GPU={GPU}")
+test_summary = bc.summarise(bc.score(fm_test.merge(ref_test, on=["unique_id", "ds"]), test, train))
+test_summary[["model", "mean_rmsse", "median_rmsse", "n_series"]].round(3)
+
+# %% [markdown]
+# ## Discussion
+#
+# * Did the validation decision hold on the test window?
+# * Chronos-2 sees at most ~93 weekly points of context here; its 8k-token context is irrelevant. What *is*
+#   it bringing?
+# * Licences differ: Chronos-2 is Apache-2.0; recent TabPFN weights are non-commercial. Check before production.
