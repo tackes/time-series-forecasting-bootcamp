@@ -1,30 +1,34 @@
-# Day 2 · Deep Learning, Foundation Models and Advanced Topics
+# Packt Nov 2026 · Day 2 · Deep Learning, Foundation Models and Advanced Topics
 
-Materials for Day 2 of the Time Series Bootcamp (255 minutes). They use the weekly retail dataset in
+Materials for Day 2 of the Packt Nov 2026 Time Series Bootcamp (28–29 Nov 2026; 4 hours). They use the weekly retail dataset in
 `../data` (see `../README.md`) and continue the Day 1 leaderboard: same test window, same score.
+Interactive figures: https://time-series-modeling.github.io/workshops/packt-2026-11/day2
 
 ## Agenda and files
 
 | Time | Min | Segment | Type | Material |
 |---|---|---|---|---|
 | 0:00 | 10 | Recap and handoff: Day 1 leaderboard | talk + notebook | `00_recap_leaderboard` |
-| 0:10 | 15 | Deep learning for global modelling: N-BEATS, N-HiTS, TFT vs GBDTs, costs | talk | slides |
-| 0:25 | 20 | Differences between ML and NNs: transforms, features, parameters, evaluation, losses | talk | slides |
-| 0:45 | 20 | Default training with GFMs: with/without decomposition, wrangling, evaluative splitting | lab | `01_lab_gfm_default_training` |
-| 1:05 | 30 | Hyperparameter optimisation: what is worth tuning | lab | `02_lab_hpo` |
-| 1:35 | 15 | Break | | |
-| 1:50 | 30 | Exogenous variables and responsiveness: price/promo response curves | lab | `03_lab_exogenous_response` |
-| 2:20 | 20 | Foundation models: zero-shot vs fine-tuned, covariates, context, inference cost | talk | slides |
-| 2:40 | 30 | Foundation models: fine-tune or not | lab | `04_lab_foundation_models` |
-| 3:10 | 20 | Hierarchy and coherence: reconciliation types and performance | lab | `05_lab_hierarchy_coherence` |
-| 3:30 | 20 | Uncertainty: proper scoring rules, conformal prediction | talk + demo | `06_demo_uncertainty` |
-| 3:50 | 20 | Model selection and ensembling: win rates, Elo / Bradley–Terry, by shape and volume | lab | `07_lab_model_selection` |
-| 4:10 | 5 | Final standings | | `07_lab_model_selection` (last section) |
+| 0:10 | 25 | Deep learning for global models; ML vs NNs: scaling, evaluation, losses | talk | slides |
+| 0:35 | 20 | Default training with GFMs: with/without decomposition, wrangling, evaluative splitting | lab | `01_lab_gfm_default_training` |
+| 0:55 | 30 | Hyperparameter optimisation: what is worth tuning | lab | `02_lab_hpo` |
+| 1:25 | 15 | Break | | |
+| 1:40 | 30 | Exogenous variables and responsiveness: price/promo response curves | lab | `03_lab_exogenous_response` |
+| 2:10 | 10 | Foundation models: zero-shot vs fine-tuned, covariates, cost | talk | slides |
+| 2:20 | 30 | Foundation models: fine-tune or not | lab | `04_lab_foundation_models` |
+| 2:50 | 20 | Hierarchy and coherence: reconciliation types and performance | lab | `05_lab_hierarchy_coherence` |
+| 3:10 | 15 | Uncertainty: proper scoring rules, conformal prediction | talk + demo | `06_demo_uncertainty` |
+| 3:25 | 20 | Model selection and ensembling: win rates, Elo / Bradley–Terry, by shape and volume | lab | `07_lab_model_selection` |
+| 3:45 | 10 | Wrap-up: final standings, take-home | | `07_lab_model_selection` (last section) |
 
-* `slides/day2_slides.md` — the lecture deck in [Marp](https://marp.app) Markdown, with speaker notes in the
-  HTML comments. Export with `npx @marp-team/marp-cli slides/day2_slides.md --pdf` (or `--pptx`), or open it in
+* `slides/day2_slides.md` — the 28-slide lecture deck (about 65 minutes of talk); `slides/day2_slides_full.md` is the
+  longer 52-slide version with extra background slides. Both are [Marp](https://marp.app) Markdown, with speaker
+  notes in the HTML comments. Export with `npx @marp-team/marp-cli slides/day2_slides.md --pdf` (or `--pptx`), or open it in
   VS Code with the Marp extension. `slides/day2_slides.pptx` is an editable copy (native text, tables and
   notes) that imports into PowerPoint or Google Slides.
+  Rebuild it with `node slides/build_pptx.js slides/day2_slides.md slides/day2_slides.pptx` (needs `pptxgenjs`;
+  see the note at the top of the script) after `python slides/make_figures.py` has refreshed the figures.
+* Every content slide ends with a one-line **Takeaway**; the last slide is the take-home summary.
 * Every topic has an **Intuition** slide (plain language, an analogy and a simple picture before any formula),
   and every lab has a **What we found** slide that reads the reference-run results and explains why they came
   out that way. The notebooks carry the same material as "Intuition" and "Reading the result" cells.

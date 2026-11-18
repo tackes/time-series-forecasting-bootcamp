@@ -145,6 +145,19 @@ for m in methods:
 pd.Series(chk, name="max |total − Σ items|").round(2)
 
 # %% [markdown]
+# Every reconciled column should show 0 (up to rounding); only the base forecasts are allowed to disagree.
+# **Always run this check.** With `hierarchicalforecast` 1.5.3, `MiddleOut` fails it on this hierarchy: the
+# total and departments agree, but the classes and everything below them do not add up to the departments.
+# A "reconciled" forecast that does not add up is not reconciled, so any method that fails is dropped from the
+# comparison below.
+
+# %%
+total_size = Y_train[Y_train.unique_id == "Total"].y.mean()
+incoherent = [m for m, v in chk.items() if m != "Base (incoherent)" and v > 1e-6 * total_size]
+print("fails the coherence check, dropped:", incoherent)
+methods = [m for m in methods if m not in incoherent]
+
+# %% [markdown]
 # ## 4. Accuracy per level
 #
 # Scaled errors (RMSSE against a 1-step naive, because aggregates have <2 years of history) so levels are
@@ -177,15 +190,19 @@ plt.tight_layout()
 #
 # ![Lab 05 results](slides/img/res_lab05.png)
 #
-# In the reference run (ratios to the incoherent base forecasts):
+# In the reference run (ratios to the incoherent base forecasts). Scores in this table are scaled by the
+# 1-step naive error, so they are not on the leaderboard scale; read the ratios.
 #
 # * **BottomUp**: items unchanged, total ≈ 29 % worse. Small item biases add up across 2,000 items.
 # * **TopDown**: total unchanged, items ≈ 10 % worse. Fixed proportions miss item-level promotions.
-# * **MinT-shrink**: within a few percent of the best at every level, and coherent.
-# * **MinT-ols** is 3–11× worse below the total: it treats a 600-unit item and a 150k-unit department as equally
-#   reliable. The weights are the whole point.
+# * **MinT-shrink**: within a few percent of the best at every level, and coherent. At the item level it is
+#   level with the base forecast (1.251 vs 1.253 on the leaderboard metric): coherence comes for free.
+# * **MinT-ols** is about 3–6× worse below the total, and `wls_struct` up to 2.6× worse at the items. Both ignore
+#   how noisy each node really is: `ols` treats a 600-unit item and a 150k-unit department as equally reliable,
+#   `wls_struct` only counts how many items sit under a node. The weights are the whole point.
+# * **MiddleOut** failed the coherence check in this library version and was dropped. Always run the check.
 #
-# *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
+# *Reference run: 2,000 series, laptop CPU. Your numbers will differ a little; the reading should not.*
 
 # %% [markdown]
 # ## 5. Item level onto the leaderboard
@@ -197,14 +214,19 @@ plt.tight_layout()
 train_pl, test_pl = bc.split(panel)
 item_fc = Y_rec[Y_rec.unique_id.isin(items)][["unique_id", "ds"] + methods].copy()
 item_fc["unique_id"] = item_fc["unique_id"].str.split("/").str[-1]    # "Total/D…/C…/S…/123_S1" → "123_S1"
-# Base and BottomUp item forecasts are identical to AutoETS from notebook 00, so only the
-# methods that change the item level go on the leaderboard.
+# Base and BottomUp item forecasts are the same AutoETS as notebook 00 (on the 1,996 items that fit the
+# hierarchy), so only the methods that change the item level go on the leaderboard.
 item_fc = item_fc.rename(columns={"TopDown": "ETS_TopDown", "MinT-wls_struct": "ETS_MinT-wls",
                                   "MinT-shrink": "ETS_MinT-shrink"})
 keep = ["unique_id", "ds", "ETS_TopDown", "ETS_MinT-wls", "ETS_MinT-shrink"]
 bc.save_forecasts(item_fc[keep], "05_hierarchy")
 bc.record(item_fc[keep], test_pl, train_pl, lab="05 hierarchy",
           fit_seconds=t_base.seconds + t_rec.seconds)
+
+# %%
+# Like for like at the item level: base vs reconciled, same series, leaderboard metric (52-week scale)
+item_cmp = item_fc.rename(columns={"Base (incoherent)": "ETS_base"})
+bc.summarise(bc.score(item_cmp, test_pl, train_pl, ["ETS_base", "BottomUp"] + keep[2:]), item_cmp, test_pl)
 
 # %% [markdown]
 # ## Discussion

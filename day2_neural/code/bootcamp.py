@@ -184,18 +184,35 @@ def static_frame(train: pl.DataFrame) -> pd.DataFrame:
 
 
 def series_info(df: pl.DataFrame) -> pl.DataFrame:
-    """Per-series attributes used to slice results: volume class and shape features."""
-    feats = pl.read_parquet(DATA_DIR / "series_features.parquet").select(
-        "unique_id", "cluster_label", "zero_proportion", "cv_squared", "intermittent_ratio", "mean"
+    """Per-series attributes used to slice results: volume class, demand type and shape cluster.
+
+    Demand statistics are computed here from the training weeks. The numeric columns
+    in ``series_features.parquet`` are standardised (z-scores) and its ``cv_squared``
+    is constant, so only its ``cluster_label`` is used (computed by the data provider
+    on the full history; fine for slicing results, not as a model input).
+    """
+    feats = pl.read_parquet(DATA_DIR / "series_features.parquet").select("unique_id", "cluster_label")
+    demand = (
+        df.filter(pl.col("ds") < TEST_START)
+        .group_by("unique_id")
+        .agg(
+            (pl.col("y") == 0).mean().alias("zero_share"),
+            pl.col("y").mean().alias("mean_weekly_units"),
+            (pl.col("y").filter(pl.col("y") > 0).std() / pl.col("y").filter(pl.col("y") > 0).mean())
+            .pow(2).fill_null(0.0).alias("cv2_nonzero"),
+        )
     )
-    info = df.select("unique_id", "sale_class", "department_id").unique("unique_id").join(feats, on="unique_id", how="left")
-    # Syntetos-Boylan demand classes: ADI = 1 / share of non-zero weeks, CV² of non-zero demand
-    adi = 1.0 / (1.0 - pl.col("zero_proportion")).clip(lower_bound=1e-6)
+    info = (df.select("unique_id", "sale_class", "department_id").unique("unique_id")
+            .join(demand, on="unique_id", how="left").join(feats, on="unique_id", how="left"))
+    # Syntetos-Boylan demand classes: ADI = average weeks between non-zero sales
+    # (= 1 / share of non-zero weeks), CV² = squared coefficient of variation of the non-zero sales
+    adi = 1.0 / (1.0 - pl.col("zero_share")).clip(lower_bound=1e-6)
     return info.with_columns(
-        pl.when((adi < 1.32) & (pl.col("cv_squared") < 0.49)).then(pl.lit("smooth"))
+        adi.alias("adi"),
+        pl.when((adi < 1.32) & (pl.col("cv2_nonzero") < 0.49)).then(pl.lit("smooth"))
         .when(adi < 1.32).then(pl.lit("erratic"))
-        .when(pl.col("cv_squared") < 0.49).then(pl.lit("intermittent"))
-        .otherwise(pl.lit("lumpy")).alias("demand_type")
+        .when(pl.col("cv2_nonzero") < 0.49).then(pl.lit("intermittent"))
+        .otherwise(pl.lit("lumpy")).alias("demand_type"),
     )
 
 
@@ -252,6 +269,7 @@ def summarise(metrics: pd.DataFrame, fcst=None, test=None) -> pd.DataFrame:
         }
         if fcst is not None and test is not None:
             f = _as_pandas(fcst).merge(_as_pandas(test)[["unique_id", "ds", "y"]], on=["unique_id", "ds"])
+            f = f[f[model].notna()]           # same rows in numerator and denominator
             r["wape"] = (f[model].clip(lower=0) - f["y"]).abs().sum() / f["y"].abs().sum()
         rows.append(r)
     return pd.DataFrame(rows).sort_values("mean_rmsse").reset_index(drop=True)
