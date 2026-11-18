@@ -11,7 +11,7 @@
 # ---
 
 # %% [markdown]
-# # Day 2 · 06 — Demo: uncertainty, proper scoring rules and conformal prediction (20 min)
+# # Day 2 · 06 — Demo: uncertainty, proper scoring rules and conformal prediction (15 min)
 #
 # A lecture segment with a live demo. Three ways to get an 80 % / 95 % interval for the same data:
 #
@@ -77,7 +77,7 @@ from neuralforecast.models import NHITS
 nf = NeuralForecast(models=[NHITS(h=bc.H, input_size=4 * bc.H, loss=MQLoss(level=LEVELS), scaler_type="robust",
                                   max_steps=bc.MAX_STEPS, random_seed=bc.RANDOM_SEED, **bc.trainer_kwargs())],
                     freq=bc.FREQ)
-nf.fit(df=Y_train, val_size=bc.H)
+nf.fit(df=Y_train)
 nh = nf.predict()
 nh.columns = [c.replace("NHITS", "NHITS_MQ") for c in nh.columns]
 nh = nh.rename(columns={"NHITS_MQ-median": "NHITS_MQ"})
@@ -116,6 +116,41 @@ et = sf.forecast(df=Y_train, h=bc.H, level=LEVELS)
 
 fc = nh.merge(lg, on=["unique_id", "ds"]).merge(et, on=["unique_id", "ds"]).merge(Y_test, on=["unique_id", "ds"])
 MODELS = ["NHITS_MQ", "LightGBM_conf", "ETS_conf"]
+
+# %% [markdown]
+# ### Why 3 calibration windows per series is not enough
+#
+# Both conformal methods above calibrate **each series on its own**: for every series and horizon step they
+# have only `n_windows = 3` past errors. The 95 % interval is then essentially "± the largest of 3 past errors",
+# and a new error is larger than all 3 previous ones with probability 1/4, so coverage cannot be better than
+# about 75 %, whatever the model. (Split conformal needs ⌈(n+1)(1−α)⌉ ≤ n calibration scores: 19 for 95 %.)
+#
+# The fix is to **pool**: divide each past error by the series' scale, put the errors of all series in one bag
+# per horizon step (≈ 6,000 scores instead of 3), take the quantile, and scale it back. The assumption changes
+# from "this series' past errors look like its future errors" to "scaled errors are alike across series".
+
+# %%
+cv_lgb = mlf.cross_validation(df=Y_train, n_windows=3, h=bc.H, step_size=bc.H)   # same 3 windows, refit each
+sn_scale = (Y_train.sort_values(["unique_id", "ds"]).groupby("unique_id")["y"]
+            .apply(lambda y: np.abs(np.diff(y.values, n=1)).mean()).replace(0, np.nan).rename("sn_scale"))
+cv_lgb = cv_lgb.merge(sn_scale, left_on="unique_id", right_index=True)
+cv_lgb["step"] = cv_lgb.groupby(["unique_id", "cutoff"]).cumcount()
+cv_lgb["score"] = (cv_lgb["y"] - cv_lgb["LightGBM_conf"]).abs() / cv_lgb["sn_scale"]
+
+def conformal_q(scores: pd.Series, level: int) -> float:
+    s = np.sort(scores.dropna().values)
+    k = int(np.ceil((len(s) + 1) * level / 100)) - 1          # finite-sample corrected rank
+    return s[min(k, len(s) - 1)]
+
+fc["step"] = fc.groupby("unique_id").cumcount()
+fc = fc.merge(sn_scale, left_on="unique_id", right_index=True, how="left")
+fc["LightGBM_pooled"] = fc["LightGBM_conf"]
+for lvl in LEVELS:
+    q = cv_lgb.groupby("step")["score"].apply(conformal_q, level=lvl)
+    half = fc["step"].map(q) * fc["sn_scale"].fillna(0)
+    fc[f"LightGBM_pooled-lo-{lvl}"] = (fc["LightGBM_pooled"] - half).clip(lower=0)
+    fc[f"LightGBM_pooled-hi-{lvl}"] = fc["LightGBM_pooled"] + half
+MODELS = ["NHITS_MQ", "LightGBM_conf", "LightGBM_pooled", "ETS_conf"]
 
 # %% [markdown]
 # ## 4. Score the intervals
@@ -165,12 +200,17 @@ uq.round(3)
 #
 # ![Coverage vs promise](slides/img/res_lab06.png)
 #
-# * **NHITS with a quantile loss** slightly over-covers (≈ 85 % for a promised 80 %) and has the best scaled CRPS
-#   (≈ 1.47 vs ≈ 2.6): it learned **per-item** widths.
-# * **Conformal** intervals under-cover in the test quarter (≈ 67–68 % instead of 80 %). The guarantee holds when
-#   the future is exchangeable with the calibration windows; April to July brought promotions and shifts those
-#   windows had not seen, and one width is shared by fast and slow items.
-# * Fixes: calibrate per class, on recent windows, or conformalise the quantile model (CQR).
+# * **NHITS with a quantile loss** slightly over-covers (≈ 83 % for a promised 80 %, ≈ 97 % for 95 %) and has by far
+#   the best scores (interval score ≈ 15 vs ≈ 26, scaled CRPS ≈ 1.45 vs ≈ 2.6): it learned **per-item, per-week**
+#   widths.
+# * **Per-series conformal under-covers** (≈ 67–68 % for 80 %, ≈ 74 % for 95 %). The main cause is arithmetic, not
+#   drift: with 3 calibration windows each series has 3 scores per horizon step, and a 95 % interval from 3 scores
+#   is just "the largest error seen so far". The chance a new error beats the largest of 3 is 1 in 4, so coverage
+#   tops out near 75 %, which is what we got.
+# * **Pooled conformal** (scale-free errors pooled across all series, then rescaled per series) fixes the
+#   coverage: ≈ 80 % and ≈ 93 %. But its scores barely move: honest width is not the same as useful width. It
+#   still gives every item the same *relative* width, wide for steady sellers and too narrow for spiky ones.
+# * Fixes that keep the guarantee and add shape: calibrate per class, or conformalise the quantile model (CQR).
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 
@@ -192,7 +232,7 @@ plt.tight_layout()
 
 # %%
 uid = info[info.sale_class == "D"].unique_id.iloc[0]
-fig, axes = plt.subplots(1, 3, figsize=(16, 4), sharey=True)
+fig, axes = plt.subplots(1, len(MODELS), figsize=(20, 4), sharey=True)
 h = Y_train[(Y_train.unique_id == uid) & (Y_train.ds >= "2024-10-01")]
 for ax, m in zip(axes, MODELS):
     f = fc[fc.unique_id == uid]

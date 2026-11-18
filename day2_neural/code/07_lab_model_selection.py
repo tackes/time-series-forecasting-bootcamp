@@ -146,9 +146,11 @@ ratings.round(3)
 # %% [markdown]
 # ### Reading the result
 #
-# In the reference run LightGBM is only 4th on mean RMSSE but 2nd by Bradley–Terry: it wins more series by a
-# little and loses some intermittent ones by a lot. The 430 intermittent series (22 %) make up 51 % of the summed
-# RMSSE, so the mean is mostly a contest about the hardest items.
+# In the reference run the two orders disagree at the top. **NHITSx** is 2nd on mean RMSSE but 1st by
+# Bradley–Terry (it wins 68 % of its duels), and **LightGBM** is 4th on the mean but 2nd by Bradley–Terry.
+# **NHITS_noexog** is 1st on the mean but only 3rd in the duels. The reason is the ~340 intermittent series:
+# 17 % of the panel, but 40–46 % of the summed RMSSE. NHITSx and LightGBM win many ordinary series by a little
+# and lose some intermittent ones by a lot, so the mean is mostly a contest about the hardest items.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 
@@ -171,6 +173,16 @@ plt.tight_layout()
 
 # %%
 Rx.groupby("demand_type")[list(order[:6])].mean().round(3).assign(n=Rx.groupby("demand_type").size())
+
+# %% [markdown]
+# **Reading it.** No model wins everywhere. In the reference run NHITSx is best on **smooth** (≈ 0.64),
+# **erratic** (≈ 0.72) and **lumpy** (≈ 1.33) series, where promotions and price moves explain the spikes. On
+# **intermittent** series (mostly zeros) the model *without* covariates wins (NHITS_noexog ≈ 2.59 vs NHITSx ≈ 3.0):
+# there the covariates mostly give the network more ways to predict a spike that does not come. Errors on
+# intermittent series are 4× larger than anywhere else, whatever the model.
+#
+# The cluster table below comes from Day 1's feature clustering. Several clusters hold only 2–6 series, so read
+# only the big ones.
 
 # %%
 Rx.groupby("cluster_label")[list(order[:6])].mean().round(3).assign(n=Rx.groupby("cluster_label").size())
@@ -213,10 +225,14 @@ eval_scores[["model", "mean_rmsse", "median_rmsse", "wape"]].head(12)
 #
 # ![Lab 07 results](slides/img/res_lab07.png)
 #
-# * On the held-out half, the plain **average of the top 3** beats every single model (≈ 1.24 vs ≈ 1.32 for the
-#   best single model): their errors partly cancel.
-# * Picking the **best model per class** looked great on the selection half and did not carry over: selection
-#   overfits, averaging does not.
+# * On the held-out half, the plain **average of the top 3** (NHITSx, NHITS_noexog, LightGBM) beats every single
+#   model: ≈ 1.25 against ≈ 1.31 for the best single model on that half (NHITS_noexog), about 5 % better. Their
+#   errors partly cancel: NHITSx is strong on erratic and lumpy series, NHITS_noexog on intermittent ones.
+# * Picking the **best model per class** did not carry over (≈ 1.40, worse than several single models):
+#   it chose NHITSx for almost every class, and NHITSx's tail on intermittent series came with it. Selection
+#   overfits; averaging does not.
+# * The leaderboard below scores the ensembles on **all** series, half of which chose them, so their leaderboard
+#   numbers (≈ 1.03 for the top-3 average) are optimistic. Quote the held-out comparison.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 
@@ -256,18 +272,18 @@ plt.savefig(bc.RESULTS_DIR / "final_standings.png", dpi=150)
 #
 # | Question from the recap | What today's numbers say (reference run) |
 # |---|---|
-# | Is the GBDT strong because it is **global** or because of **covariates**? | Mostly **global**: NHITS without covariates (≈ 1.15) already matches LightGBM (≈ 1.17); covariates add a few percent, mostly in promo weeks |
-# | Can a neural net learn the hand-built features? | **Yes, about as well**, from the raw window |
-# | What does it cost? | 20–30 s per neural fit vs 1.6 s; tuning ≈ 474 s for 1 % |
-# | Does it **respond to price** the right way? | **Direction yes, size no**: promo lift +9 % to +28 % vs +72 % in the data |
-# | Best of the day? | The **average of the top 3** (≈ 1.03), about 12 % better than the best Day 1 model |
+# | Is the GBDT strong because it is **global** or because of **covariates**? | **Covariates**: LightGBM without them falls to ≈ 1.33, no better than Naive. NHITS without covariates (≈ 1.13) already beats LightGBM (≈ 1.17) |
+# | Can a neural net learn the hand-built features? | **Mostly yes**, from the raw window; covariates still help it on most series, just not on intermittent ones |
+# | What does it cost? | 25–35 s per neural fit vs ≈ 2 s; tuning ≈ 540 s for 1.6 % |
+# | Does it **respond to price** the right way? | **Direction yes, size timid**: promo lift +39 % to +55 % vs +82 % raw in the data (an upper bound) |
+# | Best of the day? | The **average of the top 3**: on the held-out half ≈ 1.25 vs ≈ 1.31 for the best single model and ≈ 1.36 for Day 1's LightGBM |
 
 # %% [markdown]
 # ## A decision framework to take home
 #
 # 1. **Baselines first.** If you cannot beat SeasonalNaive / ETS on most series, stop and look at the data.
 # 2. **Global before deep.** A GBDT with lags and covariates is the bar. A neural model has to beat it by more
-#    than the fold-to-fold noise to justify its training and serving cost.
+#    than the seed-to-seed noise (Lab 02), on more than one window, to justify its training and serving cost.
 # 3. **Tune the few things that matter** (lookback, learning rate / steps, scaler, loss) and stop.
 # 4. **Check responsiveness** before accuracy if the forecast drives pricing or promotion decisions.
 # 5. **Foundation models** are a strong zero-shot baseline; fine-tune only when you have the data and the

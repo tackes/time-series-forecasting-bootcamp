@@ -87,12 +87,12 @@ common = dict(h=bc.H, input_size=INPUT_SIZE, loss=MAE(), scaler_type="standard",
 
 nf_plain = NeuralForecast(models=[NHITS(alias="NHITS_noexog", **common)], freq=bc.FREQ)
 with bc.Timer() as t_plain:
-    nf_plain.fit(df=Y_train[["unique_id", "ds", "y"]], val_size=bc.H)
+    nf_plain.fit(df=Y_train[["unique_id", "ds", "y"]])
 
 nf_x = NeuralForecast(models=[NHITS(alias="NHITSx", futr_exog_list=X, stat_exog_list=bc.STATIC_COLS, **common)],
                       freq=bc.FREQ)
 with bc.Timer() as t_x:
-    nf_x.fit(df=Y_train, static_df=static, val_size=bc.H)
+    nf_x.fit(df=Y_train, static_df=static)
 
 fcst = nf_plain.predict().merge(nf_x.predict(futr_df=futr[["unique_id", "ds"] + X], static_df=static), on=["unique_id", "ds"])
 
@@ -126,28 +126,56 @@ with bc.Timer() as t_lgb:
 assert list(mlf.ts.features_order_) == X + lag_feats, mlf.ts.features_order_
 fcst = fcst.merge(mlf.predict(h=bc.H, X_df=futr[["unique_id", "ds"] + X]), on=["unique_id", "ds"])
 
+# The same LightGBM with no covariates at all: separates "global" from "sees prices and promotions"
+mlf_plain = make_mlf(LightGBM_noexog={})
+with bc.Timer() as t_lgb_plain:
+    mlf_plain.fit(Y_train[["unique_id", "ds", "y"]], static_features=[])
+fcst = fcst.merge(mlf_plain.predict(h=bc.H), on=["unique_id", "ds"])
+
 # %%
 bc.save_forecasts(fcst, "03_exogenous")
 bc.record(fcst, test, train, lab="03 exogenous",
           fit_seconds={"NHITS_noexog": t_plain.seconds, "NHITSx": t_x.seconds,
-                       "LightGBMx": t_lgb.seconds / 2, "LightGBMx_mono": t_lgb.seconds / 2})
+                       "LightGBMx": t_lgb.seconds / 2, "LightGBMx_mono": t_lgb.seconds / 2,
+                       "LightGBM_noexog": t_lgb_plain.seconds})
 
 # %% [markdown]
 # ### Where do covariates help? Split by "promotion inside the test window"
 
 # %%
-models = ["NHITS_noexog", "NHITSx", "LightGBMx", "LightGBMx_mono"]
+models = ["NHITS_noexog", "NHITSx", "LightGBM_noexog", "LightGBMx", "LightGBMx_mono"]
 promo_ids = test.group_by("unique_id").agg((pl.col("promo") > 0).any().alias("promo_in_test"))
 m = bc.score(fcst, test, train, models)
 m = m[m.metric == "rmsse"].merge(promo_ids.to_pandas(), on="unique_id")
 m.groupby("promo_in_test")[models].mean().round(3)
 
 # %% [markdown]
+# ### One average can hide the story: look at several summaries
+#
+# Mean RMSSE gives every series one vote, so a few series that blow up can outvote hundreds that improve.
+# Before concluding "covariates do not help", check the share of series that improved, the median and WAPE
+# (volume-weighted), and the split by demand type.
+
+# %%
+d = m["NHITSx"] - m["NHITS_noexog"]
+info = bc.series_info(panel).to_pandas()[["unique_id", "demand_type"]]
+print(f"NHITSx better on {(d < 0).mean():.0%} of series | mean change {d.mean():+.3f} | "
+      f"mean change without the worst 1% of series {d[d < d.quantile(0.99)].mean():+.3f}")
+print(bc.summarise(bc.score(fcst, test, train, ["NHITS_noexog", "NHITSx"]), fcst, test)[["model", "mean_rmsse", "median_rmsse", "wape"]])
+m.merge(info, on="unique_id").groupby("demand_type")[["NHITS_noexog", "NHITSx", "LightGBM_noexog", "LightGBMx"]].mean().round(3)
+
+# %% [markdown]
 # ### Reading the result
 #
-# Covariates help **where they carry information**. In the reference run, on items with a promotion in the test
-# window, NHITS improved from ≈ 1.29 to ≈ 1.24; on items without one it got slightly worse (≈ 0.91 → 0.95),
-# because there the extra inputs are mostly noise to fit.
+# * **LightGBM needs the covariates.** Without them it falls from ≈ 1.20 to ≈ 1.33 mean RMSSE, and it is worse
+#   with or without a promotion in the test window (prices move in non-promo weeks too). Lags alone do not tell it
+#   that next week is on promotion.
+# * **NHITS: the mean says "no", everything else says "yes".** On mean RMSSE NHITSx looks slightly worse
+#   (≈ 1.15 vs ≈ 1.13). But it is better on about 60 % of series, its median drops from ≈ 0.62 to ≈ 0.56 and its
+#   WAPE from ≈ 0.33 to ≈ 0.27. The mean is pulled up by the ~340 **intermittent** series, where the extra inputs
+#   are noise to fit (≈ 2.65 → 3.1); drop the worst 1 % of series and NHITSx is ahead on the mean too.
+# * Day 1's LightGBM (≈ 1.17) uses a price ratio to the *rolling* mean instead of our median price index, which
+#   is a reminder that how you encode a covariate matters as much as whether you include it.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 
@@ -165,13 +193,28 @@ m.groupby("promo_in_test")[models].mean().round(3)
 # %%
 MULTS = [0.75, 0.85, 0.95, 1.0, 1.05, 1.15, 1.25]
 
-def scenario(df: pd.DataFrame, mult: float | None = None, promo: float | None = None) -> pd.DataFrame:
+def scenario(df: pd.DataFrame, mult: float) -> pd.DataFrame:
+    """Planned price × mult in every test week; the other inputs follow from the new price."""
     out = df.copy()
-    if mult is not None:
-        out["price_index"] = out["price_index"] * mult
-        out["discount_depth"] = np.maximum(0, 1 - out["price_ratio_to_rolling_mean"] * mult)
-    if promo is not None:
-        out["promo"] = promo
+    out["price_index"] = out["price_index"] * mult
+    out["discount_depth"] = np.maximum(0, 1 - out["price_ratio_to_rolling_mean"] * mult)
+    return out
+
+# A promotion in this data is a flag *and* a price cut. To compare like with like, the promo scenario switches
+# on the flag together with the item's typical promo discount (median over its training promo weeks), and the
+# no-promo scenario uses the item's regular price level.
+tr_pd = train.to_pandas()
+reg_index = tr_pd[tr_pd.promo == 0].groupby("unique_id")["price_index"].median()
+promo_disc = tr_pd[tr_pd.promo > 0].groupby("unique_id")["discount_depth"].median()
+promo_disc = promo_disc.reindex(reg_index.index).fillna(tr_pd.loc[tr_pd.promo > 0, "discount_depth"].median())
+
+def promo_scenario(df: pd.DataFrame, on: bool) -> pd.DataFrame:
+    out = df.copy()
+    reg = out["unique_id"].map(reg_index).fillna(1.0)
+    disc = out["unique_id"].map(promo_disc).fillna(0.0) if on else 0.0
+    out["promo"] = 1.0 if on else 0.0
+    out["discount_depth"] = disc
+    out["price_index"] = reg * (1 - disc)
     return out
 
 def predict_all(futr_s: pd.DataFrame) -> pd.DataFrame:
@@ -208,12 +251,12 @@ def response_report(model: str) -> dict:
     return {
         "model": model,
         "median_elasticity": float(np.nanmedian(elasticity)),
-        "share_perverse (>0)": float(np.nanmean(elasticity > 0.05)),
+        "share_perverse (e>0.05)": float(np.nanmean(elasticity > 0.05)),
         "share_flat (|e|<0.05)": float(np.nanmean(elasticity.abs() < 0.05)),
         "share_monotone_decreasing": float(monotone.mean()),
     }
 
-promo_on, promo_off = predict_all(scenario(futr, promo=1.0)), predict_all(scenario(futr, promo=0.0))
+promo_on, promo_off = predict_all(promo_scenario(futr, on=True)), predict_all(promo_scenario(futr, on=False))
 report = pd.DataFrame([response_report(m) for m in resp_models]).set_index("model")
 report["median_promo_lift"] = [(promo_on[m] / promo_off[m].replace(0, np.nan) - 1).median() for m in resp_models]
 report.round(3)
@@ -221,28 +264,31 @@ report.round(3)
 # %% [markdown]
 # ### Is the size plausible? Compare with what the data says
 #
-# A crude empirical check: per series, log-sales lift in promo weeks vs non-promo weeks in **training**. If the
-# model's promo lift is far from this, it has either ignored the flag or memorised a few extreme events.
+# A crude empirical check: per series, average sales in promo weeks ÷ average sales in non-promo weeks, in
+# **training**. It is crude in the other direction from the models: promotions are timed for good weeks
+# (seasonal peaks, events), so part of this raw lift is timing, not the promotion. Read it as an upper reference.
 
 # %%
-emp = (train.filter(pl.col("y") > 0)
-       .group_by("unique_id", "promo").agg(pl.col("y").log().mean().alias("ly"))
-       .pivot(on="promo", index="unique_id", values="ly").drop_nulls())
-emp_lift = np.exp(emp["1.0"] - emp["0.0"]) - 1
-print(f"empirical median promo lift (train weeks): {np.median(emp_lift):.2f}  "
-      f"vs model lifts: {report['median_promo_lift'].round(2).to_dict()}")
+emp = (train.group_by("unique_id", "promo").agg(pl.col("y").mean().alias("mean_y"))
+       .pivot(on="promo", index="unique_id", values="mean_y").drop_nulls()
+       .filter(pl.col("0.0") > 0))
+emp_lift = (emp["1.0"] / emp["0.0"] - 1).to_numpy()
+print(f"raw empirical median promo lift (train weeks, {len(emp_lift)} series with both kinds of week): "
+      f"{np.median(emp_lift):.2f}  vs model lifts: {report['median_promo_lift'].round(2).to_dict()}")
 
 # %% [markdown]
 # ### Reading the result
 #
 # ![Lab 03 results](slides/img/res_lab03.png)
 #
-# * **Direction mostly right**: fewer than 2 % of the price curves point the wrong way, and the monotone
-#   constraint makes 98 % of LightGBM's curves slope down everywhere (vs 73 % without it, 40 % for NHITSx).
-# * **Size wrong**: the data shows a **+72 %** median promo lift; the models predict **+9 % to +28 %**. A global
-#   model pulls every item toward the average week, so its reactions are timid.
-# * The best-scoring model in this lab under-predicts what a promotion does by a factor of about 2.5. Check lifts
-#   against the data before anyone plans a promotion with them.
+# * **Direction mostly right**: fewer than 1 % of the price curves point the wrong way, and the monotone
+#   constraint makes 98 % of LightGBM's curves slope down everywhere (vs 73 % without it, 43 % for NHITSx).
+# * **Size: timid, and NHITSx most of all.** A promotion here is a flag *plus* the item's usual discount. The
+#   models predict a median lift of **+39 %** (NHITSx) to **+55 %** (LightGBMx). The raw data shows **+82 %**, but
+#   that is an upper reference, because promotions are timed for good weeks. A global model also pulls every
+#   item toward the average reaction.
+# * The model with the best median accuracy in this lab (NHITSx) has the flattest promo response. Accuracy and
+#   responsiveness are different questions; check both before anyone plans a promotion with a forecast.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 

@@ -99,10 +99,13 @@ print(panel.group_by("unique_id").agg(pl.col("y").mean()).select(pl.col("y").qua
 #
 # ```
 # 2023-07 ────────────── train ────────────── 2025-01-08 ─ valid (14w) ─ 2025-04-16 ─ test (14w) ─ 2025-07-16
-#                                             └─ used for early stopping / HPO ┘      └─ scored once ┘
+#                                             └─ used for tuning (Lab 02) ┘           └─ scored once ┘
 # ```
 #
-# * `val_size=bc.H` inside `fit` holds out the last 14 training weeks for validation loss / early stopping.
+# * The validation window is for **choosing** things (hyperparameters in Lab 02). Passing `val_size=bc.H` to
+#   `fit` removes those 14 weeks from training; it only pays off with early stopping
+#   (`early_stop_patience_steps`) or a search. Here we train for a fixed `max_steps`, so we train on all
+#   training weeks and leave `val_size` out.
 # * `cross_validation` on the **training** data gives rolling-origin estimates for model choice.
 # * The test window is scored once, by `bc.record`.
 
@@ -122,8 +125,10 @@ for cutoff, g in cv.groupby("cutoff"):
 pd.concat(cv_scores)[["cutoff", "model", "mean_rmsse", "median_rmsse"]]
 
 # %% [markdown]
-# The two folds disagree. That spread is the noise floor: differences between models smaller than this are not
-# worth arguing about.
+# The two folds disagree a lot. That is not randomness in the model: it is how much **harder one 14-week
+# period is than another** (the first fold runs through Christmas). Two lessons: a single 14-week test window is a
+# small sample, so do not over-read small gaps on the leaderboard; and compare models on the **same** windows.
+# The noise floor for comparing two settings of the same model (seed-to-seed variation) is measured in Lab 02.
 
 # %% [markdown]
 # ## 3. Default training: with and without decomposition
@@ -145,7 +150,7 @@ fcst = None
 for m in models:
     nf = NeuralForecast(models=[m], freq=bc.FREQ)
     with bc.Timer() as t:
-        nf.fit(df=Y_train, val_size=bc.H)
+        nf.fit(df=Y_train)
     name = m.alias or type(m).__name__
     fit_seconds[name] = t.seconds
     p = nf.predict()
@@ -168,10 +173,11 @@ bc.leaderboard()[["model", "mean_rmsse", "median_rmsse", "wape", "fit_seconds", 
 #   LightGBM (≈ 1.17). **DLinear**, a linear model, is clearly worse (≈ 1.41): weekly retail is not linear.
 # * **Interpretable = generic.** The trend + season prior costs nothing and buys plots, but 1.8 yearly cycles are
 #   too few to learn a season from, so it does not help accuracy.
-# * **The noise floor.** The same NHITS scored ≈ 2.35 on one CV fold and ≈ 1.27 on the other. The period you test
-#   on moves the score far more than the choice between these models does, so a 0.03 gap on one window may
-#   flip on the next.
-# * **Cost**: 20–30 s per neural fit against 1.6 s for LightGBM.
+# * **Which period you test on matters more than the model.** The same NHITS scored ≈ 2.35 on the CV fold that
+#   runs through Christmas and ≈ 1.27 on the next one. Those folds are different periods, not different random
+#   seeds, so this is about how hard the window is. It is still a warning: a 0.03 gap measured on one 14-week
+#   window may flip on the next. The seed-to-seed noise floor comes in Lab 02.
+# * **Cost**: 25–35 s per neural fit (DLinear 3 s) against about 2 s for LightGBM.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 
@@ -197,8 +203,10 @@ plt.tight_layout()
 # %% [markdown]
 # ## Discussion (5 min)
 #
-# * Did the **decomposed** models (interpretable N-BEATS, DLinear) help or hurt against the generic ones? With
-#   under two years of history, the learned seasonality basis has little to learn from.
+# * Did the **decomposed** models (interpretable N-BEATS, DLinear) help or hurt against the generic ones? Note
+#   that N-BEATS' seasonality basis is a set of sine waves that fit inside the input + horizon window
+#   (28 + 14 = 42 weeks here), so it cannot represent a 52-week yearly cycle at all; with this lookback the
+#   interpretable variant is really "smooth trend + short cycles".
 # * Compare **fit time** with LightGBM from Day 1. What would the neural models need to justify the cost?
 # * We used `input_size = 2·h = 28` weeks. A yearly pattern needs 52+. That is the first thing we tune next.
 #

@@ -156,8 +156,8 @@ bc.leaderboard()
 #
 # * **Last week beats last year** (Naive ≈ 1.33 vs SeasonalNaive ≈ 1.52). With under two years of history and
 #   promotions that move around the calendar, "the same week last year" is a weak guide here.
-# * **Mean ≈ 1.17 but median ≈ 0.60** for LightGBM: the typical item is forecast well, and a minority of erratic,
-#   promo-driven items pulls the mean up. Keep both numbers in view all day; Lab 07 comes back to this.
+# * **Mean ≈ 1.17 but median ≈ 0.60** for LightGBM: the typical item is forecast well, and a minority of
+#   intermittent, mostly-zero items pulls the mean up. Keep both numbers in view all day; Lab 07 comes back to this.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
 

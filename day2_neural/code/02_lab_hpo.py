@@ -71,8 +71,8 @@ print(f"tuning fit: → {fit_part['ds'].max()} | validation: {valid['ds'].min()}
 #
 # Imagine a mixing desk with twenty knobs. Most change the sound very little; one or two change it a lot. The
 # sensitivity sweep finds out which knobs matter **before** you spend money searching over all of them. And every
-# gain must be compared with the noise floor from Lab 01: a knob whose effect is smaller than that is not a
-# finding.
+# gain must be compared with the noise floor, measured below by refitting the same model with different random
+# seeds: a knob whose effect is smaller than that is not a finding.
 
 # %% [markdown]
 # ## 1. One-at-a-time sensitivity
@@ -99,12 +99,12 @@ def label(v):
 _cache: dict[str, tuple[float, float]] = {}
 
 
-def valid_rmsse(**overrides) -> tuple[float, float]:
+def valid_rmsse(seed: int = bc.RANDOM_SEED, **overrides) -> tuple[float, float]:
     params = {**DEFAULT, **overrides}
-    key = repr(sorted((k, label(v)) for k, v in params.items()))
+    key = repr(sorted((k, label(v)) for k, v in params.items())) + f"|seed={seed}"
     if key in _cache:                      # the default setting appears in every row of the grid
         return _cache[key]
-    model = NHITS(h=bc.H, random_seed=bc.RANDOM_SEED, **params, **bc.trainer_kwargs())
+    model = NHITS(h=bc.H, random_seed=seed, **params, **bc.trainer_kwargs())
     nf = NeuralForecast(models=[model], freq=bc.FREQ)
     with bc.Timer() as t:
         nf.fit(df=Y_fit)
@@ -139,9 +139,21 @@ plt.tight_layout()
 spread.sort_values(ascending=False)
 
 # %% [markdown]
+# ### The noise floor: same settings, different random seeds
+#
+# A neural net starts from random weights and sees mini-batches in random order. Refit the **default** setting
+# with two more seeds: the spread you get is what "changing nothing" does to the score. A parameter whose spread
+# is not clearly bigger than this is not a finding.
+
+# %%
+seed_scores = [valid_rmsse()[0]] + [valid_rmsse(seed=s)[0] for s in (1, 2)]
+seed_spread = max(seed_scores) - min(seed_scores)
+print("default setting, 3 seeds:", [round(x, 4) for x in seed_scores], f"| seed spread {seed_spread:.4f}")
+print("parameters whose spread beats the seed spread:", list(spread[spread > seed_spread].sort_values(ascending=False).index))
+
+# %% [markdown]
 # **Read the chart before the search.** Parameters at the bottom of the bar chart are not worth search budget:
-# fix them at the default. Compare the spreads with the **fold-to-fold spread from Lab 01**; a parameter whose
-# effect is smaller than that noise is not a finding.
+# fix them at the default. A parameter whose effect is smaller than the seed spread above is not a finding.
 
 # %% [markdown]
 # ### Reading the result
@@ -205,10 +217,13 @@ bc.leaderboard()[["model", "mean_rmsse", "median_rmsse", "wape", "fit_seconds", 
 #
 # ![Lab 02 results](slides/img/res_lab02.png)
 #
-# * 8 Optuna trials took ≈ 474 s and moved test RMSSE from ≈ 1.186 to ≈ 1.174: **15× the compute for about 1 %**,
-#   and LightGBM (1.6 s, ≈ 1.169) is still ahead.
-# * fANOVA credits the learning rate with most of the importance, but only within the narrow range we searched.
-#   The one-at-a-time sweep is the more honest picture of what is worth tuning.
+# * **The noise floor.** Refitting the default with three seeds moved validation RMSSE by ≈ 0.009. All four swept
+#   parameters beat that, but only the **loss** beats it by a mile (0.25: MSE chases the few huge weeks and is
+#   ≈ 20 % worse). Lookback, width and learning rate move the score by 0.03–0.06, a few times the seed noise.
+# * **Optuna**: 8 trials took ≈ 540 s and moved test RMSSE from ≈ 1.193 to ≈ 1.174. That is **15× the compute for
+#   ≈ 1.6 %**, a gain only about twice the seed noise, and LightGBM (≈ 2 s, ≈ 1.169) is still ahead.
+# * fANOVA credits the learning rate with almost all the importance (0.97), but that is importance *within the
+#   ranges we searched*, from 8 points. The one-at-a-time sweep is the more honest picture of what is worth tuning.
 # * Rule of thumb: get the **loss** and the **scaling** right, then stop tuning.
 #
 # *Reference run: 2,000 series, laptop CPU, 500 steps. Your numbers will differ a little; the reading should not.*
