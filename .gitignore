@@ -286,3 +286,5 @@ temp/
 .claude/
 CLAUDE.local.md
 .mcp.json
+# GD working instructions for Claude (local, step-by-step plans)
+gd_instructions/
