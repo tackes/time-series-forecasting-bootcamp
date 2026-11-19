@@ -281,3 +281,8 @@ temp/
 *.bak
 *.swp
 *.swo
+
+# Claude Code - keep local AI session state, settings, and memory out of the repo
+.claude/
+CLAUDE.local.md
+.mcp.json
