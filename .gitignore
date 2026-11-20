@@ -281,3 +281,9 @@ temp/
 *.bak
 *.swp
 *.swo
+
+# CatBoost training logs (written to the working directory)
+catboost_info/
+
+# Superseded first-round leaderboards (kept locally, not published)
+results/day1/exploratory_v1/
