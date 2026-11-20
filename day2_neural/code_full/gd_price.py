@@ -54,16 +54,20 @@ SYNTHETIC_LIFT = {0.10: 0.35, 0.15: 0.45, 0.20: 0.60, 0.25: 1.00, 0.30: 1.50}
 # PRICE FEATURES
 # ============================================================================
 
-def _price_index(df: pl.DataFrame) -> pl.DataFrame:
-    """Price relative to the series' median training price (as in ``bootcamp.load_panel``)."""
-    ref = (df.filter(pl.col("ds") < bc.TEST_START).group_by("unique_id")
+def price_index(df: pl.DataFrame, cutoff=bc.TEST_START) -> pl.DataFrame:
+    """Price relative to the series' median price before ``cutoff`` (as in ``bc.load_panel``).
+
+    Rebuild it with ``cutoff=bc.VALID_START`` for tuning, so the validation weeks do not leak
+    into the reference price.
+    """
+    ref = (df.filter(pl.col("ds") < cutoff).group_by("unique_id")
            .agg(pl.col("sale_price").median().alias("_ref")))
     return (df.drop("price_index", strict=False).join(ref, on="unique_id")
             .with_columns((pl.col("sale_price") / pl.col("_ref")).alias("price_index"))
             .drop("_ref"))
 
 
-def deflate_prices(df: pl.DataFrame, path=gd.CPI_PATH) -> pl.DataFrame:
+def deflate_prices(df: pl.DataFrame, path=gd.CPI_PATH, cutoff=bc.TEST_START) -> pl.DataFrame:
     """Divide prices by the CPI deflator for their week, then rebuild the price features.
 
     The deflator is 1 in the base week, so prices are in base-week money.
@@ -80,7 +84,7 @@ def deflate_prices(df: pl.DataFrame, path=gd.CPI_PATH) -> pl.DataFrame:
     ).drop("deflator")
     out = bc._add_price_features(out.drop("price_ratio_to_rolling_mean", "price_pct_change_1w",
                                           "discount_depth"))
-    return _price_index(out)
+    return price_index(out, cutoff)
 
 
 def add_discount_flag(df: pl.DataFrame, rule: str = "rolling", depth: float = 0.10) -> pl.DataFrame:
@@ -165,8 +169,14 @@ def hierarchy_statics(panel: pl.DataFrame, level: str = "department_id",
 # FROM A CONFIG TO TRAINING DATA
 # ============================================================================
 
-def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | None = None):
+def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | None = None,
+            cutoff=bc.TEST_START):
     """Rebuild a notebook's training data from its config.
+
+    ``cutoff`` splits training from forecast weeks: ``bc.TEST_START`` (default) for the final
+    fit, ``bc.VALID_START`` for tuning. Everything per series (reference price, oversampling
+    counts, statics) is then computed on the weeks before ``cutoff`` only, and ``test`` is the
+    14 weeks after it.
 
     Reads these optional config keys (all default off):
 
@@ -183,14 +193,16 @@ def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | 
     feats = cfg.get("features", {})
     panel = panel if panel is not None else gd.train_panel()
     if feats.get("deflate"):
-        panel = deflate_prices(panel)
+        panel = deflate_prices(panel, cutoff=cutoff)
+    elif cutoff != bc.TEST_START:
+        panel = price_index(panel, cutoff)
     if feats.get("events"):
         panel = add_events(panel)
     if feats.get("fourier_k"):
         panel = add_fourier(panel, feats["fourier_k"])
     over = cfg.get("oversample")
     panel = add_discount_flag(panel, rule=(over or {}).get("rule", "rolling"))
-    train, test = bc.split(panel, cutoff=bc.TEST_START)
+    train, test = bc.split(panel, cutoff=cutoff)
 
     fit = train
     if over:
@@ -219,7 +231,10 @@ def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | 
 
 def copies_per_series(train: pl.DataFrame, weights: dict = FLAT_CORE,
                       multiplier: int = COPY_MULTIPLIER, cap: int = COPY_CAP) -> pl.DataFrame:
-    """How many extra copies each series gets, from its discount weeks in **training** only."""
+    """How many extra copies each series gets, from its discount weeks in ``train`` only.
+
+    Pass the training rows only (``prepare`` does), so no forecast week is counted.
+    """
     counts = (train.filter(pl.col("ds") < bc.TEST_START)
               .group_by("unique_id")
               .agg(pl.col("is_discount").sum().alias("discount_weeks"),
@@ -273,7 +288,8 @@ def add_synthetic_cuts(train: pl.DataFrame, cuts_per_copy: int = 2, seed: int = 
     return out.with_columns(
         (pl.col("sale_price") * cut).alias("sale_price"),
         (pl.col("price_index") * cut).alias("price_index"),
-        pl.max_horizontal(pl.col("discount_depth"), pl.col("synthetic_depth")).alias("discount_depth"),
+        pl.max_horizontal(pl.col("discount_depth"), pl.col("synthetic_depth"))
+        .alias("discount_depth"),
         (pl.col("y") * (1 + pl.col("_lift"))).round().alias("y"),
     ).drop("_row", "_lift")
 
@@ -283,7 +299,8 @@ def add_synthetic_cuts(train: pl.DataFrame, cuts_per_copy: int = 2, seed: int = 
 # ============================================================================
 
 def report_ids(train: pl.DataFrame, ids: list[str] | None = None) -> list[str]:
-    """Series we report elasticity for: classes A-I selling at least ``MIN_UNITS`` a week."""
+    """Series we report elasticity for: classes A-I selling at least ``MIN_UNITS`` a week
+    over the rows of ``train`` (pass the training rows for the window you sweep)."""
     ids = ids if ids is not None else gd.eval_ids()
     keep = (train.filter(pl.col("unique_id").is_in(ids) & (pl.col("ds") < bc.TEST_START))
             .group_by("unique_id")
@@ -454,7 +471,8 @@ def probe(nf, data, ids: list[str], shocks=PROBE_SHOCKS, channel: str = "price_i
 
 
 def probe_summary(resp: pd.DataFrame) -> pd.DataFrame:
-    """Median lift, elasticity and spill by shock and mode, with the share of right-signed series."""
+    """Median lift, elasticity and spill by shock and mode, and the share of right-signed
+    series."""
     right_sign = np.sign(resp["lift"]) == -np.sign(resp["shock"])
     return (resp.assign(right_sign=right_sign)
             .groupby(["mode", "shock"])

@@ -14,9 +14,9 @@
 # <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 00 (full data) — Recap: train on everything, score on the sample (10 min)
 #
-# The original Day 2 labs train and score on a 2,000-series sample so they run on a laptop. Here we
-# **train on every eligible series** and **score on the same 2,000**, so every number below can be put
-# next to the original labs.
+# The original Day 2 labs train and score on a 2,000-series sample so they run on a laptop. Here
+# we **train on every eligible series** and **score on the same 2,000**, so every number below can
+# be put next to the original labs.
 #
 # | | |
 # |---|---|
@@ -68,12 +68,14 @@ eval_ids = gd.eval_ids()
 info = gplt.series_table(panel)
 
 print(f"{panel['unique_id'].n_unique():,} training series | {len(eval_ids):,} scored | "
-      f"train {train['ds'].min()} → {train['ds'].max()} | test {test['ds'].min()} → {test['ds'].max()}")
+      f"train {train['ds'].min()} → {train['ds'].max()} | "
+      f"test {test['ds'].min()} → {test['ds'].max()}")
 
 by_class = (info.assign(scored=info.index.isin(eval_ids))
             .groupby("sale_class")
             .agg(series=("scored", "size"), scored=("scored", "sum"),
-                 mean_weekly_units=("mean_weekly_units", "mean"), share_zero=("zero_share", "mean")))
+                 mean_weekly_units=("mean_weekly_units", "mean"),
+                 share_zero=("zero_share", "mean")))
 by_class.round(2)
 
 # %% [markdown]

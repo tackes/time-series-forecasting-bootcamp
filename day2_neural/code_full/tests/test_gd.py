@@ -3,6 +3,7 @@
     GD_SMOKE=1 .venv/Scripts/python -m pytest day2_neural/code_full/tests -q
 """
 
+import json
 import os
 import sys
 from datetime import date, timedelta
@@ -121,3 +122,65 @@ def test_empirical_elasticity_recovers_planted_slope():
                          "sale_class": "D", "y": np.expm1(ly), "price_index": p})
     est = gp.empirical_elasticity(pl.DataFrame(rows), [f"s{i}" for i in range(40)])
     assert est.loc[est["sale_class"] == "all", "elasticity"].item() == pytest.approx(-0.5, abs=0.05)
+
+
+def test_save_config_writes_nan_as_null():
+    cfg = {"a": float("nan"), "b": [np.float64("inf"), 1.0], "c": {"d": np.float32("nan")}}
+    path = gd.save_config("test_nan", cfg)
+
+    def no_constants(name):
+        raise ValueError(f"non-strict JSON constant {name}")
+
+    back = json.loads(path.read_text(), parse_constant=no_constants)
+    assert back == {"a": None, "b": [None, 1.0], "c": {"d": None}}
+    path.unlink()
+
+
+def _middle_class_panel(n: int = 3) -> pl.DataFrame:
+    """A few scored smoke-panel series from classes that get discount copies (B-H)."""
+    panel = gd.train_panel()
+    ids = (panel.filter(pl.col("unique_id").is_in(gd.eval_ids())
+                        & pl.col("sale_class").is_in(list("DEFG")))
+           ["unique_id"].unique().sort().head(n).to_list())
+    return panel.filter(pl.col("unique_id").is_in(ids))
+
+
+@pytest.mark.parametrize("deflate", [False, True])
+def test_prepare_valid_cutoff_reference_price_uses_pre_cutoff_weeks(deflate):
+    panel = _middle_class_panel()
+    later = pl.col("ds") >= bc.VALID_START
+    shocked = panel.with_columns(pl.when(later).then(pl.col("sale_price") * 10)
+                                 .otherwise(pl.col("sale_price")).alias("sale_price"))
+    cfg = {"features": {"deflate": deflate}, "futr_exog": bc.FUTR_EXOG_COLS}
+    base, inner, valid, data = gp.prepare(cfg, panel=panel, cutoff=bc.VALID_START)
+    moved = gp.prepare(cfg, panel=shocked, cutoff=bc.VALID_START)[0]
+
+    before = pl.col("ds") < bc.VALID_START
+    key = ["unique_id", "ds"]
+    a = base.filter(before).sort(key)["price_index"].to_numpy()
+    b = moved.filter(before).sort(key)["price_index"].to_numpy()
+    assert np.allclose(a, b)                       # later prices do not move the reference
+    if not deflate:                                # reference = median pre-cutoff sale price
+        ref = panel.filter(before).group_by("unique_id").agg(pl.col("sale_price").median())
+        check = base.join(ref.rename({"sale_price": "ref"}), on="unique_id")
+        assert np.allclose(check["price_index"], check["sale_price"] / check["ref"])
+    assert inner["ds"].max() < bc.VALID_START
+    assert valid["ds"].min() == bc.VALID_START
+    assert valid["ds"].n_unique() == bc.H
+    futr_weeks = pd.to_datetime(data.futr_df["ds"]).dt.date
+    assert futr_weeks.min() == bc.VALID_START
+    assert futr_weeks.nunique() == bc.H
+
+
+def test_prepare_valid_cutoff_counts_copies_pre_cutoff():
+    panel = _middle_class_panel().with_columns(
+        pl.when(pl.col("ds") >= bc.VALID_START).then(0.5).otherwise(0.0).alias("discount_depth"))
+    cfg = {"futr_exog": bc.FUTR_EXOG_COLS,
+           "oversample": {"rule": "rolling", "cap": gp.COPY_CAP, "multiplier": 5}}
+    # every discount week sits after VALID_START: tuning sees none, so no copies
+    _, inner, _, tune = gp.prepare(cfg, panel=panel, cutoff=bc.VALID_START)
+    assert tune.fit_df["unique_id"].nunique() == inner["unique_id"].n_unique()
+    assert pd.to_datetime(tune.fit_df["ds"]).dt.date.max() < bc.VALID_START
+    # the final fit's training weeks include them (14 weeks: the 10-25 tier), so copies appear
+    _, train, _, final = gp.prepare(cfg, panel=panel)
+    assert final.fit_df["unique_id"].nunique() > train["unique_id"].n_unique()

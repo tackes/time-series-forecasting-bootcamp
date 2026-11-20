@@ -6,7 +6,7 @@
 | 0 | Pinned env (`day2_neural/code_full/requirements.txt`), `AGENTS.md`, README | done (laptop); GPU box to check |
 | 1 | `docs/gfm_learnings.md` | draft, awaiting approval |
 | 2 | `gd_helpers.py`, `gd_price.py`, `gd_plots.py` + `tests/` (12 passing) | done |
-| 3+ | notebooks 00 → 10 | in progress |
+| 3+ | notebooks 00 → 10 (+05b) | built; CPU smoke chain in progress; prose and style passes to follow |
 
 ## Findings from the build so far
 - **Panel:** 18,692 series in the data, 17,241 pass Lei's filters, 2,000 in the eval sample (`results/eval_ids.csv`). By class: A 35, B 90, C 161, D 266, E 400, F 575, G 829, H 1,277, I 2,231, J 11,377.
@@ -30,6 +30,35 @@ jupyter nbconvert --to notebook --execute --inplace <nb>.ipynb --ExecutePreproce
 cd ../.. && git add -A results/day2_full day2_neural/code_full && git commit -m "run: <nb> on GPU" && git push
 ```
 Models land in `models/day2_full/` (gitignored); upload them to the release or hosting decided in open decision 3.
+
+**Order matters.** Run the notebooks 00 → 10 in order, on a clean `results/day2_full/runs` and `tables`. Runs are cached by name, so a changed upstream config is not noticed (see `AGENTS.md`).
+
+## GPU budget (full-panel fits per notebook)
+| Notebook | Fits | Notes |
+|---|---|---|
+| 00 | 0 | StatsForecast on 2,000 series + one LightGBM (CPU minutes) |
+| 01 | 9 | 3 arms × 3 seeds; sets minutes per fit (**budget gate**) |
+| 02 | 39 | 12-cell grid × 3 seeds + 3 refits; trim `GRID` if 01's timing is high |
+| 03 | 12 | 3 arms × 3 seeds on validation + 3 test refits (base reused from 02) |
+| 04 | 9 | 3 arms × 3 seeds (arm C trains on ~2× series because of the copies) + LightGBM |
+| 05 | ~96–105 | 30 trials × 3 seeds + incumbent + confirm set; `N_TRIALS` is the main dial |
+| 05b | 3 | + sweeps / probes |
+| 06 | ~6–7 equivalents | cluster static × 3 + per-cluster models |
+| 07 | 0 (+3 opt-in) | Chronos-2 zero-shot; fine-tune only with `GD_FM_FINETUNE=1` |
+| 08 | 0 | one prediction for all series + AutoETS on ~2,100 upper nodes |
+| 09 | ~4 | quantile model (1 seed) + 3 calibration fits |
+| 10 | 0 | |
+
+Total ≈ 185 full-panel fits. Multiply by 01's minutes per fit to get GPU hours. If that's too many, cut `N_TRIALS` in 05 first, then the 02 grid.
+
+## Known limitations
+- **Reference price for HPO:** `bc.load_panel` computes `price_index` against the median price before the test window. Notebooks that tune use `gp.prepare(cfg, cutoff=bc.VALID_START)`, which rebuilds it from pre-validation weeks only. Lei's own labs keep the small leak.
+- **Validation window has no event week:** 8 Jan – 9 Apr 2025. Validation can judge the Fourier terms but not the event dummies. Good Friday 2025 falls in the first test week, and Anzac Day in the second.
+- **Single-seed exceptions to the 3-seed rule:**
+  - the quantile GFM in 09 (intervals);
+  - 08's item-level base (the saved seed);
+  - 05's reference model in the 05b comparison.
+  Saving more seeds in 05 would remove the last two.
 
 ## Timing log (fill in from the GPU runs)
 | Notebook | Fits | Minutes per fit | Total |

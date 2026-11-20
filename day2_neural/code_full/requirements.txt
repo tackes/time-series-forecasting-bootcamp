@@ -25,3 +25,4 @@ jupytext==1.17.3
 nbconvert==7.16.6
 ipykernel==6.30.1
 pytest==8.4.2
+chronos-forecasting==2.3.2   # 07: Chronos-2 (pulls transformers, accelerate; weights go to the HF cache)

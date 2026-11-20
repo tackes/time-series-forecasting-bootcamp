@@ -20,7 +20,7 @@
 #
 # | Ingredient | Why |
 # |---|---|
-# | Steps scaled to the panel (≈174 visits per series) | a fixed budget under-trains a bigger panel |
+# | Steps scaled to the panel (≈174 visits per series) | a fixed budget under-trains big panels |
 # | 5% learning-rate warm-up, then 3 halvings | fewer early blow-ups, smaller oscillations |
 # | Run the full budget, **keep the best validation weights** | most runs ended above their best |
 # | Gradient clipping at 1.0 | stops single bad batches from throwing training off |
@@ -130,7 +130,8 @@ gplt.plot_training(arms["NBEATSx_off"][:1] + arms["NBEATSx_recipe"][:1] + arms["
 
 # %%
 forecasts = {name: gd.seed_forecasts(runs) for name, runs in arms.items()}
-seed_scores, health = {}, []
+seed_scores = {}
+health = []
 for name, runs in arms.items():
     rmsse = gd.per_series(gd.score(forecasts[name], test, train))
     seed_cols = [c for c in rmsse.columns if not c.endswith("_mean")]
@@ -166,7 +167,9 @@ board_fcst = forecasts["NBEATSx_off"][["unique_id", "ds"]]
 for name in arms:
     board_fcst = board_fcst.merge(forecasts[name][["unique_id", "ds", f"{name}_mean"]],
                                   on=["unique_id", "ds"])
-fit_seconds = {f"{n}_mean": gd.summaries(r)["fit_seconds"].mean() for n, r in arms.items()}
+fit_seconds = {}
+for name, runs in arms.items():
+    fit_seconds[f"{name}_mean"] = gd.summaries(runs)["fit_seconds"].mean()
 gd.save_forecasts(board_fcst, "01_recipe")
 gd.record(board_fcst, test, train, lab="01 recipe (3-seed mean)", fit_seconds=fit_seconds,
           notes="fit_seconds is per seed")

@@ -46,3 +46,22 @@ GD_SMOKE=1 GD_TRAIN=1 BOOTCAMP_ACCELERATOR=cpu jupyter nbconvert --to notebook -
 GD_SMOKE=1 python -m pytest day2_neural/code_full/tests -q
 ```
 See `docs/progress.md` for the GPU commands.
+
+## The config chain
+Every notebook reads the config(s) before it and writes its own to `results/day2_full/configs/`. Keys that `gd_price.prepare(cfg)` understands are marked ★. Passing any config to `prepare` rebuilds exactly that notebook's training data.
+
+| Config | Written by | Keys |
+|---|---|---|
+| `00_baselines` | 00 | `n_train_series`, `n_eval_series`, `examples` (tier → ids), `baselines`, `median_rmsse`, `mean_rmsse` |
+| `01_recipe` | 01 | `params` (NBEATSx, see `gd.NBEATSX_DEFAULTS`), `recipe`, ★`y_shift`, ★`futr_exog`, `stat_exog`, `max_steps`, `seeds`, `minutes_per_fit`, `median_rmsse`, `seed_spread`, `saved_model` |
+| `02_shortlist` | 02 | `base_params`, `grid`, `max_steps`, `seeds`, `noise_floor`, `shortlist` (list of `{params, median_rmsse_valid, seed_sd}`), `best_params`, ★`futr_exog`, ★`y_shift` |
+| `03_features` | 03 | `params`, ★`features` (`deflate`, `events`, `fourier_k`, `hierarchy_level`), ★`futr_exog`, ★`y_shift`, `max_steps`, `seeds`, `median_rmsse` |
+| `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → report), `empirical`, `empirical_band`, `selected_arm`, `max_steps`, `seeds` |
+| `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `selection_rule`, `confirm`, `saved_model` |
+| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`) and `use` (`"05"` or `"05b"`) |
+| `06_clusters` … `10_final` | 06–10 | free-form, documented in the notebook |
+
+Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.
+- **Forecasts:** read them with `gd.selected_forecasts()`, which returns the column as `GFM_selected` whichever notebook won. 05b saves its own file and column (`GFM_synthetic`), named in its config's `forecasts` and `forecast_column` keys.
+- **Tuning data:** use `gp.prepare(cfg, cutoff=bc.VALID_START)`. It returns the pre-validation training rows and the validation window, with every per-series statistic computed before the cutoff.
+- **Cached runs go stale.** Runs and tables are cached by name, not by config. If an upstream config changes, delete the cached `runs/` and `tables/` entries of every later notebook before retraining. On the GPU box, always run the notebooks in order.

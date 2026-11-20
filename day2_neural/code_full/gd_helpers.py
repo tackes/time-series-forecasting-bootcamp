@@ -242,8 +242,19 @@ def per_series(metrics: pd.DataFrame, metric: str = "rmsse") -> pd.DataFrame:
 def save_config(name: str, config: dict) -> Path:
     """Write ``configs/<name>.json``; the next notebook reads it instead of hardcoding."""
     path = CONFIG_DIR / f"{name}.json"
-    path.write_text(json.dumps(config, indent=2, default=_jsonable))
+    path.write_text(json.dumps(_no_nan(config), indent=2, default=_jsonable, allow_nan=False))
     return path
+
+
+def _no_nan(x):
+    """Replace NaN and infinity with ``None`` (null), so configs are strict JSON."""
+    if isinstance(x, dict):
+        return {k: _no_nan(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_no_nan(v) for v in x]
+    if isinstance(x, (float, np.floating)) and not np.isfinite(x):
+        return None
+    return x
 
 
 def load_config(name: str) -> dict:
@@ -286,6 +297,19 @@ def selected_config() -> dict:
         if cfg.get("use") == "05b":
             return cfg
     return load_config("05_selected")
+
+
+def selected_forecasts(cfg: dict | None = None) -> pd.DataFrame:
+    """Forecasts of the selected model, with the column renamed to ``GFM_selected``.
+
+    05 saves ``05_selected.parquet`` (column ``GFM_selected``); if 05b won, its config names its
+    own file and column (``forecasts``, ``forecast_column``).
+    """
+    cfg = cfg or selected_config()
+    name = cfg.get("forecasts", "05_selected")
+    col = cfg.get("forecast_column", "GFM_selected")
+    fcst = pd.read_parquet(FORECAST_DIR / f"{name}.parquet")
+    return fcst[["unique_id", "ds", col]].rename(columns={col: "GFM_selected"})
 
 
 def save_forecasts(fcst, name: str) -> Path:
