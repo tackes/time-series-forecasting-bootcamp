@@ -221,9 +221,9 @@ __marimo__/
 
 
 
-# ==========================================
+# ===================================
 # Packt Forecasting Cohort - Additional Rules
-# ==========================================
+# ===================================
 
 # Jupyter and local development
 .jupyter/
@@ -288,3 +288,9 @@ CLAUDE.local.md
 .mcp.json
 # GD working instructions for Claude (local, step-by-step plans)
 gd_instructions/
+
+# CatBoost training logs (written to the working directory)
+catboost_info/
+
+# Superseded first-round leaderboards (kept locally, not published)
+results/day1/exploratory_v1/
