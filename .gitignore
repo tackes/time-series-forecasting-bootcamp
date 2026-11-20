@@ -288,3 +288,7 @@ CLAUDE.local.md
 .mcp.json
 # GD working instructions for Claude (local, step-by-step plans)
 gd_instructions/
+
+# code_full: saved models (hosted outside the repo) and smoke-test output
+models/
+results/day2_full_smoke/

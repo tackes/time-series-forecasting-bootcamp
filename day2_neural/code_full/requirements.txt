@@ -1,0 +1,27 @@
+# Pinned environment for day2_neural/code_full.
+# Saved models only reload with the same neuralforecast / torch versions, so keep these in step
+# on the laptop and the GPU box.
+#
+#   uv venv --python 3.11 .venv
+#   uv pip install -r day2_neural/code_full/requirements.txt
+#
+# On a Linux GPU box, PyPI's torch 2.6.0 wheel ships with CUDA 12.4. On Windows it is CPU-only.
+neuralforecast==3.1.6
+torch==2.6.0
+statsforecast==2.0.2
+mlforecast==1.0.31
+utilsforecast==0.2.15
+hierarchicalforecast==1.5.3
+lightgbm==4.6.0
+optuna==4.8.0
+polars==1.39.3
+pyarrow==21.0.0
+pandas==2.3.3
+numpy==2.2.6
+scikit-learn==1.7.2
+matplotlib==3.10.8
+holidays==0.84
+jupytext==1.17.3
+nbconvert==7.16.6
+ipykernel==6.30.1
+pytest==8.4.2
