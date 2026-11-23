@@ -174,6 +174,9 @@ empirical.round(2)
 #   regression on weekly data counts the spike but not the dip spread over the following weeks.
 # * The promo flag and the price cut arrive together, so the regression credits price with part
 #   of the promo's effect.
+# * The data itself is **cleaner** than the later research sets: the promo flag lines up with
+#   real price cuts, and prices are recorded consistently. A clear, well-measured signal gives
+#   a strong estimate rather than one shrunk towards zero by noise.
 #
 # So the band describes "a short promotion", not "a permanent price change". The charts shade
 # it as a reference, not a target. The research constant is printed for comparison only.

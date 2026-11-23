@@ -1,4 +1,3 @@
-<!-- DRAFT: to be reviewed before release -->
 # What we learnt training global forecasting models (GFMs)
 
 This is a summary of a research programme on global N-BEATSx models for retail demand and price response. It is written for the Day 2 `code_full` notebooks, which refer to it by tag.
