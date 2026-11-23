@@ -118,8 +118,11 @@ print(f"report series: {len(valid_report)} (validation), {len(test_report)} (tes
 
 # %%
 def fit_config(params: dict, data: gd.NixtlaData, prefix: str, seeds: list[int],
-               report: list[str]) -> list[dict]:
-    """Fit one setting for each seed (cached by a hash of ``params``), with a price sweep."""
+               report: list[str], save_first: bool = False) -> list[dict]:
+    """Fit one setting for each seed (cached by a hash of ``params``), with a price sweep.
+
+    ``save_first`` saves the first seed's model as ``<prefix>_<key>`` when it is fitted.
+    """
     def build(seed):
         return gd.build_nbeatsx(params, data, max_steps, seed, "GFM_selected")
 
@@ -127,8 +130,10 @@ def fit_config(params: dict, data: gd.NixtlaData, prefix: str, seeds: list[int],
         return {"sweep": gp.price_sweep(nf, d, report, channel=cfg04["price_channel"])}
 
     name = f"{prefix}_{gd.params_key(params)}"
+    save_first_as = name if save_first else None
     with bc.Timer() as t:
-        runs = gd.fit_seeds(build, data, name, seeds=seeds, extras=extras)
+        runs = gd.fit_seeds(build, data, name, seeds=seeds, extras=extras,
+                            save_first_as=save_first_as)
     if gd.TRAIN:
         print(f"{name}: {t.seconds / 60:.1f} min")
     return runs
@@ -257,7 +262,8 @@ def constraint(trial) -> list[float]:
 # Forced **coverage cells** run first: every block layout at two learning rates, so the search
 # does not miss a region by chance. Then Optuna's TPE sampler takes over. The study is stored
 # in SQLite and every fit is cached by a hash of its settings, so a crash resumes where it
-# stopped.
+# stopped: `gd.run_study` queues an interrupted trial again, and its finished seeds load from
+# the cache.
 
 # %%
 def run_study() -> None:
@@ -268,19 +274,14 @@ def run_study() -> None:
     # A fresh seed per restart: a fixed seed would re-draw the same points after a crash.
     study.sampler = optuna.samplers.TPESampler(seed=SAMPLER_SEED + len(study.trials),
                                                multivariate=True, constraints_func=constraint)
-    if not study.trials:
-        cells = []
-        for blocks in BLOCKS:
-            for lr in COVERAGE_LRS:
-                cells.append({"n_blocks": blocks, "learning_rate": lr,
-                              "mlp_size": incumbent_params["mlp_size"],
-                              "mlp_depth": incumbent_params["mlp_depth"],
-                              "dropout_prob_theta": incumbent_params["dropout_prob_theta"]})
-        for cell in cells[:N_TRIALS]:
-            study.enqueue_trial(cell)
-    done = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
-    if N_TRIALS > len(done):
-        study.optimize(objective, n_trials=N_TRIALS - len(done))
+    cells = []
+    for blocks in BLOCKS:
+        for lr in COVERAGE_LRS:
+            cells.append({"n_blocks": blocks, "learning_rate": lr,
+                          "mlp_size": incumbent_params["mlp_size"],
+                          "mlp_depth": incumbent_params["mlp_depth"],
+                          "dropout_prob_theta": incumbent_params["dropout_prob_theta"]})
+    gd.run_study(study, objective, N_TRIALS, first_trials=cells[:N_TRIALS])
 
 
 def trials_table() -> pd.DataFrame:
@@ -415,13 +416,12 @@ confirm_params["incumbent"] = incumbent_params
 selected_params = confirm_params[selected_role]
 
 confirm_runs = {}
-confirm_nf = {}
 for role, params in confirm_params.items():
     key = gd.params_key(params)
     if key not in confirm_runs:
+        # the first seed is saved as it is fitted, so the winner can be kept whatever happens
         confirm_runs[key] = fit_config(params, full_data, "05_confirm", CONFIRM_SEEDS,
-                                       test_report)
-        confirm_nf[key] = confirm_runs[key][0]["nf"]   # first seed, kept to save if selected
+                                       test_report, save_first=True)
 
 rows = []
 confirm_eval = {}
@@ -511,25 +511,8 @@ gd.record(selected_fcst, test, train,
 gd.median_board()
 
 # %%
-def save_selected() -> None:
-    """Save the first confirm seed of the selected setting as ``05_selected``.
-
-    If the confirm runs were loaded from disk (a resumed run), that seed is refitted once.
-    """
-    nf = confirm_nf.get(selected_key)
-    if nf is not None:
-        gd.save_model(nf, "05_selected")
-        return
-
-    def build(seed):
-        return gd.build_nbeatsx(selected_params, full_data, max_steps, seed, "GFM_selected")
-
-    gd.fit_seed(build, CONFIRM_SEEDS[0], full_data, f"05_selected_{selected_key}",
-                save_as="05_selected")
-
-
-if gd.TRAIN:
-    save_selected()
+if gd.TRAIN:   # the selected setting's first confirm seed, saved when it was fitted
+    gd.copy_model(f"05_confirm_{selected_key}", "05_selected")
 
 # %%
 trial_no = None

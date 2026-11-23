@@ -27,11 +27,14 @@ Environment variables:
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
+import shutil
 import sys
 import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import date
 from functools import partial
@@ -284,10 +287,28 @@ def per_series(metrics: pd.DataFrame, metric: str = "rmsse") -> pd.DataFrame:
 # CONFIGS, TABLES, FORECASTS, MODELS
 # ============================================================================
 
+@contextmanager
+def _atomic(path: Path):
+    """Write to a temporary name next to ``path``, then rename it into place.
+
+    A crash mid-write leaves the old file (or none), never a half-written one that a LOAD run
+    would fail to read. Works for files and folders.
+    """
+    tmp = path.with_name(f".{path.name}.tmp")
+    if tmp.is_dir():
+        shutil.rmtree(tmp)
+    yield tmp
+    if path.is_dir():
+        shutil.rmtree(path)
+    os.replace(tmp, path)
+
+
 def save_config(name: str, config: dict) -> Path:
     """Write ``configs/<name>.json``; the next notebook reads it instead of hardcoding."""
     path = CONFIG_DIR / f"{name}.json"
-    path.write_text(json.dumps(_no_nan(config), indent=2, default=_jsonable, allow_nan=False))
+    with _atomic(path) as tmp:
+        tmp.write_text(json.dumps(_no_nan(config), indent=2, default=_jsonable,
+                                  allow_nan=False))
     return path
 
 
@@ -333,7 +354,8 @@ def cached(name: str, compute) -> pd.DataFrame:
     if not TRAIN:
         raise FileNotFoundError(f"{path.name} missing: run this notebook once with GD_TRAIN=1.")
     out = compute()
-    out.to_parquet(path, index=False)
+    with _atomic(path) as tmp:
+        out.to_parquet(tmp, index=False)
     return out
 
 
@@ -361,14 +383,33 @@ def selected_forecasts(cfg: dict | None = None) -> pd.DataFrame:
 
 
 def save_forecasts(fcst, name: str) -> Path:
-    """Point forecasts for the eval ids, for the selection notebook."""
-    return bc.save_forecasts(only(fcst, eval_ids()), name)
+    """Point forecasts for the eval ids, for the selection notebook.
+
+    The same file ``bc.save_forecasts`` writes (``forecasts/<name>.parquet``: ``unique_id``,
+    ``ds`` and the model columns), written atomically.
+    """
+    fcst = only(fcst, eval_ids())
+    fcst = fcst.to_pandas() if isinstance(fcst, pl.DataFrame) else fcst
+    path = FORECAST_DIR / f"{name}.parquet"
+    with _atomic(path) as tmp:
+        fcst[["unique_id", "ds"] + bc.model_columns(fcst)].to_parquet(tmp, index=False)
+    return path
 
 
 def save_model(nf, name: str) -> Path:
     """Save a fitted ``NeuralForecast`` without its training data (tens of MB, not GB)."""
     path = MODEL_DIR / name
-    nf.save(str(path), save_dataset=False, overwrite=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _atomic(path) as tmp:
+        nf.save(str(tmp), save_dataset=False, overwrite=True)
+    return path
+
+
+def copy_model(source: str, name: str) -> Path:
+    """Save an already-saved model under a second name (e.g. the winner as ``05_selected``)."""
+    path = MODEL_DIR / name
+    with _atomic(path) as tmp:
+        shutil.copytree(MODEL_DIR / source, tmp)
     return path
 
 
@@ -429,6 +470,7 @@ class BestWeights(pl_lightning.Callback):
     def on_fit_end(self, trainer, pl_module):
         if self._state is not None:
             pl_module.load_state_dict(self._state)
+        self._state = None                            # free the copy; not saved with the model
         pl_module.best_step = self.best_step          # read back by ``health``
 
 
@@ -551,15 +593,26 @@ def _run_dir(name: str, seed: int) -> Path:
     return RUNS_DIR / name / f"seed{seed}"
 
 
+def clear_gpu() -> None:
+    """Free Python garbage and the GPU memory torch has cached, between fits."""
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def fit_seed(build_model, seed: int, data: NixtlaData, name: str, val_size: int = bc.H,
              extras=None, save_as: str | None = None) -> dict:
     """Fit one model for one seed, forecast the eval ids, and cache the results.
 
     ``build_model(seed)`` returns an unfitted neuralforecast model whose alias is the column
     name. ``extras(nf, data)`` may return a dict of extra frames (e.g. a price sweep), cached
-    with the run. ``save_as`` also saves the fitted model (only for configs later notebooks
-    load). Returns ``forecast``, ``trajectory``, ``summary``, the extras and ``nf`` (``None``
-    when the run was loaded from disk).
+    with the run. ``save_as`` also saves the fitted model to ``models/`` (only for models a
+    later notebook or a demo loads; read it back with ``load_model``). Returns ``forecast``,
+    ``trajectory``, ``summary`` and the extras: the same as ``load_runs`` reads from disk.
+
+    The fitted model is not kept in memory: each one holds its own copy of the training data,
+    so an HPO notebook would otherwise grow by one panel per fit. Everything is on disk before
+    ``summary.json``, which is written last, so a crash at any point loses only this fit.
     """
     from neuralforecast import NeuralForecast
 
@@ -573,6 +626,7 @@ def fit_seed(build_model, seed: int, data: NixtlaData, name: str, val_size: int 
     if not TRAIN:
         raise FileNotFoundError(f"{run_dir} missing: run this notebook once with GD_TRAIN=1.")
 
+    clear_gpu()
     model = build_model(seed)
     nf = NeuralForecast(models=[model], freq=bc.FREQ)
     with bc.Timer() as t:
@@ -587,25 +641,72 @@ def fit_seed(build_model, seed: int, data: NixtlaData, name: str, val_size: int 
                **health(traj, fitted.max_steps, getattr(fitted, "best_step", None))}
 
     run_dir.mkdir(parents=True, exist_ok=True)
-    fcst.to_parquet(run_dir / "forecast.parquet", index=False)
-    traj.to_csv(run_dir / "trajectory.csv", index=False)
-    out = {"forecast": fcst, "trajectory": traj, "summary": summary, "nf": nf}
-    for key, frame in (extras(nf, data) if extras else {}).items():
-        frame.to_parquet(run_dir / f"{key}.parquet", index=False)
-        out[key] = frame
+    out = {"forecast": fcst, "trajectory": traj, "summary": summary}
+    if extras:
+        out.update(extras(nf, data))
+    for key, frame in out.items():
+        if key == "summary":
+            continue
+        suffix = ".csv" if key == "trajectory" else ".parquet"
+        with _atomic(run_dir / f"{key}{suffix}") as tmp:
+            if suffix == ".csv":
+                frame.to_csv(tmp, index=False)
+            else:
+                frame.to_parquet(tmp, index=False)
     if save_as:
         save_model(nf, save_as)
-    done.write_text(json.dumps(summary, indent=2, default=_jsonable))   # written last
+    with _atomic(done) as tmp:                                           # written last
+        tmp.write_text(json.dumps(summary, indent=2, default=_jsonable))
+    del nf, model, fitted
+    clear_gpu()
     return out
 
 
 def _load_run(run_dir: Path) -> dict:
-    """A finished run read back from disk, in the same shape ``fit_seed`` returns (no model)."""
+    """A finished run read back from disk, in the same shape ``fit_seed`` returns."""
     out = {"summary": json.loads((run_dir / "summary.json").read_text()),
-           "trajectory": pd.read_csv(run_dir / "trajectory.csv"), "nf": None}
-    for path in run_dir.glob("*.parquet"):
+           "trajectory": pd.read_csv(run_dir / "trajectory.csv")}
+    for path in sorted(run_dir.glob("*.parquet")):
         out[path.stem] = pd.read_parquet(path)
     return out
+
+
+def load_runs(name: str, seeds: list[int] | None = None) -> list[dict]:
+    """Every finished seed of a named run, read from ``runs/<name>/``.
+
+    For pulling any run into a notebook, e.g. a 05 trial or a 02 grid cell named in a table:
+    ``gd.load_runs("05_trial_<key>")``. Same shape as ``fit_seeds`` returns, so ``seed_forecasts``,
+    ``summaries`` and the plots take it directly. ``list_runs`` shows the names.
+    """
+    folder = RUNS_DIR / name
+    found = {}
+    for run_dir in folder.glob("seed*"):
+        if (run_dir / "summary.json").exists():
+            found[int(run_dir.name.removeprefix("seed"))] = run_dir
+    if not found:
+        raise FileNotFoundError(f"no finished runs in runs/{name}: see list_runs().")
+    if seeds is None:                 # the order fit_seeds uses, then any other seeds
+        seeds = [s for s in SEEDS if s in found]
+        seeds += sorted(set(found) - set(seeds))
+    missing = [s for s in seeds if s not in found]
+    if missing:
+        raise FileNotFoundError(f"{name}: no finished run for seed(s) {missing}.")
+    return [_load_run(found[s]) for s in seeds]
+
+
+def list_runs(prefix: str = "") -> pd.DataFrame:
+    """One row per finished fit on disk (name, seed, model, minutes, training health).
+
+    ``prefix`` narrows it to one notebook, e.g. ``list_runs("05_trial")``.
+    """
+    rows = []
+    for path in sorted(RUNS_DIR.glob(f"{prefix}*/seed*/summary.json")):
+        s = json.loads(path.read_text())
+        rows.append({"name": path.parent.parent.name, "seed": s["seed"], "alias": s["alias"],
+                     "fit_minutes": round(s["fit_seconds"] / 60, 1),
+                     "best_frac": s.get("best_frac"), "best_valid": s.get("best_valid"),
+                     "max_steps": s["max_steps"], "n_train_series": s["n_train_series"]})
+    return pd.DataFrame(rows)
 
 
 def predict(nf, data: NixtlaData, futr_df: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -622,9 +723,16 @@ def predict(nf, data: NixtlaData, futr_df: pd.DataFrame | None = None) -> pd.Dat
 
 
 def fit_seeds(build_model, data: NixtlaData, name: str, seeds: list[int] | None = None,
-              **kwargs) -> list[dict]:
-    """``fit_seed`` for each seed (3 by default). Each run caches separately."""
-    return [fit_seed(build_model, s, data, name, **kwargs) for s in (seeds or SEEDS)]
+              save_first_as: str | None = None, **kwargs) -> list[dict]:
+    """``fit_seed`` for each seed (3 by default). Each run caches separately.
+
+    ``save_first_as`` saves the first seed's model under that name as soon as it is fitted.
+    """
+    runs = []
+    for i, seed in enumerate(seeds or SEEDS):
+        save_as = save_first_as if i == 0 else None
+        runs.append(fit_seed(build_model, seed, data, name, save_as=save_as, **kwargs))
+    return runs
 
 
 def seed_forecasts(runs: list[dict]) -> pd.DataFrame:
@@ -659,6 +767,55 @@ def params_key(params: dict) -> str:
     """Short stable hash of a parameter dict, for caching HPO trials."""
     blob = json.dumps(params, sort_keys=True, default=str).encode()
     return hashlib.sha1(blob).hexdigest()[:10]
+
+
+# ============================================================================
+# HPO STUDIES
+# ============================================================================
+
+def _trial_settings(trial) -> dict:
+    """The settings a trial ran (or was queued to run) with."""
+    return trial.system_attrs.get("fixed_params") or dict(trial.params)
+
+
+def run_study(study, objective, n_trials: int, first_trials: list[dict] | None = None,
+              max_failures: int = 3) -> None:
+    """Run an Optuna study until it has ``n_trials`` finished trials, resuming after a crash.
+
+    The study lives in SQLite and every fit is cached on disk, so a stopped GPU run picks up
+    where it left off:
+
+    - on the first run, ``first_trials`` (e.g. coverage cells) are queued ahead of the sampler;
+    - a trial the crash interrupted is marked failed and its settings queued again. Its
+      finished seeds load from the cache, so only the interrupted fit is redone;
+    - a trial that runs out of GPU memory is marked failed, the GPU cleared and its settings
+      queued again. After ``max_failures`` of these the study stops with an error (rerun the
+      notebook: a fresh process starts with empty memory). Any other error stops it at once.
+    """
+    from optuna.trial import TrialState
+
+    if not study.trials and first_trials:
+        for settings in first_trials:
+            study.enqueue_trial(settings)
+    for trial in study.get_trials(deepcopy=False, states=[TrialState.RUNNING]):
+        study._storage.set_trial_state_values(trial._trial_id, state=TrialState.FAIL)
+        study.enqueue_trial(_trial_settings(trial))
+        print(f"trial {trial.number} was interrupted: queued again")
+
+    failures = 0
+    while len(study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])) < n_trials:
+        failed_before = {t.number for t in study.get_trials(states=[TrialState.FAIL])}
+        study.optimize(objective, n_trials=1, catch=(torch.cuda.OutOfMemoryError,))
+        for trial in study.get_trials(states=[TrialState.FAIL]):
+            if trial.number in failed_before:
+                continue
+            failures += 1
+            clear_gpu()
+            if failures > max_failures:
+                raise RuntimeError(f"{failures} trials ran out of GPU memory: rerun the notebook "
+                                   "(it resumes), or lower batch_size.")
+            study.enqueue_trial(_trial_settings(trial))
+            print(f"trial {trial.number} ran out of GPU memory: queued again")
 
 
 # ============================================================================

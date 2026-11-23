@@ -279,3 +279,83 @@ def test_build_nbeatsx_loss_override():
                              loss=MQLoss(level=[80]), valid_loss=MQLoss(level=[80]))
     assert isinstance(quant.loss, MQLoss) and isinstance(quant.valid_loss, MQLoss)
     assert quant.alias == "q" and quant.max_steps == 10
+
+
+def test_atomic_write_keeps_old_file_on_crash(tmp_path):
+    path = tmp_path / "table.parquet"
+    pd.DataFrame({"a": [1]}).to_parquet(path)
+    with pytest.raises(RuntimeError):
+        with gd._atomic(path) as tmp:
+            tmp.write_text("half a file")
+            raise RuntimeError("crash mid-write")
+    assert pd.read_parquet(path)["a"].tolist() == [1]          # the old file is untouched
+    with gd._atomic(path) as tmp:
+        pd.DataFrame({"a": [2]}).to_parquet(tmp)
+    assert pd.read_parquet(path)["a"].tolist() == [2]
+    assert [p.name for p in tmp_path.iterdir()] == ["table.parquet"]   # no temp file left
+
+
+def _fake_run(runs_dir, name, seed, alias="NBEATSx"):
+    run_dir = runs_dir / name / f"seed{seed}"
+    run_dir.mkdir(parents=True)
+    pd.DataFrame({"unique_id": ["a"], "ds": [pd.Timestamp("2025-01-01")], alias: [1.0]}
+                 ).to_parquet(run_dir / "forecast.parquet")
+    pd.DataFrame({"step": [1], "valid_loss": [1.0]}).to_csv(run_dir / "trajectory.csv")
+    summary = {"name": name, "seed": seed, "alias": alias, "fit_seconds": 60.0,
+               "max_steps": 20, "n_train_series": 150, "best_frac": 0.5, "best_valid": 1.0}
+    (run_dir / "summary.json").write_text(json.dumps(summary))
+
+
+def test_load_runs_and_list_runs(tmp_path, monkeypatch):
+    monkeypatch.setattr(gd, "RUNS_DIR", tmp_path)
+    for seed in reversed(gd.SEEDS):
+        _fake_run(tmp_path, "05_trial_abc", seed)
+    (tmp_path / "05_trial_abc" / "seed999").mkdir()          # unfinished: no summary.json
+    _fake_run(tmp_path, "02_cell_xyz", gd.SEEDS[0])
+
+    runs = gd.load_runs("05_trial_abc")
+    assert [r["summary"]["seed"] for r in runs] == gd.SEEDS    # fit_seeds order
+    assert set(runs[0]) == {"summary", "trajectory", "forecast"}
+    assert list(gd.seed_forecasts(runs).columns)[-1] == "NBEATSx_mean"
+
+    table = gd.list_runs("05_trial")
+    assert len(table) == len(gd.SEEDS) and set(table["name"]) == {"05_trial_abc"}
+    assert len(gd.list_runs()) == len(gd.SEEDS) + 1
+    with pytest.raises(FileNotFoundError):
+        gd.load_runs("05_trial_missing")
+    with pytest.raises(FileNotFoundError):
+        gd.load_runs("02_cell_xyz", seeds=gd.SEEDS)
+
+
+def test_run_study_resumes_interrupted_and_out_of_memory_trials(tmp_path):
+    import optuna
+
+    optuna.logging.set_verbosity(optuna.logging.ERROR)
+    storage = f"sqlite:///{(tmp_path / 'study.db').as_posix()}"
+    ran = []
+
+    def objective(trial):
+        x = trial.suggest_float("x", 0, 1)
+        ran.append(round(x, 3))
+        if x == 0.25 and ran.count(0.25) == 1:
+            raise torch_oom()
+        return x
+
+    def torch_oom():
+        return gd.torch.cuda.OutOfMemoryError("CUDA out of memory (simulated)")
+
+    # a crash leaves a trial RUNNING (here: started by hand and never finished)
+    study = optuna.create_study(study_name="s", storage=storage)
+    gd.run_study(study, objective, 1, first_trials=[{"x": 0.1}])
+    stale = study.ask({"x": optuna.distributions.FloatDistribution(0, 1)})
+    stale_x = stale.params["x"]
+
+    study = optuna.load_study(study_name="s", storage=storage)
+    study.enqueue_trial({"x": 0.25})                          # will run out of memory once
+    gd.run_study(study, objective, 4)
+    complete = study.get_trials(states=[optuna.trial.TrialState.COMPLETE])
+    assert len(complete) == 4
+    xs = [round(t.params["x"], 3) for t in complete]
+    assert round(stale_x, 3) in xs                            # the interrupted trial was redone
+    assert 0.25 in xs and ran.count(0.25) == 2                # retried once after the OOM
+    assert len(study.get_trials(states=[optuna.trial.TrialState.FAIL])) == 2

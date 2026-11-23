@@ -1,0 +1,14 @@
+{
+  "name": "02_cell_a3c78bc449",
+  "seed": 46335,
+  "alias": "NBEATSx",
+  "fit_seconds": 332.4,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.032357142857142855,
+  "oscillation": 0.001732268275857518,
+  "best_step": 11680,
+  "best_frac": 0.9967571257893838,
+  "best_valid": 1528.5323486328125,
+  "final_over_best": 1.0
+}

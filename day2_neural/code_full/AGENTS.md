@@ -23,7 +23,11 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   - No Lightning checkpoints or logs, and one device per fit (`gd.trainer_kwargs()`). `BestWeights` keeps the best weights in memory.
 - **One GPU.** Build every neural model's trainer settings from `gd.trainer_kwargs()` (or `gd.recipe_kwargs`), never `bc.trainer_kwargs()` directly. Lightning's default trains on every visible GPU, which hangs inside a notebook on a multi-GPU box.
   - HPO trials save summaries, not models.
-  - `save_as=` (which uses `nf.save(save_dataset=False)`) only for models a later notebook or a live demo loads, one seed each: `01_nbeatsx_recipe`, `05_selected`, `05b_synthetic`, `09_quantile`. Models go to `models/` (gitignored, hosted outside the repo).
+  - `save_as=` (which uses `nf.save(save_dataset=False)`) only for models a later notebook or a live demo loads, one seed each: `01_nbeatsx_recipe`, `05_selected`, `05b_synthetic`, `09_quantile`. Models go to `models/` (gitignored, hosted outside the repo). A model is saved the moment it is fitted, never held for later: 05 saves each confirm setting's first seed (`05_confirm_<key>`) and copies the winner to `05_selected`.
+  - `fit_seed` frees each fitted model once its results are on disk (each one holds a copy of the training data). Need the model? Save it with `save_as=` and `gd.load_model` it.
+  - Every file is written atomically, so a crash never leaves a half-written file for a LOAD run.
+- **Pulling results into a notebook.** `gd.list_runs(prefix)` lists every cached fit; `gd.load_runs(name)` reads all seeds of one, in the shape `fit_seeds` returns. Use them in demo cells rather than refitting.
+- **HPO studies resume.** Run Optuna studies with `gd.run_study`: it requeues a trial a crash interrupted, retries a trial that ran out of GPU memory, and loads finished seeds from the cache.
 - **Figures are displayed.**
   - Call `gplt.use_style()` once, and use the `gd_plots` functions (F1–F12; see its docstring).
   - Each `.ipynb` stays under ~3 MB.
