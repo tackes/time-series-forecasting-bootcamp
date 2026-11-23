@@ -67,6 +67,12 @@ def test_recipe_kwargs_on_and_off():
     assert gd.recipe_kwargs(1000)["callbacks"][0] is not on["callbacks"][0]  # fresh per model
 
 
+def test_one_device_per_fit():
+    # devices="auto" starts distributed training on a multi-GPU box and hangs in a notebook
+    assert gd.recipe_kwargs(1000)["devices"] == 1
+    assert gd.recipe_kwargs(1000, recipe=False)["devices"] == 1
+
+
 def test_arc_elasticity_recovers_constant_elasticity():
     # q = p^-1 at every shift: arc elasticity is exactly -1 by construction
     rows = [{"unique_id": "a", "shift": s, "units": 1 / (1 + s)}

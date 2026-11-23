@@ -20,7 +20,8 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   - A TRAIN run reuses any cached table or run already on disk. `GD_REFRESH=1` makes `gd.cached` recompute its tables; delete a `runs/` folder to refit it.
   - Each `gd.cached` computation stands alone: it must not read globals that another `cached` call sets.
 - **Saving and size.**
-  - No Lightning checkpoints or logs (`bc.trainer_kwargs()`). `BestWeights` keeps the best weights in memory.
+  - No Lightning checkpoints or logs, and one device per fit (`gd.trainer_kwargs()`). `BestWeights` keeps the best weights in memory.
+- **One GPU.** Build every neural model's trainer settings from `gd.trainer_kwargs()` (or `gd.recipe_kwargs`), never `bc.trainer_kwargs()` directly. Lightning's default trains on every visible GPU, which hangs inside a notebook on a multi-GPU box.
   - HPO trials save summaries, not models.
   - `save_as=` (which uses `nf.save(save_dataset=False)`) only for models a later notebook or a live demo loads, one seed each: `01_nbeatsx_recipe`, `05_selected`, `05b_synthetic`, `09_quantile`. Models go to `models/` (gitignored, hosted outside the repo).
 - **Figures are displayed.**

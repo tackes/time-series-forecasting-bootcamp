@@ -25,6 +25,9 @@ mkdir -p "$LOGDIR"
 [ -f "$TIMINGS" ] || echo "notebook,pass,minutes,finished" > "$TIMINGS"
 
 export BOOTCAMP_ACCELERATOR="${BOOTCAMP_ACCELERATOR:-gpu}"
+# One GPU per run. Lightning would otherwise train on every visible card, which hangs inside
+# a notebook on a multi-GPU box. Pick another card with CUDA_VISIBLE_DEVICES=1.
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
 if [ "$#" -eq 0 ]; then
     echo "usage: run_gpu.sh <notebook> [...] | all" >&2

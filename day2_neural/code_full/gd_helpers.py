@@ -21,6 +21,8 @@ Environment variables:
 - ``GD_SMOKE=1``: tiny panel and a few training steps, written to ``results/day2_full_smoke``.
 - ``GD_N_JOBS``: StatsForecast worker processes (default all cores; 1 in a smoke run).
 - ``BOOTCAMP_ACCELERATOR``: ``auto`` (default), ``cpu`` or ``gpu``, read by ``bootcamp``.
+- ``CUDA_VISIBLE_DEVICES``: which GPU to use. Every fit uses one device (``trainer_kwargs``);
+  ``run_gpu.sh`` defaults this to ``0``.
 """
 
 from __future__ import annotations
@@ -430,6 +432,16 @@ class BestWeights(pl_lightning.Callback):
         pl_module.best_step = self.best_step          # read back by ``health``
 
 
+def trainer_kwargs() -> dict:
+    """``bc.trainer_kwargs`` pinned to one device.
+
+    Lightning's default ``devices="auto"`` trains on every visible GPU. On a multi-GPU box that
+    starts distributed training inside the notebook kernel, which hangs, and it would also
+    split each batch across cards. One device keeps every fit the same as a single-GPU run.
+    """
+    return dict(bc.trainer_kwargs(), devices=1)
+
+
 def recipe_kwargs(max_steps: int, recipe: bool = True, val_check_steps: int | None = None,
                   warmup_frac: float = 0.05, n_decays: int = 3) -> dict:
     """Training settings for a neuralforecast model, with the research recipe on or off.
@@ -441,7 +453,7 @@ def recipe_kwargs(max_steps: int, recipe: bool = True, val_check_steps: int | No
 
     val_check_steps = val_check_steps or max(5, min(500, max_steps // 40))
     kwargs = dict(max_steps=max_steps, val_check_steps=val_check_steps,
-                  early_stop_patience_steps=-1, **bc.trainer_kwargs())
+                  early_stop_patience_steps=-1, **trainer_kwargs())
     if not recipe:
         return dict(kwargs, loss=MAE(), valid_loss=MAE())
     warmup = max(1, int(warmup_frac * max_steps))

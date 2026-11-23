@@ -35,6 +35,7 @@ GD_SMOKE=1 python -m pytest day2_neural/code_full/tests -q                      
 `run_gpu.sh` runs each notebook twice: a TRAIN pass (fits, caches runs/tables/configs under `results/day2_full`, saves the selected models), then a LOAD pass (re-executes from the saved results so the committed `.ipynb` has clean outputs). It stops at the first failure.
 - **Logs:** the executed TRAIN-pass copies go to `results/day2_full/gpu_logs/`, which is gitignored.
 - **Timings:** wall-clock minutes per pass are appended to `results/day2_full/gpu_timings.csv`.
+- **One GPU:** every fit uses one device (`gd.trainer_kwargs()` sets `devices=1`), and `run_gpu.sh` defaults `CUDA_VISIBLE_DEVICES=0`. On a two-GPU box, Lightning's default (`devices="auto"`) started distributed training inside the notebook kernel and hung in 01 with no fits made. Use `CUDA_VISIBLE_DEVICES=1` to run on the other card.
 ```bash
 tmux new -s gd                               # reattach later with: tmux attach -t gd
 source .venv/bin/activate
