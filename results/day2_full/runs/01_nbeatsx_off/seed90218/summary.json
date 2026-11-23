@@ -1,0 +1,14 @@
+{
+  "name": "01_nbeatsx_off",
+  "seed": 90218,
+  "alias": "NBEATSx_off",
+  "fit_seconds": 516.0,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.08503571428571428,
+  "oscillation": 0.5930475864743203,
+  "best_step": null,
+  "best_frac": null,
+  "best_valid": 457342.125,
+  "final_over_best": 2.2074788376426073
+}
