@@ -1,11 +1,11 @@
-<!-- DRAFT: Graeme to edit and approve before this is committed -->
-# What we learned training global forecasting models (GFMs)
+<!-- DRAFT: to be reviewed before release -->
+# What we learnt training global forecasting models (GFMs)
 
-This is a summary of an internal research programme on global N-BEATSx models for retail demand and price response. It is written for the Day 2 `code_full` notebooks, which refer to it by tag.
+This is a summary of a research programme on global N-BEATSx models for retail demand and price response. It is written for the Day 2 `code_full` notebooks, which refer to it by tag.
 
 **Tags**
-- **[single store]**: dataset A, one large store with about 18,000 item series. The bootcamp data is an anonymised weekly version of it.
-- **[100k set]**: dataset B, a multi-store estate of roughly 100,000 weekly item-store series. The research moved to it part-way through.
+- **[single store]**: dataset A, one large store with many thousands of weekly item series, similar in shape to the bootcamp data.
+- **[100k set]**: dataset B, a much larger multi-store set of weekly item-store series. The research moved to it part-way through.
 - **[method]**: holds whatever the data.
 
 Each finding is marked **accepted**, **rejected** or **experimental**.
@@ -27,7 +27,7 @@ Each finding is marked **accepted**, **rejected** or **experimental**.
 | 7 | [100k set] | Calendar events; synthetic discounts in training; price probes | **Experimental** |
 | 8 | [100k set] | Hierarchy: GFM at item level, simple models above, reconciliation | **Experimental** |
 
-**A lesson we learned the hard way [method].** Until phase 6b, HPO trials were scored on the final test window: the code defined validation splits but never used them. The phase 4 defaults below were therefore chosen on test data. From phase 6b onwards the split was weeks 1–74 train, 75–88 tuning, 89–102 final test, and the test window was touched once. `code_full` tunes on `bc.VALID_START` only.
+**A lesson learnt the hard way [method].** Until phase 6b, HPO trials were scored on the final test window: the code defined validation splits but never used them. The phase 4 defaults below were therefore chosen on test data. From phase 6b onwards the split was weeks 1–74 train, 75–88 tuning, 89–102 final test, and the test window was touched once. `code_full` tunes on `bc.VALID_START` only.
 
 ---
 
@@ -52,7 +52,7 @@ Each finding is marked **accepted**, **rejected** or **experimental**.
 - Evaluate on a common floor instead (historical mean ≥ 2 units/week), so phases are comparable.
 
 **Decision for `code_full`:**
-- Train on Lei's eligible set (≈17,241 series). His filters are close to the research's final rule: price ≤ 0 anywhere, fewer than 66 training weeks, and constant series.
+- Train on the original labs' eligible set (≈17,241 series). Their filters are close to the research's final rule: price ≤ 0 anywhere, fewer than 66 training weeks, and constant series.
 - Notebook 00 shows what the early filters would also have dropped.
 
 ---
@@ -152,7 +152,7 @@ class BestWeights(pl.Callback):
 
 ### How the method changed
 1. **Phases 1–4: a compound sweep.** Price was multiplied by ±5% to ±25%, and the relative-price features were recomputed with it. Results were reported as shares of perverse, elastic and highly elastic series, and per-class medians against a week-on-week historical elasticity.
-2. **Phase 5: the compound sweep is wrong [100k set].** Moving price together with its derived features gave a *positive* elasticity (+0.45). Moving the price channel alone gave the right sign on all series. **From then on, only one price channel moves; derived and promo features stay at their observed values.** Lei's 03 currently moves `price_index` and `discount_depth` together, and `code_full/04` shows both versions.
+2. **Phase 5: the compound sweep is wrong [100k set].** Moving price together with its derived features gave a *positive* elasticity (+0.45). Moving the price channel alone gave the right sign on all series. **From then on, only one price channel moves; derived and promo features stay at their observed values.** The original lab 03 moves `price_index` and `discount_depth` together, and `code_full/04` shows both versions.
 3. **Phase 6: a standard sweep [method].**
    - Shift sizes ±5%, ±10% and ±20%.
    - For each shift size, predict at the base price, at −m and at +m.

@@ -15,13 +15,31 @@
 # # Day 2 · 10 (full data) — Lab: model selection, ensembles and final standings (20 min)
 #
 # Every notebook saved its test forecasts for the 2,000 evaluation series. Here we put them
-# side by side and ask better questions than "which has the lowest mean RMSSE?":
+# side by side, with the selected model (`gd.selected_config()`: 05 or 05b) as the incumbent,
+# and ask better questions than "which has the lowest RMSSE?".
+#
+# Goals
 #
 # 1. **Win rates**: on what share of series does model A beat model B?
 # 2. **Bradley–Terry and Elo**: one strength number per model from every series-level duel.
 # 3. **Ties**: which models are within the seed noise (notebook 02) of the best?
 # 4. **Ensembles**: mean, median, top 3 and per-class selection, chosen on half the series.
 # 5. **Final standings**, with accuracy **and** price response side by side.
+#
+# **In the chain:** reads the selected config, `00_baselines`, `02_shortlist`, `04_price`,
+# `05_selected` and `05b_synthetic`, writes `10_final`.
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## Intuition: a league table for models
+#
+# ![Rating difference against win chance](../slides/img/elo_curve.png)
+#
+# Treat every series as a match between two models: the one with the lower RMSSE wins. The
+# **win rate** ignores the margin, so one disaster cannot dominate. **Bradley–Terry** and
+# **Elo** turn all the matches into one rating, as in chess: +100 points is about a 64% chance
+# of winning a series. Two models whose medians differ by less than the seed noise are
+# **tied**: retraining with a different seed could swap them.
 
 # %%
 import matplotlib.pyplot as plt
@@ -37,12 +55,13 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. Every saved forecast, on the evaluation series
 #
 # Models that forecast only a subset of the series (e.g. a foundation model run on a CPU) are
-# left out: a fair standing needs every model on the same series. As in notebooks 06–09, the
-# selected model (05 or 05b, `gd.selected_forecasts()`) is the column `GFM_selected`. If 05b
-# won, 05's own model stays in as `GFM_05`.
+# left out: a fair standing needs every model on the same series. As in 06–09, the selected
+# model is the column `GFM_selected`. If 05b won, 05's own model stays in as `GFM_05`. The
+# table lists each model's median RMSSE.
 
 # %%
 panel = gd.train_panel()
@@ -78,19 +97,12 @@ R.median().sort_values().round(3)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ## Intuition: a league table for models
-#
-# Treat every series as a match between two models: the one with the lower RMSSE wins. The
-# **win rate** ignores the margin, so one disaster cannot dominate. **Bradley–Terry** and
-# **Elo** turn all the matches into one rating, as in chess: +100 points is about a 64% chance
-# of winning a series. Two models whose medians differ by less than the seed noise are
-# **tied**: retraining with a different seed could swap them.
-
-# %% [markdown]
 # ## 2. Pairwise win rates
 #
-# Cell (row A, column B) is the share of series where A has the lower RMSSE. Ties (e.g. two
-# models that both forecast zero) count half.
+# The win matrix: cell (row A, column B) is the share of series where A has the lower RMSSE.
+# Ties (e.g. two models that both forecast zero) count half. Rows are sorted by average win
+# rate, so the strongest model is at the top. Blue cells (above 0.5) are wins for the row, red
+# cells losses; pale cells near 0.5 are coin flips.
 
 # %%
 def win_matrix(R: pd.DataFrame) -> pd.DataFrame:
@@ -105,21 +117,15 @@ def win_matrix(R: pd.DataFrame) -> pd.DataFrame:
 W = win_matrix(R)
 order = W.mean(axis=1).sort_values(ascending=False).index
 W = W.loc[order, order]
-fig, ax = plt.subplots(figsize=(2 + 0.75 * len(order), 1 + 0.55 * len(order)))
-im = ax.imshow(W.to_numpy(), cmap="RdBu", vmin=0.2, vmax=0.8)
-ax.set_xticks(range(len(order)), order, rotation=60, ha="right")
-ax.set_yticks(range(len(order)), order)
-for (i, j), v in np.ndenumerate(W.to_numpy()):
-    if i != j:
-        ax.text(j, i, f"{v:.2f}", ha="center", va="center", fontsize=7)
-ax.grid(False)
-fig.colorbar(im, ax=ax, label="row beats column")
-ax.set_title("Pairwise win rate (series level, RMSSE)")
-fig.tight_layout()
-plt.show()
+gplt.plot_heatmap(W, "Pairwise win rate (series level, RMSSE)", cmap="RdBu",
+                  label="row beats column", vmin=0.2, vmax=0.8, xrotation=60,
+                  figsize=(2 + 0.75 * len(order), 1 + 0.55 * len(order)))
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. Bradley–Terry and Elo
+#
+# Both turn the win matrix into one rating per model, on a scale where 1000 is average.
 #
 # * **Bradley–Terry**: P(A beats B) = s_A / (s_A + s_B), fitted by maximum likelihood on every
 #   pairwise result (the classic MM algorithm).
@@ -169,15 +175,24 @@ ratings.round(3)
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# When the median order and the rating order disagree, one model wins **often by a little**
-# and the other **rarely by a lot**. The mean is pulled by the hardest (mostly intermittent)
-# series; the ratings count every series once.
+# * When the median order and the rating order disagree, one model wins **often by a little**
+#   and the other **rarely by a lot**.
+# * The mean is pulled by the hardest (mostly intermittent) series; the median and the ratings
+#   count every series once. A model that ranks well on the median but poorly on the mean is
+#   strong on ordinary series and fragile on a few.
+# * Look at where `GFM_selected` sits: rating ≈ __ against LightGBM's ≈ __.
+#   <!-- TODO: fill after GPU run -->
+#
+# *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. Who is tied with the best?
 #
 # Notebook 02 measured how much the median RMSSE moves when only the seed changes: the
-# **noise floor**. A model within it of the best cannot be told apart from the best.
+# **noise floor** (the incumbent's seed-to-seed standard deviation on validation). A model
+# within one noise floor of the best cannot be told apart from it. This is the
+# **equivalence band** drawn in the final chart.
 
 # %%
 shortlist_path = gd.CONFIG_DIR / "02_shortlist.json"
@@ -194,11 +209,14 @@ else:
 ratings[["median_rmsse", "mean_rmsse", "bradley_terry", "tied_with_best"]].round(3)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 5. Ensembles
 #
 # Choosing on the test window and then scoring on it is cheating. As in the original lab we
 # use a **cross-sectional split**: half the series choose which models go in, the other half
-# is scored. The choice uses the median RMSSE.
+# is scored. The choice uses the median RMSSE. We also add the research's pairing, the
+# selected GFM averaged with LightGBM: LightGBM was its most accurate model, N-BEATSx its best
+# on price response (§5, [100k set]).
 
 # %%
 rng = np.random.default_rng(bc.RANDOM_SEED)
@@ -225,10 +243,10 @@ for sale_class, model in class_choice.items():
 ens_models = bc.model_columns(ens)
 
 # %%
-held_out = ~fc["unique_id"].isin(sel_ids)
 both = fc.merge(ens, on=["unique_id", "ds"])
-held_metrics = gd.score(both[held_out.to_numpy()], test, train)
-held_scores = bc.summarise(held_metrics, both[held_out.to_numpy()], test)
+held_out = both[~both["unique_id"].isin(sel_ids)]
+held_metrics = gd.score(held_out, test, train)
+held_scores = bc.summarise(held_metrics, held_out, test)
 held_scores = held_scores.sort_values("median_rmsse").reset_index(drop=True)
 held_scores[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3).head(12)
 
@@ -237,12 +255,14 @@ held_scores[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3
 # ### Reading the result
 #
 # * Averaging lets the models' mistakes partly cancel. Does the top-3 average beat every
-#   single model on the held-out half, and by more than the noise floor?
-# * Per-class selection chooses on half the series and often does not carry over: selection
-#   overfits, averaging does not.
+#   single model on the held-out half, and by more than the noise floor (≈ __ against ≈ __)?
+#   <!-- TODO: fill after GPU run -->
+# * Per-class selection often fails to carry over to the held-out half. Selection overfits;
+#   averaging does not.
+# * The ensembles go on the board scored on **all** series, half of which chose them, so their
+#   board numbers are optimistic. Quote the held-out table.
 #
-# The ensembles go on the board scored on **all** series, half of which chose them, so their
-# board numbers are optimistic. Quote the held-out table.
+# *Exact numbers vary with seed and hardware.*
 
 # %%
 gd.save_forecasts(ens, "10_ensembles")
@@ -251,11 +271,13 @@ gd.record(ens, test, train, lab="10 ensembles",
 gd.median_board()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 6. Price response next to accuracy
 #
 # An accurate model can still respond the wrong way to price. Notebooks 04, 05 and 05b report
 # the response with the same numbers every time: the median arc elasticity at ±20%, the share
-# of series that respond the wrong way (perverse), and how many series could be measured.
+# of series that respond the wrong way (perverse), the share that are flat, and how many series
+# could be measured. This cell gathers those reports from the configs.
 
 # %%
 def find_reports(obj, path: str = "") -> list[dict]:
@@ -281,9 +303,11 @@ print(f"{len(reported)} elasticity reports found in the configs")
 reported.round(3)
 
 # %% [markdown]
-# Where a notebook kept its per-series sweeps, we recompute the report here, from the seed-mean
+# <!-- DRAFT: Graeme to edit -->
+# Where a notebook kept its per-series sweeps, we recompute the report from the seed-mean
 # sweep, so every model is measured the same way. Each board model is paired with the runs (or
-# table) its sweeps came from.
+# table) its sweeps came from. The strength chart (F6) then shows, per model, the share of
+# series in each band, from highly elastic to perverse.
 
 # %%
 def sweep_sources() -> dict:
@@ -318,6 +342,8 @@ def seed_mean_elasticity(kind: str, name: str) -> pd.DataFrame | None:
     if not {"unique_id", "shift", "units"} <= set(sweeps.columns):
         return None
     sweep = sweeps.groupby(["unique_id", "shift"], as_index=False)["units"].mean()
+    swept = [0.0] + list(gp.SHIFTS)            # LightGBM's sweep also has ±2% and ±30%
+    sweep = sweep[np.isclose(sweep["shift"].abs().to_numpy()[:, None], swept).any(axis=1)]
     return gp.arc_elasticity(sweep)
 
 
@@ -327,8 +353,7 @@ for model, (kind, name) in sweep_sources().items():
     el = seed_mean_elasticity(kind, name)
     if el is None or model not in models:
         continue
-    top = el[el["shift"] == el["shift"].max()]
-    strength[model] = top.set_index("unique_id")["e_arc"]
+    strength[model] = gp.e20(el)
     response[model] = gp.elasticity_report(el)
 response = pd.DataFrame(response).T.reindex(columns=REPORT_COLS)
 print(f"per-series sweeps found for: {list(strength) or 'none'}")
@@ -342,11 +367,28 @@ else:
     print("No per-series sweeps saved yet: the reported table above is the response evidence.")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Compare the GFM's median elasticity (≈ __) with the empirical ≈ −3.6 on this data.
+#   <!-- TODO: fill after GPU run --> The research's −0.4 to −0.7 came from a different panel
+#   [100k set] and is not the target here.
+# * If LightGBM appears, expect a response that shrinks as the shock grows and goes flat
+#   outside the prices it has seen: an artefact of tree splits, not of demand (§5).
+# * Remember the research's sharpest negative result: elasticity tuned on one window did not
+#   carry to the next (it shrank 7–18×, §6). Treat any one-window response as provisional.
+#
+# *Exact numbers vary with seed and hardware.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 7. The final model
 #
 # The rule, fixed before looking: **keep the selected GFM unless another single model beats
 # its median RMSSE by more than the noise floor.** The GFM's price response was checked in
-# 04–05b; a model that is only tied on accuracy gives no reason to drop that.
+# 04–05b; a model that is only tied on accuracy gives no reason to drop that. The rule reads
+# the test window, but it can only overturn the incumbent on a clear win, so it is a check,
+# not a fresh search.
 
 # %%
 singles = ratings.copy()
@@ -365,6 +407,11 @@ standings.loc[standings.index.isin(baseline_names), "role"] = "baseline"
 standings.loc[final_model, "role"] = "final"
 standings.round(3)
 
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# The class heatmap (F3): median RMSSE by sales class (columns) for the final model, the top
+# five and the two yardsticks. Greener is better; read down a column to compare models.
+
 # %%
 contenders = list(dict.fromkeys([final_model] + list(ratings.index[:5])
                                 + ["LightGBM", "SeasonalNaive"]))
@@ -372,25 +419,33 @@ contenders = [m for m in contenders if m in R.columns]
 gplt.plot_class_heatmap(R, info, models=contenders)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ### The final model against the yardsticks
+#
+# First against SeasonalNaive (F4). Bars above 0.5 are classes where the final model wins
+# more series than it loses; the volume bars weight each series by its sales.
 
 # %%
 gplt.plot_wins(R, info, model=final_model, baseline="SeasonalNaive")
 
 # %% [markdown]
-# Against LightGBM, the strongest Day 1 model (or against the selected GFM, if LightGBM is
-# the final model).
+# <!-- DRAFT: Graeme to edit -->
+# Then against LightGBM, the strongest Day 1 model (or against the selected GFM, if LightGBM
+# is the final model).
 
 # %%
 rival = "LightGBM" if final_model != "LightGBM" else selected_col
 gplt.plot_wins(R, info, model=final_model, baseline=rival)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 8. Final standings
 #
-# Median RMSSE on all evaluation series (mean as a dot). The shaded band is the noise floor
-# above the best model: bars that end inside it are tied with the best. Ensembles are scored on
-# all series here, so they are flattered (see section 5).
+# One bar per model: median RMSSE on all evaluation series, with the mean as a black dot. The
+# shaded **equivalence band** runs from the best single model's median to one noise floor
+# above it: bars that end inside it are tied with the best. Green is the final model, grey the
+# Day 1 baselines, orange the ensembles. Ensembles are scored on all series here, so they are
+# flattered (see section 5).
 
 # %%
 all_scores = gd.per_series(gd.score(fc.merge(ens, on=["unique_id", "ds"]), test, train))
@@ -443,11 +498,34 @@ gd.save_config("10_final", {
 # <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * Which models are tied with the best? If several are, accuracy alone cannot choose: the
-#   price response, the cost of training and serving, and the seed spread can.
-# * Does the final model win where the sales are (the volume-weighted bars), or only on count?
-# * The research used LightGBM for accuracy and N-BEATSx for price response. Does the
-#   GFM + LightGBM average keep the best of both, and how would you sweep its price response?
+# * Which models are tied with the best? If several are, accuracy alone cannot choose: price
+#   response, the cost of training and serving, and the seed spread can.
+# * Does the final model win where the sales are (the volume bars), or only on count?
+# * Does the GFM + LightGBM average keep the best of both? How would you sweep its price
+#   response?
+#
+# ### What we learnt on Day 2
+#
+# <!-- TODO: fill the ≈ __ numbers after the GPU run -->
+#
+# * **Training is most of the battle.** Scaled steps, warm-up, clipping and best-weights
+#   retention took the research from 3 usable runs in 6 to 6 in 6 (§3, [100k set]); 01 tests
+#   the recipe here. Seed noise then sets the bar: a gap below the 02 noise floor is a tie, not
+#   a finding [method].
+# * **Accuracy.** The final model reaches a median RMSSE of ≈ __ (mean ≈ __), against ≈ __ for
+#   SeasonalNaive and ≈ __ for LightGBM on the same 2,000 series.
+# * **Price response is a separate test.** An accurate model can ignore price or respond the
+#   wrong way. In the research the most accurate trials had the weakest elasticity (§6), and
+#   LightGBM, the most accurate model, had an artefactual response (§5) [100k set]. Here the
+#   final model's median elasticity is ≈ __ against an empirical ≈ −3.6, with ≈ __% perverse.
+# * **Tune on validation, test once.** The research's early tuning was scored on its test
+#   window (§1). Once it tuned properly, accuracy carried to a new window but elasticity did
+#   not (§6). So trust accuracy gains across windows more than elasticity gains.
+# * **New work, not settled practice.** Synthetic discounts (05b), per-cluster models (06),
+#   GFM-based reconciliation (08) and conformal bands (09) go beyond the research. Read their
+#   results as leads.
+# * **Average rather than select.** In the original lab, averaging beat picking a model per
+#   segment. Here the top-3 average reaches ≈ __ on the held-out half.
 #
 # **Try it:** change the selection half (`bc.RANDOM_SEED` in the split) and see whether the
 # top 3 and the per-class choice stay the same.

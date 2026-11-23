@@ -15,24 +15,28 @@
 # # Day 2 · 01 (full data) — Lab: a training recipe for global models (20 min)
 #
 # The original lab 01 trains NHITS and N-BEATS with library defaults for 500 steps. On ≈17,000
-# series that under-trains, and the result moves a lot from one random seed to the next. Our own
-# research ran into exactly this, and settled on a short **training recipe**:
+# series that under-trains, and the score moves a lot from one random seed to the next. The
+# research hit the same problem and settled on a short **training recipe**
+# (`docs/gfm_learnings.md` §3):
 #
-# | Ingredient | Why |
-# |---|---|
-# | Steps scaled to the panel (≈174 visits per series) | a fixed budget under-trains big panels |
-# | 5% learning-rate warm-up, then 3 halvings | fewer early blow-ups, smaller oscillations |
-# | Run the full budget, **keep the best validation weights** | most runs ended above their best |
-# | Gradient clipping at 1.0 | stops single bad batches from throwing training off |
-# | Huber loss to train, MAE to validate | robust to outliers; validate on what we report |
-# | Target shifted by one (`y + 1`) | robust scaling divides by zero on all-zero windows |
+# | Ingredient | What the research found | Tag |
+# |---|---|---|
+# | Steps scaled to the panel (≈174 visits/series) | fixed budgets under-trained | [100k set] |
+# | 5% learning-rate warm-up, then 3 halvings | validation oscillation down a third | [100k set] |
+# | Full budget, **keep the best weights** | usable runs: 3 of 6 → 6 of 6 | [100k set] |
+# | Gradient clip at 1.0 | 0.1 was erratic; 5.0 lost accuracy | [100k set] |
+# | Huber to train, MAE to validate | simpler loss: half the estate unresponsive | [method] |
+# | Target shifted by one (`y + 1`) | zeros are safe for scaling and ratios | [method] |
 #
-# This notebook fits N-BEATSx with the recipe **off** and **on**, plus NHITS with it on,
-# with 3 seeds each. It compares accuracy, how much the seeds disagree, and training health.
-# See `docs/gfm_learnings.md` §3.
+# Goals
+#
+# 1. Fit N-BEATSx with the recipe **off** and **on**, and NHITS with it on: 3 seeds each.
+# 2. Compare accuracy, how much the seeds disagree, and training health.
+# 3. Put the recipe model on the board next to the Day 1 models.
+#
+# **In the chain:** reads `00_baselines`, writes `01_recipe`.
 
 # %%
-import numpy as np
 import pandas as pd
 from neuralforecast.models import NHITS
 
@@ -44,13 +48,23 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## Intuition: why a recipe and not just more steps?
+#
+# Training a network is a walk downhill in fog. A **warm-up** takes small steps until you have
+# your footing. **Clipping** stops one steep patch from sending you over a cliff. **Keeping the
+# best weights** means remembering the lowest point you passed, rather than stopping wherever
+# you stood when time ran out.
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. Data and the starting configuration
 #
 # The future covariates are the original labs' scale-free set (`promo`, `discount_depth`,
 # `price_index`), with the three numeric statics. The starting settings are the research's
-# **phase 4 defaults**. One honest caveat: the research chose them by scoring trials on a test
-# window, a mistake it fixed later. Here every tuning decision uses the validation window, and
-# the test window is scored once.
+# **phase 4 defaults** [single store]. One honest caveat: the research chose them by scoring
+# trials on the test window, a mistake it fixed later (§1). Here every tuning decision uses the
+# validation window, and the test window is scored once.
 
 # %%
 baselines_cfg = gd.load_config("00_baselines")
@@ -70,23 +84,17 @@ pd.Series(params)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ## Intuition: why a recipe and not just more steps?
-#
-# Training a network is a walk downhill in the fog. A **warm-up** takes small steps until you
-# have your footing. **Clipping** stops one steep patch from sending you over a cliff. **Keeping
-# the best weights** is remembering the lowest point you passed, rather than wherever you were
-# standing when the time ran out.
-
-# %% [markdown]
 # ## 2. Three arms, three seeds each
 #
-# * `NBEATSx_off`: same model and budget, library defaults (MAE loss, step decay, no clipping,
-#   final weights, no shift).
-# * `NBEATSx_recipe`: the full recipe.
-# * `NHITS_recipe`: NHITS with the recipe, for comparison with the original lab.
+# Each arm changes one thing, so any gap between them has one cause.
 #
-# Each fit validates on the last 14 training weeks (`val_size = H`). The recipe uses that window
-# to pick its best weights. Every run is cached, so this cell only trains on the GPU box.
+# * `NBEATSx_off`: the same model and budget with library defaults (MAE loss, step decay, no
+#   clipping, final weights, no shift).
+# * `NBEATSx_recipe`: the full recipe.
+# * `NHITS_recipe`: NHITS with the recipe, to link back to the original lab.
+#
+# Each fit validates on the last 14 training weeks (`val_size = H`), and the recipe picks its
+# best weights there. Every run is cached, so this cell only trains on the GPU box.
 
 # %%
 def nbeatsx_off(seed):
@@ -104,63 +112,97 @@ def nhits_recipe(seed):
                  random_seed=seed, alias="NHITS_recipe", **gd.recipe_kwargs(max_steps))
 
 
+# Keep one model to predict live on the day: the first recipe seed (``save_as``).
+recipe_runs = [gd.fit_seed(nbeatsx_recipe, gd.SEEDS[0], recipe_data, "01_nbeatsx_recipe",
+                           save_as="01_nbeatsx_recipe")]
+recipe_runs += gd.fit_seeds(nbeatsx_recipe, recipe_data, "01_nbeatsx_recipe",
+                            seeds=gd.SEEDS[1:])
 arms = {
     "NBEATSx_off": gd.fit_seeds(nbeatsx_off, plain_data, "01_nbeatsx_off"),
-    "NBEATSx_recipe": gd.fit_seeds(nbeatsx_recipe, recipe_data, "01_nbeatsx_recipe"),
+    "NBEATSx_recipe": recipe_runs,
     "NHITS_recipe": gd.fit_seeds(nhits_recipe, recipe_data, "01_nhits_recipe"),
 }
-# Keep one model for later notebooks to predict live: the first recipe seed.
-if gd.TRAIN and arms["NBEATSx_recipe"][0]["nf"] is not None:
-    gd.save_model(arms["NBEATSx_recipe"][0]["nf"], "01_nbeatsx_recipe")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. Training curves: recipe off vs on
 #
-# Loss against step on a log scale. The dotted line is where the warm-up ends; the dashed green
-# line is the step whose weights the recipe kept.
+# One panel per run: training loss (blue) and validation loss (orange) against step, on a log
+# scale. The dotted grey line is where the warm-up ends. The dashed green line is the step whose
+# weights were kept.
+#
+# Look for early spikes in the off arm, and for how far the kept step sits from the end.
 
 # %%
-gplt.plot_training(arms["NBEATSx_off"][:1] + arms["NBEATSx_recipe"][:1] + arms["NHITS_recipe"][:1],
-                   warmup=gd.warmup_steps(max_steps), title="First seed of each arm")
+first_seeds = []
+for runs in arms.values():
+    first_seeds.append(runs[0])
+gplt.plot_training(first_seeds, warmup=gd.warmup_steps(max_steps), title="First seed of each arm")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. Accuracy and seed spread
 #
-# Each seed is scored on its own, then the three seeds are averaged into one forecast.
+# Each seed is scored on its own: its median RMSSE over the 2,000 series. The table gives the
+# middle of the three, and the gap between the best and worst seed.
 
 # %%
 forecasts = {name: gd.seed_forecasts(runs) for name, runs in arms.items()}
 seed_scores = {}
 health = []
 for name, runs in arms.items():
-    rmsse = gd.per_series(gd.score(forecasts[name], test, train))
-    seed_cols = [c for c in rmsse.columns if not c.endswith("_mean")]
-    seed_scores[name] = rmsse[seed_cols].median()
-    health.append(gd.summaries(runs).assign(arm=name))
+    seed_scores[name] = gd.seed_medians(runs, test, train)
+    for run in runs:
+        health.append({**run["summary"], "arm": name})
 
 spread = pd.DataFrame({name: {"median of seed medians": s.median(),
                               "seed spread (max - min)": s.max() - s.min()}
                        for name, s in seed_scores.items()}).T
 spread.round(3)
 
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# The arm comparison chart puts the seeds side by side. Left: every seed's validation curve,
+# one colour per arm. Then a box per arm for oscillation and for median RMSSE, with each black
+# dot one seed. Tight boxes mean the seeds agree.
+
 # %%
 gplt.plot_arm_comparison(arms, metrics=seed_scores)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Compare the gap between arms with the seed spread inside each arm. A gap smaller than the
+#   spread is not a finding.
+# * Median RMSSE: recipe ≈ __, off ≈ __, NHITS ≈ __. Seed spread: recipe ≈ __, off ≈ __.
+#   <!-- TODO: fill after GPU run -->
+# * In the research the bigger prize was **stability**, not accuracy [100k set].
+#
+# *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
+# reading should not.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ### Training health
 #
-# These are screened on the validation curve only, never on price response:
+# We screen runs on the validation curve only, never on price response (§4, [method]):
+#
 # * `oscillation`: how much validation loss jumps between checks late in training;
-# * `best_frac`: where the kept weights came from (above ≈0.65 suggests the budget is too short);
-# * `neg_share`: the share of negative forecasts.
+# * `best_frac`: where the kept weights came from. Above ≈ 0.65 suggests the budget is short;
+# * `neg_share`: the share of negative forecasts. Discard a run above 10%.
 
 # %%
 health_cols = ["arm", "seed", "fit_seconds", "oscillation", "best_frac", "final_over_best",
                "neg_share"]
-pd.concat(health)[health_cols].round(3)
+pd.DataFrame(health)[health_cols].round(3)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 5. On the board, and against the Day 1 models
+#
+# The three seeds of each arm are averaged into one forecast and recorded. We then compare the
+# recipe model with LightGBM and SeasonalNaive using the charts from notebook 00.
 
 # %%
 board_fcst = forecasts["NBEATSx_off"][["unique_id", "ds"]]
@@ -189,7 +231,22 @@ gplt.plot_wins(rmsse, info, model="NBEATSx_recipe_mean", baseline="SeasonalNaive
 gplt.plot_wins(rmsse, info, model="NBEATSx_recipe_mean", baseline="LightGBM")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Against SeasonalNaive the recipe model should win most series. Against LightGBM, look at
+#   the by-volume bars: does the network win where the sales are?
+# * Recipe model: median RMSSE ≈ __ (mean ≈ __); LightGBM: median ≈ __ (mean ≈ __).
+#   <!-- TODO: fill after GPU run -->
+#
+# *Exact numbers vary with seed and hardware; the reading should not.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 6. The example series, with forecasts
+#
+# The examples from notebook 00, with the recipe model and LightGBM dashed over the test
+# window. Each title gives the forecast bias over the 14 weeks.
 
 # %%
 gplt.plot_series_price(panel, baselines_cfg["examples"], both,
@@ -217,11 +274,12 @@ gd.save_config("01_recipe", {
 # <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * Does the recipe win on accuracy, on seed spread, or both? In the research the bigger prize
-#   was **stability**: with best-weights retention every seed was usable.
-# * Look at `best_frac`. If the kept weights come from the very end, the budget is too short; if
-#   from the middle, the run kept going after its best.
-# * The minutes per fit (in the config) size the search in notebook 02.
+# * Does the recipe win on accuracy, on seed spread, or both? Which would you rather have when
+#   every later notebook compares settings that differ by a little?
+# * Look at `best_frac`. If the kept weights come from the very end, the budget is too short.
+#   If they come from the middle, the run kept going after its best. Which do you see?
+# * The minutes per fit in `01_recipe` size the search in notebook 02. How many fits could you
+#   afford in an afternoon?
 #
 # **Try it:** set `warmup_frac=0` in `gd.recipe_kwargs` and look at the first few hundred steps
 # of the training curve.

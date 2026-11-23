@@ -12,21 +12,28 @@
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# # Day 2 · 09 (full data) — Demo: intervals for the selected GFM (15 min)
+# # Day 2 · 09 (full data) — Lab: intervals for the selected GFM (15 min)
 #
-# The original demo 06 builds 80% and 95% intervals three ways on the 2,000-series sample.
-# Here we build them for the model we selected in notebook 05, trained on every series:
+# The original demo 06 builds intervals three ways on the 2,000-series sample. Here we build
+# them for our selected model, trained on every series. Conformal intervals by horizon and
+# group were an open question in the research (`docs/gfm_learnings.md` §9), so this is new work.
 #
 # | Method | How the interval is made |
 # |---|---|
 # | `GFM_quantile` | the selected config trained with a multi-quantile loss |
 # | `GFM_conf_step` | split conformal around `GFM_selected`: one bag of errors per horizon week |
-# | `GFM_conf_class` | the same, with one bag per sales class × horizon week (research §9) |
+# | `GFM_conf_class` | the same, with one bag per sales class × horizon week |
 # | `ETS_conf` | AutoETS with per-series conformal intervals, as in the original demo |
 #
-# The conformal bags are filled on the **validation** window, so the test window is scored once.
-# We judge the intervals by coverage, width, the interval (Winkler) score and an approximate
-# CRPS.
+# Goals
+#
+# 1. Fit the quantile GFM, and fill the conformal bags on the **validation** window.
+# 2. Score every method once on the test window: coverage, width, interval (Winkler) score and
+#    an approximate CRPS.
+# 3. Check calibration by sales class and by horizon week.
+#
+# **In the chain:** reads the selected config (`gd.selected_config()`, and its saved test
+# forecasts) and `00_baselines`, writes `09_intervals`.
 
 # %%
 import matplotlib.pyplot as plt
@@ -34,7 +41,6 @@ import numpy as np
 import pandas as pd
 import polars as pl
 from neuralforecast.losses.pytorch import HuberMQLoss, MQLoss
-from neuralforecast.models import NBEATSx
 from statsforecast import StatsForecast
 from statsforecast.models import AutoETS
 from statsforecast.utils import ConformalIntervals
@@ -55,14 +61,19 @@ MIN_GROUP = 40                  # smallest class × week bag; smaller bags use t
 # <!-- DRAFT: Graeme to edit -->
 # ## Intuition: honest about what we do not know
 #
+# ![Conformal intervals in two steps](../slides/img/conformal.png)
+#
 # A point forecast says "about 12 units". An 80% interval says "between 7 and 18, and we
 # expect to be outside that range one week in five". **Calibration** checks that promise;
-# **sharpness** prefers the narrowest interval that keeps it. Conformal prediction is "be as
-# wrong as you were before": collect the model's misses on weeks it did not train on, and put
-# that much around every new forecast.
+# **sharpness** prefers the narrowest interval that keeps it. Conformal prediction is "expect
+# to be as wrong as you were before": collect the model's misses on weeks it did not train on,
+# and put that much around every new forecast.
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. Data: the selected config
+#
+# `gp.prepare` rebuilds the selected config's training data exactly.
 
 # %%
 cfg = gd.selected_config()
@@ -77,28 +88,23 @@ print(f"{data.fit_df['unique_id'].nunique():,} training series (with copies) | "
       f"{len(eval_ids):,} scored | {cfg['max_steps']:,} steps per fit")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 2. The quantile GFM
 #
-# The same N-BEATSx, features and recipe as the selected model, with two changes: it learns
-# the 2.5, 10, 50, 90 and 97.5% quantiles with a Huber-smoothed pinball loss, and it keeps the
+# The same N-BEATSx, features and recipe as the selected model, with two changes. It learns
+# the 2.5, 10, 50, 90 and 97.5% quantiles with a Huber-smoothed pinball loss. And it keeps the
 # weights with the best multi-quantile validation loss.
 #
-# One seed is enough here. We judge an interval by how often it holds across 28,000
-# series-weeks, which a second seed barely moves. The point forecast it also gives is the
-# 1-seed exception on the board. Set `QUANTILE_SEEDS = gd.SEEDS` to check.
+# This fit uses **one seed**, an exception to the 3-seed rule (`docs/progress.md`). We judge an
+# interval by how often it holds across 28,000 series-weeks, which we expect a second seed to
+# move little. Its median point forecast is the 1-seed row on the board. Set
+# `QUANTILE_SEEDS = gd.SEEDS` to check.
 
 # %%
 def nbeatsx_quantile(seed):
-    """The selected N-BEATSx with a multi-quantile loss (``gd.build_nbeatsx`` with two keys
-    replaced)."""
-    p = {**gd.NBEATSX_DEFAULTS, **cfg["params"]}
-    mlp_units = [[p.pop("mlp_size")] * p.pop("mlp_depth")] * len(p["stack_types"])
-    train_kwargs = gd.recipe_kwargs(cfg["max_steps"])
-    train_kwargs["loss"] = HuberMQLoss(level=LEVELS)
-    train_kwargs["valid_loss"] = MQLoss(level=LEVELS)
-    return NBEATSx(h=bc.H, futr_exog_list=data.futr_exog, stat_exog_list=data.stat_exog,
-                   mlp_units=mlp_units, random_seed=seed, alias="GFM_quantile", **p,
-                   **train_kwargs)
+    """The selected N-BEATSx with a multi-quantile loss in place of the recipe's losses."""
+    return gd.build_nbeatsx(cfg["params"], data, cfg["max_steps"], seed, "GFM_quantile",
+                            loss=HuberMQLoss(level=LEVELS), valid_loss=MQLoss(level=LEVELS))
 
 
 assert data.futr_exog, "the selected config has future covariates (the exogenous stack needs them)"
@@ -113,9 +119,10 @@ gplt.plot_training(runs, warmup=gd.warmup_steps(cfg["max_steps"]),
                    title="Quantile GFM: training and validation loss")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # `gd.predict` removes the `+1` target shift from the model columns only, and
-# `bc.model_columns` leaves out the `-lo-` / `-hi-` columns. So we remove it from the interval
-# columns here, then average over seeds.
+# `bc.model_columns` leaves out the `-lo-` / `-hi-` columns. So we remove the shift from the
+# interval columns here, then average over seeds.
 
 # %%
 quantile = pd.concat([r["forecast"] for r in runs])
@@ -127,12 +134,13 @@ for col in quantile.columns:
 quantile.head()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. Conformal intervals around `GFM_selected`
 #
 # Conformal needs errors on weeks the model never trained on. So we refit the selected config
-# on the weeks before `VALID_START` and forecast the validation window.
+# (3 seeds) on the weeks before `VALID_START` and forecast the validation window.
 # `gp.prepare(cfg, cutoff=bc.VALID_START)` rebuilds every per-series statistic (statics,
-# oversampling counts, reference price) from those earlier training weeks only.
+# oversampling counts, reference price) from those earlier weeks only.
 
 # %%
 _, inner_train, valid, inner_data = gp.prepare(cfg, panel=raw, synthetic_seed=synthetic_seed,
@@ -152,10 +160,11 @@ calib = gd.seed_forecasts(calib_runs)[["unique_id", "ds", "GFM_selected_mean"]]
 calib = calib.rename(columns={"GFM_selected_mean": "GFM_selected"})
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # Each error is divided by the series' typical week-on-week change, so errors from fast and
 # slow sellers can share a bag. The error keeps its sign: demand is skewed, and a signed bag
 # lets the interval reach further above the forecast than below it. The scale comes from the
-# training weeks before `VALID_START` and is used for both windows.
+# weeks before `VALID_START` and is used for both windows.
 
 # %%
 def naive_scale(hist: pl.DataFrame) -> pd.Series:
@@ -181,8 +190,10 @@ calib["score"] = (calib["y"] - calib["GFM_selected"].clip(lower=0)) / \
 print(f"{len(calib):,} calibration errors from {calib['unique_id'].nunique():,} series")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # Split conformal takes the error quantiles of each bag, with the small-sample correction:
-# with `n` errors, the upper bound is the ⌈(n + 1)(1 − α/2)⌉-th smallest.
+# with `n` errors, the upper bound is the ⌈(n + 1)(1 − α/2)⌉-th smallest. The table shows the
+# upper 80% bound per class and horizon week, in units of each series' typical weekly change.
 
 # %%
 def conformal_bounds(scores: pd.Series, level: int) -> tuple[float, float]:
@@ -233,6 +244,7 @@ print(f"{small.sum()} of {len(by_class)} class × week bags have fewer than {MIN
 by_class.pivot(index="sale_class", columns="step", values="hi_80").round(2)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # Now the intervals for the test window, around the selected model's saved forecasts.
 
 # %%
@@ -242,9 +254,10 @@ conf_step = apply_conformal(point, by_step, ["step"], "GFM_conf_step")
 conf_class = apply_conformal(point, by_class, ["sale_class", "step"], "GFM_conf_class")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. A local reference: AutoETS with per-series conformal intervals
 #
-# As in the original demo: each series is calibrated on its own three rolling windows. With
+# As in the original demo, each series is calibrated on its own three rolling windows. With
 # three errors per week, a 95% interval is "the largest error seen so far", which caps its
 # coverage near 75%.
 
@@ -264,13 +277,14 @@ def ets_conformal() -> pd.DataFrame:
 ets = gd.cached("09_ets_conformal", ets_conformal)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 5. Scoring the intervals
 #
 # For an interval [l, u] at level 1 − α the **interval score** is
 # `(u − l) + (2/α)(l − y)·1[y < l] + (2/α)(y − u)·1[y > u]`: the width plus a penalty for
 # every miss. **CRPS** is approximated by the average pinball loss over the five quantiles we
 # have. Both are scaled, like RMSSE, by each series' in-sample seasonal-naive error, and
-# summarised by the median over series (the mean alongside).
+# summarised by the median over series, with the mean alongside for CRPS.
 
 # %%
 def seasonal_scale(hist: pl.DataFrame) -> pd.Series:
@@ -327,21 +341,28 @@ scores.round(3)
 #
 # * Coverage first: is each method close to its promise (0.80 and 0.95)? Under-coverage means
 #   the intervals are too narrow to trust; over-coverage means they are wider than they need
-#   to be.
+#   to be. The class × week conformal reaches ≈ __ at 80%. <!-- TODO: fill after GPU run -->
 # * Then the scores: among the methods that keep their promise, lower interval score and CRPS
 #   are better. Width alone is not a score.
+# * Expect `ETS_conf` to under-cover at 95%, for the reason given in section 4.
+#
+# *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 6. Calibration by sales class and by horizon week
 #
 # An average coverage of 80% can hide intervals that are too wide on fast sellers and too
-# narrow on slow ones.
+# narrow on slow ones. Left: the share of actuals inside the 80% interval, one bar per method
+# in each class. Right: the same share by weeks ahead. The dotted line at 0.8 is the promise;
+# a calibrated method sits on it in every class and every week.
 
 # %%
 covered = fc[["unique_id", "sale_class", "step"]].copy()
 for m in INTERVAL_MODELS:
     lo = fc[f"{m}-lo-80"].clip(lower=0)
-    covered[m] = (fc["y"] >= lo) & (fc["y"] <= fc[f"{m}-hi-80"])
+    hi = fc[f"{m}-hi-80"].clip(lower=0)
+    covered[m] = (fc["y"] >= lo) & (fc["y"] <= hi)
 coverage_by_class = covered.groupby("sale_class")[INTERVAL_MODELS].mean()
 coverage_by_step = covered.groupby("step")[INTERVAL_MODELS].mean()
 
@@ -363,10 +384,26 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * By class: if the per-class bags earn their keep, `GFM_conf_class` sits closer to 0.8 than
+#   the pooled week bags (`GFM_conf_step`). Watch the slow classes (H–J), where zeros make
+#   coverage jumpy.
+# * By week: coverage should not slide as the horizon grows. If it does, the bands are too
+#   narrow far out.
+# * The first two test weeks hold Good Friday and Anzac Day, and the validation window has no
+#   event week (`docs/progress.md`). A dip in weeks 1–2 is the calibration window failing to
+#   look like the test window.
+#
+# *Exact numbers vary with seed and hardware.*
+#
 # ## 7. Fan charts on the example series
 #
-# The shaded bands are 80% intervals: the quantile GFM's, and the class × week conformal band
-# around `GFM_selected`.
+# A fan chart shades the interval around the forecast. Here the bands are 80% intervals: the
+# quantile GFM's, and the class × week conformal band around `GFM_selected`. The conformal band
+# has one width per class and week ahead (scaled to the series), so it cannot widen for a
+# promotion; the quantile GFM's can. Either way, about four actuals in five should fall inside.
 
 # %%
 bands = {"GFM_quantile": ("GFM_quantile-lo-80", "GFM_quantile-hi-80"),
@@ -376,10 +413,11 @@ gplt.plot_series_price(panel, baselines_cfg["examples"], fc,
                        title="80% intervals: quantile GFM and class × week conformal")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 8. On the board
 #
-# The quantile GFM's median is a point forecast too. The conformal methods reuse
-# `GFM_selected`'s point forecast, which is already on the board.
+# The quantile GFM's median is a point forecast too, so it goes on the board. The conformal
+# methods reuse `GFM_selected`'s point forecast, which is already there.
 
 # %%
 point_fcst = quantile[["unique_id", "ds", "GFM_quantile"]]
@@ -415,11 +453,11 @@ gd.save_config("09_intervals", {
 # ## Discussion
 #
 # * The conformal guarantee is for the average over series and weeks, and it assumes the test
-#   weeks look like the validation weeks. Which weeks of the test window break that (Easter)?
+#   weeks look like the validation weeks. Which test weeks break that?
 # * Bags by class trade size for fit: smaller bags follow each class's error shape, but each
 #   bound rests on fewer errors. How many errors does a 95% bound need?
-# * The quantile GFM learns a width per item and week, but has no guarantee. Conformalising it
-#   (CQR) would add one.
+# * The quantile GFM learns a width per item and week, but has no guarantee. Would
+#   conformalising it (CQR) be worth the extra step?
 #
 # **Try it:** set `MIN_GROUP = 10_000` so every class uses the pooled week bag, and compare
 # coverage by class.

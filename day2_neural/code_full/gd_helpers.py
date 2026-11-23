@@ -1,10 +1,12 @@
 """Plumbing for the full-data Day 2 notebooks (``day2_neural/code_full``).
 
-The notebooks train on every eligible series and score on Lei's 2,000-series sample, so their
-numbers line up with his labs. This module sits on top of ``bootcamp.py`` (imported, never edited):
+The notebooks train on every eligible series and score on the original labs' 2,000-series
+sample, so their numbers line up with the original labs. This module sits on top of
+``bootcamp.py`` (imported, never edited):
 
-- it points ``bootcamp``'s data and output paths at ``results/day2_full`` (Lei's ``results/day2``
-  is never touched), then ``bc.split``, ``bc.score`` and ``bc.record`` work unchanged;
+- it points ``bootcamp``'s data and output paths at ``results/day2_full`` (the original labs'
+  ``results/day2`` is never touched), then ``bc.split``, ``bc.score`` and ``bc.record`` work
+  unchanged;
 - it loads the full training panel and the fixed evaluation ids;
 - it saves and loads configs, forecasts, tables and models;
 - it holds the GFM training recipe from the research (see ``docs/gfm_learnings.md`` §3):
@@ -14,6 +16,8 @@ numbers line up with his labs. This module sits on top of ``bootcamp.py`` (impor
 Environment variables:
 
 - ``GD_TRAIN=1``: fit models and write results (the GPU run). Default: load saved results.
+- ``GD_REFRESH=1``: with ``GD_TRAIN=1``, recompute cached tables (``cached``) even if they
+  exist. Without it a TRAIN run reuses any table already on disk, so a crashed run resumes.
 - ``GD_SMOKE=1``: tiny panel and a few training steps, written to ``results/day2_full_smoke``.
 - ``GD_N_JOBS``: StatsForecast worker processes (default all cores; 1 in a smoke run).
 - ``BOOTCAMP_ACCELERATOR``: ``auto`` (default), ``cpu`` or ``gpu``, read by ``bootcamp``.
@@ -41,15 +45,39 @@ CODE_FULL = Path(__file__).resolve().parent
 ROOT = CODE_FULL.parents[1]
 sys.path.insert(0, str(ROOT / "day2_neural" / "code"))
 
-import bootcamp as bc  # noqa: E402  (Lei's harness; needs the path above)
+import bootcamp as bc  # noqa: E402  (the shared Day 2 harness; needs the path above)
 
-warnings.filterwarnings("ignore")
+
+
+def _quiet_known_warnings() -> None:
+    """Silence the known noisy library warnings only, so real ones still show on the GPU box.
+
+    Lightning's advice (``PossibleUserWarning``: few workers, small logging interval) and the
+    deprecation and user warnings that lightning, neuralforecast and the Nixtla libraries raise
+    on every fit are hidden. Anything else, e.g. from torch or our own code, is shown.
+    """
+    noisy = (r"(pytorch_lightning|lightning|lightning_fabric|neuralforecast|statsforecast|"
+             r"mlforecast|utilsforecast|coreforecast|hierarchicalforecast)(\.|$)")
+    for category in (FutureWarning, UserWarning, DeprecationWarning):
+        warnings.filterwarnings("ignore", category=category, module=noisy)
+    try:
+        from lightning_fabric.utilities.warnings import PossibleUserWarning
+    except ImportError:
+        from pytorch_lightning.utilities.warnings import PossibleUserWarning
+    warnings.filterwarnings("ignore", category=PossibleUserWarning)
+    # bootcamp (read-only here) uses polars and pandas idioms those libraries now deprecate
+    for category in (FutureWarning, DeprecationWarning):
+        warnings.filterwarnings("ignore", category=category, module="bootcamp")
+
+
+_quiet_known_warnings()
 
 # ============================================================================
 # SETTINGS AND PATHS
 # ============================================================================
 
 TRAIN = os.environ.get("GD_TRAIN") == "1"
+REFRESH = os.environ.get("GD_REFRESH") == "1"
 SMOKE = os.environ.get("GD_SMOKE") == "1"
 
 SEEDS = [46335, 11207, 90218] if not SMOKE else [46335, 11207]
@@ -71,7 +99,7 @@ CPI_PATH = CODE_FULL / "data" / "cpi_weekly_deflator.csv"
 for _d in (CONFIG_DIR, FORECAST_DIR, TABLE_DIR, RUNS_DIR, MODEL_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
-# Point Lei's harness at the full-data locations. His functions read these at call time.
+# Point the shared harness at the full-data locations. Its functions read these at call time.
 bc.DATA_DIR = ROOT / "data"
 bc.RESULTS_DIR = OUT_DIR
 bc.FORECAST_DIR = FORECAST_DIR
@@ -85,15 +113,16 @@ def status() -> None:
     """Print the run mode, so every notebook says where it reads and writes."""
     mode = "TRAIN (fit and save)" if TRAIN else "LOAD (read saved results)"
     smoke = " | SMOKE run" if SMOKE else ""
-    print(f"{mode}{smoke} | results: {OUT_DIR.relative_to(ROOT)} | accelerator: {bc.ACCELERATOR}")
+    print(f"{mode}{smoke} | results: {OUT_DIR.relative_to(ROOT)} | "
+          f"accelerator: {bc.ACCELERATOR}")
 
 
 # ============================================================================
-# DATA: train on everything eligible, score on Lei's sample
+# DATA: train on everything eligible, score on the original labs' sample
 # ============================================================================
 
 def eval_ids() -> list[str]:
-    """The fixed evaluation series: Lei's default stratified sample (written once to csv)."""
+    """The fixed evaluation series: the original labs' stratified sample (written once to csv)."""
     if not EVAL_IDS_PATH.exists():
         if SMOKE:   # every non-J series of the tiny panel, topped up with class J
             classes = train_panel().select("unique_id", "sale_class").unique().sort("unique_id")
@@ -110,13 +139,16 @@ def eval_ids() -> list[str]:
 
 
 def train_panel() -> pl.DataFrame:
-    """Every series that passes Lei's filters (``load_panel(n_series=0)``); small if smoking."""
+    """Every series that passes the original labs' filters (``load_panel(n_series=0)``).
+
+    A smoke run uses a small sample instead (``SMOKE_N_SERIES``).
+    """
     n = SMOKE_N_SERIES if SMOKE else 0
     return bc.load_panel(n_series=n, seed=bc.RANDOM_SEED)
 
 
 def dropped_series() -> pd.DataFrame:
-    """Why series are missing from the training panel: Lei's filters, applied in order.
+    """Why series are missing from the training panel: the original labs' filters, in order.
 
     Also shows what the early research filters (a zero run of 26+ weeks, fewer than 52 weeks
     of history) would have removed on top. They are reported, not applied.
@@ -206,6 +238,16 @@ def nixtla_data(train: pl.DataFrame, test: pl.DataFrame, futr_exog: list[str] | 
     return NixtlaData(fit_df, predict_df, futr_df, static_df, futr_exog, stat_exog, y_shift)
 
 
+def subset_data(data: NixtlaData, ids) -> NixtlaData:
+    """The same data restricted to ``ids``, for quick what-if predictions (sweeps, probes).
+
+    Statics are kept whole: ``predict`` picks the rows it needs.
+    """
+    return NixtlaData(only(data.fit_df, ids), only(data.predict_df, ids),
+                      only(data.futr_df, ids), data.static_df, data.futr_exog,
+                      data.stat_exog, data.y_shift)
+
+
 # ============================================================================
 # SCORING AND THE BOARD
 # ============================================================================
@@ -217,7 +259,8 @@ def score(fcst, test, train) -> pd.DataFrame:
 
 
 def record(fcst, test, train, lab: str, **kwargs) -> pd.DataFrame:
-    """``bc.record`` on the eval ids only, so every score covers Lei's 2,000 series."""
+    """``bc.record`` on the eval ids only, so every score covers the original labs' 2,000
+    series."""
     ids = eval_ids()
     return bc.record(only(fcst, ids), only(test, ids), only(train, ids), lab=lab, **kwargs)
 
@@ -266,6 +309,7 @@ def load_config(name: str) -> dict:
 
 
 def _jsonable(x):
+    """``json.dumps`` fallback: numpy numbers become Python numbers; dates and paths strings."""
     if isinstance(x, (np.integer, np.floating)):
         return x.item()
     if isinstance(x, (date, pd.Timestamp, Path)):
@@ -277,10 +321,12 @@ def cached(name: str, compute) -> pd.DataFrame:
     """Load ``tables/<name>.parquet``, or (in a TRAIN run) compute it, save it and return it.
 
     This is how notebooks stay readable on the day: heavy work sits inside ``compute`` and
-    only runs on the GPU box. A missing table in a LOAD run is an error, not a silent refit.
+    only runs on the GPU box. A TRAIN run reuses a table that already exists, so a crashed run
+    resumes; set ``GD_REFRESH=1`` to recompute it. A missing table in a LOAD run is an error,
+    not a silent refit. ``compute`` must not rely on another ``cached`` call having run.
     """
     path = TABLE_DIR / f"{name}.parquet"
-    if path.exists() and not TRAIN:
+    if path.exists() and not (TRAIN and REFRESH):
         return pd.read_parquet(path)
     if not TRAIN:
         raise FileNotFoundError(f"{path.name} missing: run this notebook once with GD_TRAIN=1.")
@@ -351,7 +397,8 @@ def scaled_max_steps(n_series: int, batch_size: int = 256, visits: int = 174,
     return int(min(max(steps, floor), ceiling))
 
 
-def warmup_then_step(step: int, warmup_steps: int, decay_every: int, gamma: float = 0.5) -> float:
+def warmup_then_step(step: int, warmup_steps: int, decay_every: int,
+                     gamma: float = 0.5) -> float:
     """Learning-rate multiplier: linear warm-up, then ×``gamma`` every ``decay_every`` steps."""
     if step < warmup_steps:
         return (step + 1) / warmup_steps
@@ -429,10 +476,12 @@ NBEATSX_DEFAULTS = {
 
 
 def build_nbeatsx(params: dict, data: NixtlaData, max_steps: int, seed: int, alias: str,
-                  recipe: bool = True):
+                  recipe: bool = True, loss=None, valid_loss=None):
     """An NBEATSx from a params dict (as stored in configs) plus the training recipe.
 
     ``mlp_size`` and ``mlp_depth`` give every stack the same MLP: ``[[size] * depth] * stacks``.
+    ``loss`` and ``valid_loss`` replace the recipe's losses when given (e.g. a multi-quantile
+    loss for intervals); everything else in the recipe stays.
     """
     from neuralforecast.models import NBEATSx
 
@@ -442,9 +491,14 @@ def build_nbeatsx(params: dict, data: NixtlaData, max_steps: int, seed: int, ali
         p["stack_types"] = [s for s in p["stack_types"] if s != "exogenous"]
         p["n_blocks"] = p["n_blocks"][:len(p["stack_types"])]
         mlp_units = mlp_units[:len(p["stack_types"])]
+    train_kwargs = recipe_kwargs(max_steps, recipe=recipe)
+    if loss is not None:
+        train_kwargs["loss"] = loss
+    if valid_loss is not None:
+        train_kwargs["valid_loss"] = valid_loss
     return NBEATSx(h=bc.H, futr_exog_list=data.futr_exog or None,
                    stat_exog_list=data.stat_exog or None, mlp_units=mlp_units,
-                   random_seed=seed, alias=alias, **p, **recipe_kwargs(max_steps, recipe=recipe))
+                   random_seed=seed, alias=alias, **p, **train_kwargs)
 
 
 # ============================================================================
@@ -481,6 +535,7 @@ def health(traj: pd.DataFrame, max_steps: int, best_step: int | None) -> dict:
 
 
 def _run_dir(name: str, seed: int) -> Path:
+    """Folder that caches one seed of one named run: ``runs/<name>/seed<seed>``."""
     return RUNS_DIR / name / f"seed{seed}"
 
 
@@ -499,6 +554,9 @@ def fit_seed(build_model, seed: int, data: NixtlaData, name: str, val_size: int 
     run_dir = _run_dir(name, seed)
     done = run_dir / "summary.json"
     if done.exists():                     # finished earlier (resume or LOAD); delete to refit
+        if TRAIN and save_as and not (MODEL_DIR / save_as).exists():
+            print(f"{save_as} is not saved, but {run_dir} is cached: delete that folder to "
+                  "refit and save it.")
         return _load_run(run_dir)
     if not TRAIN:
         raise FileNotFoundError(f"{run_dir} missing: run this notebook once with GD_TRAIN=1.")
@@ -530,6 +588,7 @@ def fit_seed(build_model, seed: int, data: NixtlaData, name: str, val_size: int 
 
 
 def _load_run(run_dir: Path) -> dict:
+    """A finished run read back from disk, in the same shape ``fit_seed`` returns (no model)."""
     out = {"summary": json.loads((run_dir / "summary.json").read_text()),
            "trajectory": pd.read_csv(run_dir / "trajectory.csv"), "nf": None}
     for path in run_dir.glob("*.parquet"):
@@ -561,11 +620,22 @@ def seed_forecasts(runs: list[dict]) -> pd.DataFrame:
     out, cols = None, []
     for run in runs:
         alias, seed = run["summary"]["alias"], run["summary"]["seed"]
-        f = run["forecast"][["unique_id", "ds", alias]].rename(columns={alias: f"{alias}_s{seed}"})
+        f = run["forecast"][["unique_id", "ds", alias]]
+        f = f.rename(columns={alias: f"{alias}_s{seed}"})
         cols.append(f"{alias}_s{seed}")
         out = f if out is None else out.merge(f, on=["unique_id", "ds"])
     out[f"{alias}_mean"] = out[cols].mean(axis=1)
     return out
+
+
+def seed_medians(runs: list[dict], actual, history) -> pd.Series:
+    """Median RMSSE of each seed's own forecast on ``actual`` (scaled by ``history``).
+
+    One value per seed, indexed ``<alias>_s<seed>``; the seed-mean forecast is left out.
+    """
+    rmsse = per_series(score(seed_forecasts(runs), actual, history))
+    seed_cols = [c for c in rmsse.columns if not c.endswith("_mean")]
+    return rmsse[seed_cols].median()
 
 
 def summaries(runs: list[dict]) -> pd.DataFrame:
@@ -602,7 +672,8 @@ def knee_by_gain(front: pd.DataFrame, x: str = "accuracy", y: str = "elasticity"
 
 
 def knee_by_distance(front: pd.DataFrame, x: str = "accuracy", y: str = "elasticity"):
-    """Index of the front point furthest from the chord joining its two ends (axes scaled 0-1)."""
+    """Index of the front point furthest from the chord joining its two ends (axes scaled
+    0-1)."""
     pts = front[[x, y]].to_numpy(dtype=float)
     span = pts.max(axis=0) - pts.min(axis=0)
     span[span == 0] = 1.0

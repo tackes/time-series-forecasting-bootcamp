@@ -7,7 +7,7 @@ it rather than just saving it. The catalogue, and where each figure appears:
 F1    ``plot_series_price``       units with price on a second axis, promo weeks, forecasts
 F1b   ``plot_series_panels``      the same as two stacked panels (the twin-axis alternative)
 F2    ``plot_error_dist``         per-series error: histogram, ECDF, box plot by class
-F3    ``plot_class_heatmap``      median error, sales class × model
+F3    ``plot_class_heatmap``      median error, sales class × model (``plot_heatmap`` draws it)
 F4    ``plot_wins``               marginal wins against a baseline
 F5    ``plot_elasticity``         elasticity histogram, by class, and against shift size
 F6    ``plot_elasticity_strength``  % of series per elasticity category, per arm
@@ -63,7 +63,16 @@ def use_style() -> None:
 
 
 def _colour(i: int) -> str:
+    """The ``i``-th model colour, cycling through ``MODEL_COLOURS``."""
     return MODEL_COLOURS[i % len(MODEL_COLOURS)]
+
+
+def example_ids(examples: dict) -> list[str]:
+    """The example series from ``00_baselines`` (tier -> ids) as one flat list, in tier order."""
+    ids = []
+    for tier_ids in examples.values():
+        ids += tier_ids
+    return ids
 
 
 def series_table(panel: pl.DataFrame) -> pd.DataFrame:
@@ -277,9 +286,41 @@ def plot_error_dist(wide: pd.DataFrame, info: pd.DataFrame, models: list[str] | 
         for patch in bp["boxes"]:
             patch.set(facecolor=_colour(i), alpha=0.5)
     axes[2].set_xticks(np.arange(10) + 0.4 - width / 2, CLASS_ORDER)
-    handles = [plt.Rectangle((0, 0), 1, 1, color=_colour(i), alpha=0.5) for i in range(len(models))]
+    handles = []
+    for i in range(len(models)):
+        handles.append(plt.Rectangle((0, 0), 1, 1, color=_colour(i), alpha=0.5))
     axes[2].legend(handles, models)
     axes[2].set(title=f"{metric} by sales class (A = top sellers)", xlabel="class")
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_heatmap(table: pd.DataFrame, title: str, fmt: str = ".2f", cmap: str = "RdYlGn_r",
+                 label: str = "", text: pd.DataFrame | None = None, figsize=None,
+                 xlabel: str = "", ylabel: str = "", vmin=None, vmax=None,
+                 xrotation: int = 0) -> None:
+    """A labelled heatmap of ``table`` (rows down, columns across), each cell written in.
+
+    Cells show ``format(value, fmt)``, or the matching cell of ``text`` if given (e.g.
+    "mean ± sd"). NaN cells are left blank. With the default colour map greener is lower.
+    """
+    values = table.to_numpy(dtype=float)
+    if figsize is None:
+        figsize = (max(6, 1.1 * table.shape[1] + 3), 0.5 * table.shape[0] + 1.8)
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(values, cmap=cmap, aspect="auto", vmin=vmin, vmax=vmax)
+    ha = "right" if xrotation else "center"
+    ax.set_xticks(range(table.shape[1]), [str(c) for c in table.columns], rotation=xrotation,
+                  ha=ha)
+    ax.set_yticks(range(table.shape[0]), [str(r) for r in table.index])
+    for (r, c), v in np.ndenumerate(values):
+        if np.isnan(v):
+            continue
+        cell = text.iloc[r, c] if text is not None else format(v, fmt)
+        ax.text(c, r, cell, ha="center", va="center", fontsize=8)
+    ax.grid(False)
+    fig.colorbar(im, ax=ax, label=label)
+    ax.set(title=title, xlabel=xlabel, ylabel=ylabel)
     fig.tight_layout()
     plt.show()
 
@@ -290,17 +331,8 @@ def plot_class_heatmap(wide: pd.DataFrame, info: pd.DataFrame,
     models = models or list(wide.columns)
     table = wide[models].join(info["sale_class"]).groupby("sale_class")[models].median().T
     table = table[[c for c in CLASS_ORDER if c in table.columns]]
-    fig, ax = plt.subplots(figsize=(10, 0.5 * len(models) + 1.5))
-    im = ax.imshow(table.to_numpy(), cmap="RdYlGn_r", aspect="auto")
-    ax.set_xticks(range(table.shape[1]), table.columns)
-    ax.set_yticks(range(table.shape[0]), table.index)
-    for (r, c), v in np.ndenumerate(table.to_numpy()):
-        ax.text(c, r, f"{v:.2f}", ha="center", va="center", fontsize=8)
-    ax.grid(False)
-    fig.colorbar(im, ax=ax, label=f"median {metric}")
-    ax.set_title(f"Median {metric} by sales class (A = top 10% of units)")
-    fig.tight_layout()
-    plt.show()
+    plot_heatmap(table, f"Median {metric} by sales class (A = top 10% of units)",
+                 label=f"median {metric}", figsize=(10, 0.5 * len(models) + 1.5))
 
 
 def win_table(wide: pd.DataFrame, info: pd.DataFrame, model: str, baseline: str) -> pd.DataFrame:
@@ -308,10 +340,10 @@ def win_table(wide: pd.DataFrame, info: pd.DataFrame, model: str, baseline: str)
     d = wide[[model, baseline]].dropna().join(info[["sale_class", "mean_weekly_units"]])
     d["win"] = d[model] < d[baseline]
     d["vol"] = d["mean_weekly_units"].fillna(0)
+    d["vol_won"] = d["vol"] * d["win"]
     g = d.groupby("sale_class")
     out = pd.DataFrame({"win_share": g["win"].mean(),
-                        "win_share_volume": g.apply(lambda x: (x["vol"] * x["win"]).sum()
-                                                    / max(x["vol"].sum(), 1e-9)),
+                        "win_share_volume": g["vol_won"].sum() / g["vol"].sum().clip(lower=1e-9),
                         "n": g.size()})
     out.loc["all"] = [d["win"].mean(), (d["vol"] * d["win"]).sum() / d["vol"].sum(), len(d)]
     return out
@@ -361,11 +393,13 @@ def plot_wins(wide: pd.DataFrame, info: pd.DataFrame, model: str, baseline: str,
 
 def plot_elasticity(el: pd.DataFrame, info: pd.DataFrame, band=None,
                     title: str = "") -> None:
-    """F5: (a) arc elasticity at the largest shift, (b) by class, (c) median against shift size.
+    """F5: (a) arc elasticity at ±20% (``gp.report_shift``), (b) by class, (c) median against
+    shift size.
 
     ``band`` (e.g. ``gp.empirical_band(emp)``) is shaded on every panel when given.
     """
-    top = el[el["shift"] == el["shift"].max()].set_index("unique_id")
+    at = gp.report_shift(el)
+    top = el[np.isclose(el["shift"], at)].set_index("unique_id")
     e = top["e_arc"].dropna()
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.3))
     axes[0].hist(e.clip(-5, 2), bins=70, color=_colour(0), alpha=0.85)
@@ -377,7 +411,7 @@ def plot_elasticity(el: pd.DataFrame, info: pd.DataFrame, band=None,
         axes[0].axvline(resp.median(), color=COLOURS["price"], ls=":",
                         label=f"median responsive {resp.median():.2f}")
     axes[0].axvline(0, color="0.2", lw=0.8)
-    axes[0].set(title=f"Arc elasticity at ±{el['shift'].max():.0%}", xlabel="elasticity",
+    axes[0].set(title=f"Arc elasticity at ±{at:.0%}", xlabel="elasticity",
                 ylabel="series")
     axes[0].legend()
     joined = top.join(info["sale_class"])

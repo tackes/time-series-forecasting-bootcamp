@@ -9,8 +9,10 @@ What is here, and the research finding behind it (``docs/gfm_learnings.md``):
   network sees more price variation (§3). Copies are for training only.
 - ``price_sweep`` and ``arc_elasticity``: the standard sweep. Move **one** price channel by
   ±5/10/20%, keep everything else as observed, and report midpoint elasticities (§5).
-- ``elasticity_report``, ``categorise`` and ``empirical_elasticity``: how we read a sweep.
+- ``elasticity_report``, ``e20``, ``seed_mean_sweep``, ``categorise`` and
+  ``empirical_elasticity``: how we read a sweep.
 - ``probe``: sustained and one-week (pulse) price shocks (§5, phase 7).
+- ``scenario_forecasts``: forecasts at base price and with every price 20% lower and higher.
 - ``add_synthetic_cuts``: one-week cuts with a planted lift, added to the copies only (05b).
 """
 
@@ -28,6 +30,7 @@ import gd_helpers as gd
 bc = gd.bc
 
 SHIFTS = (0.05, 0.10, 0.20)          # sweep magnitudes
+REPORT_SHIFT = 0.20                  # the headline elasticity is read at ±20% ("e20")
 MIN_UNITS = 3.0                      # report elasticity only for series selling >= 3 units/week
 REPORT_CLASSES = list("ABCDEFGHI")   # class J is mostly noise at these volumes
 FLAT_TOL = 0.05                      # |e| below this counts as flat
@@ -87,7 +90,8 @@ def deflate_prices(df: pl.DataFrame, path=gd.CPI_PATH, cutoff=bc.TEST_START) -> 
     return price_index(out, cutoff)
 
 
-def add_discount_flag(df: pl.DataFrame, rule: str = "rolling", depth: float = 0.10) -> pl.DataFrame:
+def add_discount_flag(df: pl.DataFrame, rule: str = "rolling",
+                      depth: float = 0.10) -> pl.DataFrame:
     """Add ``is_discount``: a real price cut of at least ``depth``.
 
     ``rule="rolling"`` (default) compares with the 4-week rolling mean (``discount_depth``);
@@ -265,8 +269,8 @@ def drop_copies(df):
     return df[~df["unique_id"].astype(str).str.contains(COPY_TAG, regex=False)]
 
 
-def add_synthetic_cuts(train: pl.DataFrame, cuts_per_copy: int = 2, seed: int = bc.RANDOM_SEED,
-                       lift: dict = SYNTHETIC_LIFT) -> pl.DataFrame:
+def add_synthetic_cuts(train: pl.DataFrame, cuts_per_copy: int = 2,
+                       seed: int = bc.RANDOM_SEED, lift: dict = SYNTHETIC_LIFT) -> pl.DataFrame:
     """Plant one-week price cuts in ordinary weeks of the **copies** (originals untouched).
 
     Each chosen week gets a cut of a random depth from ``lift``, its price features updated,
@@ -305,7 +309,8 @@ def report_ids(train: pl.DataFrame, ids: list[str] | None = None) -> list[str]:
     keep = (train.filter(pl.col("unique_id").is_in(ids) & (pl.col("ds") < bc.TEST_START))
             .group_by("unique_id")
             .agg(pl.col("y").mean().alias("mean_y"), pl.col("sale_class").first())
-            .filter((pl.col("mean_y") >= MIN_UNITS) & pl.col("sale_class").is_in(REPORT_CLASSES)))
+            .filter((pl.col("mean_y") >= MIN_UNITS)
+                    & pl.col("sale_class").is_in(REPORT_CLASSES)))
     return sorted(keep["unique_id"].to_list())
 
 
@@ -314,8 +319,8 @@ def shift_prices(futr: pd.DataFrame, shift: float, channel: str = "price_index",
     """Future covariates with price moved by ``shift`` (e.g. -0.10 for a 10% cut).
 
     Single channel (the default and the research's final method) moves ``channel`` only.
-    ``compound=True`` also recomputes ``discount_depth`` from the moved price, as Lei's lab 03
-    does; the research found that version can flip the sign. ``weeks`` limits the move to
+    ``compound=True`` also recomputes ``discount_depth`` from the moved price, as the original
+    lab 03 does; the research found that version can flip the sign. ``weeks`` limits the move to
     some forecast weeks (0-based), for a one-week pulse.
     """
     out = futr.copy()
@@ -335,9 +340,7 @@ def price_sweep(nf, data, ids: list[str], shifts=SHIFTS, channel: str = "price_i
     Returns long format: ``unique_id``, ``shift`` (0, ±m), ``units``. Forecasts are unclipped
     and have the target shift removed, as the research's method requires.
     """
-    sub = gd.NixtlaData(gd.only(data.fit_df, ids), gd.only(data.predict_df, ids),
-                        gd.only(data.futr_df, ids), data.static_df, data.futr_exog,
-                        data.stat_exog, data.y_shift)
+    sub = gd.subset_data(data, ids)
     rows = []
     for s in [0.0] + [sign * m for m in shifts for sign in (-1, 1)]:
         futr = shift_prices(sub.futr_df, s, channel, compound)
@@ -374,21 +377,52 @@ def categorise(e: pd.Series) -> pd.Series:
     return pd.cut(e, bins=edges, labels=labels, right=True)
 
 
+def report_shift(el: pd.DataFrame) -> float:
+    """The shift the headline is read at: ``REPORT_SHIFT`` (±20%) if swept, else the largest."""
+    shifts = el["shift"].abs()
+    if np.isclose(shifts, REPORT_SHIFT).any():
+        return REPORT_SHIFT
+    return float(shifts.max())
+
+
+def e20(el: pd.DataFrame) -> pd.Series:
+    """Per-series arc elasticity at ±20% (``report_shift``), indexed by ``unique_id``.
+
+    Takes ``arc_elasticity`` output, or a raw ``price_sweep`` (then converts it first).
+    """
+    if "e_arc" not in el.columns:
+        el = arc_elasticity(el)
+    top = el[np.isclose(el["shift"], report_shift(el))]
+    return top.set_index("unique_id")["e_arc"]
+
+
+def seed_mean_sweep(runs: list[dict], key: str = "sweep") -> pd.DataFrame:
+    """Average the total units of each (series, shift) over seeds: the seed-mean model's sweep.
+
+    ``runs`` are ``gd.fit_seed`` results whose extras include a sweep under ``key``.
+    """
+    sweeps = pd.concat([run[key] for run in runs], ignore_index=True)
+    return sweeps.groupby(["unique_id", "shift"], as_index=False)["units"].mean()
+
+
 def elasticity_report(el: pd.DataFrame, info: pd.DataFrame | None = None) -> dict:
     """The numbers we always quote together for one model or arm (research §5).
 
     ``n_estimable`` (non-zero response), median arc elasticity per shift, share perverse
-    (e > 0), share flat (|e| < 0.05) and the invariance ratio (median at 5% ÷ median at 20%;
-    about 1 for a smooth response).
+    (e > 0), share flat (|e| < 0.05) and the invariance ratio (median at the smallest shift ÷
+    median at ±20%; about 1 for a smooth response). The headline is read at ±20%
+    (``report_shift``), even if the sweep went further.
     """
     by_shift = el.groupby("shift")["e_arc"].median()
-    at20 = el[el["shift"] == max(el["shift"])]["e_arc"]
+    at20 = e20(el)
+    headline = by_shift[np.isclose(by_shift.index, report_shift(el))].iloc[0]
+    invariance = float(by_shift.iloc[0] / headline) if headline else None
     out = {"n": int(at20.notna().sum()),
            "n_estimable": int((at20.abs() > 1e-6).sum()),
            "median_e20": float(at20.median()),
            "share_perverse": float((at20 > 0).mean()),
            "share_flat": float((at20.abs() < FLAT_TOL).mean()),
-           "invariance": float(by_shift.iloc[0] / by_shift.iloc[-1]) if by_shift.iloc[-1] else None}
+           "invariance": invariance}
     for m, v in by_shift.items():
         out[f"median_e{int(round(m * 100))}"] = float(v)
     return out
@@ -444,9 +478,7 @@ def probe(nf, data, ids: list[str], shocks=PROBE_SHOCKS, channel: str = "price_i
     - pulse: the price moves in week ``pulse_week`` only; ``lift`` is the change in that week
       and ``spill`` the change in all other weeks (ideally about zero).
     """
-    sub = gd.NixtlaData(gd.only(data.fit_df, ids), gd.only(data.predict_df, ids),
-                        gd.only(data.futr_df, ids), data.static_df, data.futr_exog,
-                        data.stat_exog, data.y_shift)
+    sub = gd.subset_data(data, ids)
     base = gd.predict(nf, sub)
     col = bc.model_columns(base)[0]
     base["step"] = base.groupby("unique_id").cumcount()
@@ -468,6 +500,21 @@ def probe(nf, data, ids: list[str], shocks=PROBE_SHOCKS, channel: str = "price_i
             r["elasticity"] = r["lift"] / shock
             rows.append(r.reset_index().assign(shock=shock, mode=mode))
     return pd.concat(rows, ignore_index=True)
+
+
+def scenario_forecasts(nf, data, ids: list[str], shift: float = 0.20,
+                       channel: str = "price_index") -> pd.DataFrame:
+    """Forecasts for ``ids`` at base price and with every forecast-week price ``shift`` lower
+    and higher. Columns ``-20% price``, ``base``, ``+20% price`` (labels follow ``shift``)."""
+    sub = gd.subset_data(data, ids)
+    pct = f"{shift:.0%}"
+    out = None
+    for label, s in ((f"-{pct} price", -shift), ("base", 0.0), (f"+{pct} price", shift)):
+        fcst = gd.predict(nf, sub, futr_df=shift_prices(sub.futr_df, s, channel))
+        col = bc.model_columns(fcst)[0]
+        fcst = fcst[["unique_id", "ds", col]].rename(columns={col: label})
+        out = fcst if out is None else out.merge(fcst, on=["unique_id", "ds"])
+    return out
 
 
 def probe_summary(resp: pd.DataFrame) -> pd.DataFrame:

@@ -17,10 +17,12 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
 - **Train once, load on the day.**
   - `GD_TRAIN=1` fits and saves; the default only loads.
   - Heavy work sits inside `gd.fit_seed(s)` or `gd.cached(...)`, which cache per run, so a crash resumes.
+  - A TRAIN run reuses any cached table or run already on disk. `GD_REFRESH=1` makes `gd.cached` recompute its tables; delete a `runs/` folder to refit it.
+  - Each `gd.cached` computation stands alone: it must not read globals that another `cached` call sets.
 - **Saving and size.**
   - No Lightning checkpoints or logs (`bc.trainer_kwargs()`). `BestWeights` keeps the best weights in memory.
   - HPO trials save summaries, not models.
-  - `save_as=` (which uses `nf.save(save_dataset=False)`) only for configs a later notebook loads. Models go to `models/` (gitignored, hosted outside the repo).
+  - `save_as=` (which uses `nf.save(save_dataset=False)`) only for models a later notebook or a live demo loads, one seed each: `01_nbeatsx_recipe`, `05_selected`, `05b_synthetic`, `09_quantile`. Models go to `models/` (gitignored, hosted outside the repo).
 - **Figures are displayed.**
   - Call `gplt.use_style()` once, and use the `gd_plots` functions (F1–F12; see its docstring).
   - Each `.ipynb` stays under ~3 MB.
@@ -31,8 +33,8 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
 - Jupytext percent format (`# %%`, `# %% [markdown]`). Edit the `.py`, then sync the `.ipynb`.
 - Plumbing goes in `gd_helpers.py` / `gd_price.py` / `gd_plots.py`: short functions with docstrings. Model set-up, features and results stay visible in cells.
 - Lines at most 100 characters; imports at the top of the notebook; no tuple-expression one-liners, nested ternaries or dense comprehensions.
-- Prose in British English, in the structure of the original labs:
-  - title with minutes, then goals;
+- Prose in British English ("learnt"), in the structure of the original labs:
+  - title with minutes, a short introduction, then `Goals` (no colon) with capitalised numbered goals, then `**In the chain:** reads <config>, writes <config>.`;
   - `## Intuition:`;
   - numbered sections, with `### Reading the result` after key outputs;
   - `## Discussion` and `**Try it:**`.
@@ -56,10 +58,10 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `01_recipe` | 01 | `params` (NBEATSx, see `gd.NBEATSX_DEFAULTS`), `recipe`, ★`y_shift`, ★`futr_exog`, `stat_exog`, `max_steps`, `seeds`, `minutes_per_fit`, `median_rmsse`, `seed_spread`, `saved_model` |
 | `02_shortlist` | 02 | `base_params`, `grid`, `max_steps`, `seeds`, `noise_floor`, `shortlist` (list of `{params, median_rmsse_valid, seed_sd}`), `best_params`, ★`futr_exog`, ★`y_shift` |
 | `03_features` | 03 | `params`, ★`features` (`deflate`, `events`, `fourier_k`, `hierarchy_level`), ★`futr_exog`, ★`y_shift`, `max_steps`, `seeds`, `median_rmsse` |
-| `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → report), `empirical`, `empirical_band`, `selected_arm`, `max_steps`, `seeds` |
-| `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `selection_rule`, `confirm`, `saved_model` |
-| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`) and `use` (`"05"` or `"05b"`) |
-| `06_clusters` … `10_final` | 06–10 | free-form, documented in the notebook |
+| `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
+| `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `role` (chosen on validation), `selection_rule`, `confirm`, `saved_model`, `forecasts`, `forecast_column` |
+| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation), `checks`, `checks_test`, `forecasts`, `forecast_column` |
+| `06_clusters`, `07_foundation`, `08_reconcile`, `09_intervals`, `10_final` | 06–10 | free-form, documented in the notebook |
 
 Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.
 - **Forecasts:** read them with `gd.selected_forecasts()`, which returns the column as `GFM_selected` whichever notebook won. 05b saves its own file and column (`GFM_synthetic`), named in its config's `forecasts` and `forecast_column` keys.

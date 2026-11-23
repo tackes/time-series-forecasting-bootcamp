@@ -21,19 +21,20 @@ import gd_helpers as gd  # noqa: E402
 import gd_price as gp  # noqa: E402
 
 bc = gd.bc
-LEI_RESULTS = gd.ROOT / "results" / "day2"
+ORIGINAL_RESULTS = gd.ROOT / "results" / "day2"      # the original labs' outputs
 
 
-def test_paths_point_away_from_lei_results():
+def test_paths_point_away_from_original_results():
     for path in (bc.RESULTS_DIR, bc.FORECAST_DIR, bc.LEADERBOARD_PATH):
         assert gd.OUT_DIR in Path(path).parents or Path(path) == gd.OUT_DIR
-        assert LEI_RESULTS not in Path(path).parents
+        assert ORIGINAL_RESULTS not in Path(path).parents
     assert bc.DATA_DIR == gd.ROOT / "data"
     assert (bc.DATA_DIR / "sales_weekly.parquet").exists()
 
 
 def test_config_round_trip():
-    cfg = {"model": "NBEATSx", "lr": np.float64(4.83e-4), "steps": np.int64(10), "d": date(2025, 1, 1)}
+    cfg = {"model": "NBEATSx", "lr": np.float64(4.83e-4), "steps": np.int64(10),
+           "d": date(2025, 1, 1)}
     gd.save_config("test_roundtrip", cfg)
     back = gd.load_config("test_roundtrip")
     assert back == {"model": "NBEATSx", "lr": 4.83e-4, "steps": 10, "d": "2025-01-01"}
@@ -53,7 +54,8 @@ def test_scaled_max_steps(monkeypatch):
 
 
 def test_warmup_then_step():
-    f = [gd.warmup_then_step(s, warmup_steps=10, decay_every=100) for s in (0, 9, 10, 109, 110, 210)]
+    steps = (0, 9, 10, 109, 110, 210)
+    f = [gd.warmup_then_step(s, warmup_steps=10, decay_every=100) for s in steps]
     assert f == pytest.approx([0.1, 1.0, 1.0, 1.0, 0.5, 0.25])
 
 
@@ -121,7 +123,8 @@ def test_empirical_elasticity_recovers_planted_slope():
             rows.append({"unique_id": f"s{i}", "ds": bc.TEST_START - timedelta(weeks=61 - k),
                          "sale_class": "D", "y": np.expm1(ly), "price_index": p})
     est = gp.empirical_elasticity(pl.DataFrame(rows), [f"s{i}" for i in range(40)])
-    assert est.loc[est["sale_class"] == "all", "elasticity"].item() == pytest.approx(-0.5, abs=0.05)
+    overall = est.loc[est["sale_class"] == "all", "elasticity"].item()
+    assert overall == pytest.approx(-0.5, abs=0.05)
 
 
 def test_save_config_writes_nan_as_null():
@@ -184,3 +187,89 @@ def test_prepare_valid_cutoff_counts_copies_pre_cutoff():
     # the final fit's training weeks include them (14 weeks: the 10-25 tier), so copies appear
     _, train, _, final = gp.prepare(cfg, panel=panel)
     assert final.fit_df["unique_id"].nunique() > train["unique_id"].n_unique()
+
+
+def _sweep(shifts, elasticity_at):
+    """A one-series sweep whose arc elasticity at shift m is ``elasticity_at(m)``."""
+    rows = [{"unique_id": "a", "shift": 0.0, "units": 100.0}]
+    for m in shifts:
+        e = elasticity_at(m)
+        # q_up / q_dn chosen so (q_up - q_dn) / mean / (2m) == e
+        ratio = (1 + e * m) / (1 - e * m)
+        rows.append({"unique_id": "a", "shift": -m, "units": 100.0})
+        rows.append({"unique_id": "a", "shift": m, "units": 100.0 * ratio})
+    return pd.DataFrame(rows)
+
+
+def test_elasticity_report_reads_twenty_percent_not_the_largest_shift():
+    sweep = _sweep((0.05, 0.10, 0.20, 0.30), lambda m: -1.0 if m == 0.20 else -9.0)
+    el = gp.arc_elasticity(sweep)
+    report = gp.elasticity_report(el)
+    assert report["median_e20"] == pytest.approx(-1.0)
+    assert report["median_e30"] == pytest.approx(-9.0)
+    assert gp.e20(el).item() == pytest.approx(-1.0)
+    assert gp.e20(sweep).item() == pytest.approx(-1.0)          # raw sweep accepted too
+    only_small = gp.arc_elasticity(_sweep((0.05, 0.10), lambda m: -2.0))
+    assert gp.report_shift(only_small) == pytest.approx(0.10)   # falls back to the largest
+
+
+def test_seed_mean_sweep_averages_units():
+    runs = [{"sweep": pd.DataFrame({"unique_id": ["a"], "shift": [0.2], "units": [u]})}
+            for u in (1.0, 3.0)]
+    assert gp.seed_mean_sweep(runs)["units"].item() == 2.0
+
+
+def test_cached_resumes_in_a_train_run(monkeypatch):
+    name = "test_cached_resume"
+    path = gd.TABLE_DIR / f"{name}.parquet"
+    path.unlink(missing_ok=True)
+    calls = []
+
+    def compute():
+        calls.append(1)
+        return pd.DataFrame({"x": [len(calls)]})
+
+    monkeypatch.setattr(gd, "TRAIN", True)
+    monkeypatch.setattr(gd, "REFRESH", False)
+    assert gd.cached(name, compute)["x"].item() == 1
+    assert gd.cached(name, compute)["x"].item() == 1        # read back, not recomputed
+    assert len(calls) == 1
+    monkeypatch.setattr(gd, "REFRESH", True)
+    assert gd.cached(name, compute)["x"].item() == 2        # GD_REFRESH=1 recomputes
+    monkeypatch.setattr(gd, "TRAIN", False)
+    assert gd.cached(name, compute)["x"].item() == 2        # LOAD reads
+    path.unlink()
+    with pytest.raises(FileNotFoundError, match="GD_TRAIN=1"):
+        gd.cached(name, compute)
+
+
+def test_seed_medians_one_value_per_seed():
+    ids = gd.eval_ids()[:3]
+    weeks = [bc.TEST_START + timedelta(weeks=k) for k in range(2)]
+    hist_weeks = [bc.TEST_START - timedelta(weeks=60 - k) for k in range(60)]
+    rng = np.random.default_rng(0)
+    history = pl.DataFrame({"unique_id": np.repeat(ids, 60), "ds": hist_weeks * 3,
+                            "y": rng.uniform(1, 10, 180)})
+    actual = pl.DataFrame({"unique_id": np.repeat(ids, 2), "ds": weeks * 3,
+                           "y": [5.0] * 6})
+    runs = []
+    for seed, value in ((1, 5.0), (2, 8.0)):
+        fcst = pd.DataFrame({"unique_id": np.repeat(ids, 2), "ds": weeks * 3, "M": value})
+        runs.append({"summary": {"alias": "M", "seed": seed}, "forecast": fcst})
+    meds = gd.seed_medians(runs, actual, history)
+    assert list(meds.index) == ["M_s1", "M_s2"]
+    assert meds["M_s1"] == pytest.approx(0.0)
+    assert meds["M_s2"] > 0
+
+
+def test_build_nbeatsx_loss_override():
+    from neuralforecast.losses.pytorch import MAE, HuberLoss, MQLoss
+
+    data = gd.NixtlaData(pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), None,
+                         futr_exog=["promo"], stat_exog=[])
+    default = gd.build_nbeatsx({}, data, max_steps=10, seed=0, alias="a")
+    assert isinstance(default.loss, HuberLoss) and isinstance(default.valid_loss, MAE)
+    quant = gd.build_nbeatsx({}, data, max_steps=10, seed=0, alias="q",
+                             loss=MQLoss(level=[80]), valid_loss=MQLoss(level=[80]))
+    assert isinstance(quant.loss, MQLoss) and isinstance(quant.valid_loss, MQLoss)
+    assert quant.alias == "q" and quant.max_steps == 10

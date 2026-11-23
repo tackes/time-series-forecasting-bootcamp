@@ -14,15 +14,19 @@
 # <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 08 (full data) — Lab: a global model at the bottom of the hierarchy (20 min)
 #
-# The original lab 05 forecasts every level of total → department → class → subclass → item with
-# AutoETS and reconciles them. Here the **item level comes from the selected global model**,
-# trained on every series, and simple ETS models forecast the levels above. Because the model
-# forecasts every item, the upper levels are true totals, not totals of a sample.
+# The original lab 05 forecasts every level of total → department → class → subclass → item
+# with AutoETS and reconciles them. Here the **item level comes from the selected global
+# model**, and simple ETS models forecast the levels above. Because the model forecasts every
+# item, the upper levels are true totals, not totals of a sample.
+#
+# This follows the research's phase 8, which is **experimental** (`docs/gfm_learnings.md` §8,
+# [100k set]). Two differences: the upper levels use ETS, not the research's dynamic harmonic
+# regression, and the items come from one saved seed, not a 3-seed mean.
 #
 # | Level | Base forecast |
 # |---|---|
 # | total, department, class, subclass | `AutoETS(season_length=1)`, as in the original lab |
-# | item | the selected GFM (05 or 05b), target shift removed, clipped at 0 |
+# | item | the selected GFM, target shift removed, clipped at 0 |
 #
 # | Method | Idea |
 # |---|---|
@@ -31,11 +35,14 @@
 # | `MiddleOut` (class) | trust the classes: sum up from them and split down |
 # | `MinTrace` `ols` / `wls_struct` | least-squares adjustment of every level at once |
 #
-# This notebook
+# Goals
 #
-# 1. forecasts every item with the selected model, and every upper node with ETS,
-# 2. reconciles them and checks that the results add up,
-# 3. scores each method at each level, and puts the item level on the board.
+# 1. Forecast every item with the selected model, and every upper node with ETS.
+# 2. Reconcile them and check that the results add up.
+# 3. Score each method at each level, and put the item level on the board.
+#
+# **In the chain:** reads the selected config (`gd.selected_config()`, for its saved model)
+# and `00_baselines`, writes `08_reconcile`.
 
 # %%
 from dataclasses import replace
@@ -64,18 +71,22 @@ gplt.use_style()
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ## Intuition: who do you believe?
+# ## Intuition: the numbers must add up, so whom do you believe?
 #
-# A global model is good at items: it has seen thousands of them. It has never seen a department
-# total, which is a different, much smoother kind of series. ETS on the total sees exactly that
-# series. Reconciliation decides how much to believe each, and makes the numbers add up.
+# ![Incoherent forecasts](../slides/img/hierarchy_tree.png)
+#
+# Think of a budget whose line items disagree with its total. A global model is good at items:
+# it has seen thousands of them. It has never seen a department total, which is a different,
+# much smoother kind of series. ETS on the total sees exactly that series. Reconciliation
+# decides how much to believe each, and makes the numbers add up.
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. Item forecasts from the selected model
 #
 # The saved model forecasts **every** training series, not just the scored ones, so the upper
-# levels can be summed from real items. This uses the one saved seed, not the 3-seed mean on the
-# board: the other seeds were not saved.
+# levels are sums of real items. This uses the one saved seed, not the 3-seed mean on the
+# board, because the other seeds were not saved (`docs/progress.md`, single-seed exceptions).
 
 # %%
 cfg = gd.selected_config()
@@ -104,14 +115,20 @@ bottom["ds"] = pd.to_datetime(bottom["ds"])
 print(f"{bottom['unique_id'].nunique():,} items forecast by {cfg['saved_model']}")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 2. Build the hierarchy
 #
-# As in the original lab. Items without a subclass cannot be placed and are left out (25 of the
-# 17,241, 3 of them scored). The summing matrix is kept **sparse**: with ≈19,000 nodes and
-# ≈17,000 items a dense one would take several GB.
+# As in the original lab. Items without a subclass cannot be placed and are left out (the cell
+# prints how many, and how many of them are scored). The summing matrix is kept **sparse**:
+# with ≈19,000 nodes and ≈17,000 items, a dense one would take several GB.
 
 # %%
 placed = panel.filter(pl.col("subclass_id") > 0)
+unplaced = set(panel["unique_id"].unique()) - set(placed["unique_id"].unique())
+n_series = panel["unique_id"].n_unique()
+n_scored = len(unplaced & set(gd.eval_ids()))
+print(f"{len(unplaced):,} of {n_series:,} items have no subclass and are left out "
+      f"({n_scored} of them scored)")
 df = placed.select(
     pl.lit("Total").alias("total"),
     pl.format("D{}", pl.col("department_id")).alias("department"),
@@ -144,11 +161,12 @@ for key, uids in tags.items():
         level_of[uid] = key.split("/")[-1]
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. Base forecasts for the upper levels
 #
-# AutoETS on every node above the items, with Naive as the fallback if a fit fails.
-# `season_length=1`: the aggregates have under two years of history, too short for a yearly
-# season.
+# AutoETS on every node above the items, with Naive as the fallback if a fit fails. We use
+# `season_length=1` because the aggregates have under two years of history, too short for a
+# yearly season.
 
 # %%
 upper_levels = [uids for key, uids in tags.items() if not key.endswith("/item")]
@@ -178,13 +196,14 @@ Y_hat = (Y_hat.assign(_o=Y_hat["unique_id"].map(order)).sort_values(["_o", "ds"]
 print(f"{Y_hat['unique_id'].nunique():,} nodes with a base forecast")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. Reconcile
 #
-# The sparse versions of the original lab's methods. Two differences from lab 05:
+# The sparse versions of the original lab's methods, with two differences:
 #
 # * `MinTrace(mint_shrink)` is left out. It needs in-sample errors for every node, and the GFM
 #   has none for the items without a costly in-sample pass. `ols` and `wls_struct` need none.
-# * `MiddleOut` uses the class level, as the research preferred.
+# * `MiddleOut` uses the class level. The research preferred MiddleOut (§8).
 
 # %%
 reconcilers = [
@@ -210,10 +229,11 @@ methods = [c for c in Y_rec.columns if c in SHORT.values()]
 methods
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ### Coherence check: does everything add up?
 #
 # Two checks per method: the original lab's (items sum to the total) and a stricter one (every
-# node equals the sum of its items, via the summing matrix).
+# node equals the sum of its items, via the summing matrix). A method that fails is dropped.
 
 # %%
 def coherence(Y_rec: pd.DataFrame, method: str) -> dict:
@@ -227,9 +247,10 @@ def coherence(Y_rec: pd.DataFrame, method: str) -> dict:
                                                    .max())}
 
 
+COHERENCE_TOL = 1e-6        # allowed gap, as a share of the average weekly total
 checks = pd.DataFrame({m: coherence(Y_rec, m) for m in methods}).T
 total_size = Y_train[Y_train["unique_id"] == "Total"]["y"].mean()
-tolerance = 1e-6 * total_size
+tolerance = COHERENCE_TOL * total_size
 incoherent = [m for m in methods if m != "Base (incoherent)"
               and checks.loc[m].max() > tolerance]
 print("fails the coherence check, dropped:", incoherent)
@@ -237,26 +258,31 @@ methods = [m for m in methods if m not in incoherent]
 checks.round(4)
 
 # %% [markdown]
-# Every reconciled method should show 0 (up to rounding); only the base forecasts may disagree.
-# In the original lab, the dense `MiddleOut` failed this check; run it whenever the library or
-# the hierarchy changes.
+# <!-- DRAFT: Graeme to edit -->
+# Every reconciled method should show 0, up to rounding; only the base forecasts may disagree.
+# In the original lab the dense `MiddleOut` failed this check, so run it whenever the library
+# or the hierarchy changes.
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
 # ## 5. The rule, written before the results
 #
-# Planning uses every level, so a method should not be bad at any of them. We pick the coherent
-# method whose **worst level** is best: the smallest maximum, over the five levels, of its median
-# RMSSE divided by the base forecast's. Ties within 1% go to `MiddleOut`, the research's
-# preference, then to the simpler method.
+# Planning uses every level, so a method should not be bad at any of them. We pick the
+# coherent method whose **worst level** is best: the smallest maximum, over the five levels, of
+# its median RMSSE divided by the base forecast's. Ties within 1% go to `MiddleOut`, the
+# research's preference, then to the simpler method.
+#
+# The rule reads the test window, so the chosen method is a finding to report, not a setting
+# tuned for later notebooks.
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 6. Accuracy per level
 #
-# RMSSE scaled by the one-step naive error (as in the original lab: the aggregates are too short
-# for a 52-week scale), so the scores are comparable across levels but **not** with the board.
-# Forecasts are clipped at 0 for scoring. Every node at each level is scored, all 17,000 items
-# included.
+# RMSSE here is scaled by the one-step naive error, as in the original lab, because the
+# aggregates are too short for a 52-week scale. So the scores compare across levels but **not**
+# with the board. Forecasts are clipped at 0. Every node at each level is scored, all 17,000
+# items included. Median first, then the mean.
 
 # %%
 scored = Y_rec.merge(Y_test, on=["unique_id", "ds"])
@@ -272,12 +298,19 @@ by_level.round(3)
 by_level_mean.round(3)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # Bias per level: total forecast over total actual, minus one (negative = under-forecast).
 
 # %%
 sums = scored.assign(level=scored["unique_id"].map(level_of)).groupby("level")[methods + ["y"]]
 bias = sums.sum()[methods].div(sums.sum()["y"], axis=0).sub(1).loc[LEVELS]
 bias.round(3)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# The chart below puts the per-level table on one scale. Each group of bars is a method; each
+# bar is one level, its median RMSSE divided by the base forecast's at that level. Left of the
+# dotted line at 1, reconciliation helped that level; right of it, it hurt.
 
 # %%
 rel = by_level.div(by_level["Base (incoherent)"], axis=0).drop(columns="Base (incoherent)")
@@ -289,10 +322,21 @@ plt.tight_layout()
 plt.show()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Each method's longest bar is its worst level, which the rule uses. Expect BottomUp to leave
+#   the items unchanged (ratio 1) and TopDown to leave the total unchanged.
+# * In the original lab, with ETS items, BottomUp made the total ≈ 29% worse. With GFM items,
+#   is BottomUp's total ratio now ≈ __? <!-- TODO: fill after GPU run -->
+# * Check the bias table too: a method can win on RMSSE and still under-forecast a level.
+#
+# *Exact numbers vary with seed and hardware.*
+#
 # ### One subclass and its department, before and after
 #
 # The subclass and department of the first high-volume example series: actuals, the ETS base
-# forecast, and each coherent method.
+# forecast (dotted), and each coherent method (dashed).
 
 # %%
 example = baselines_cfg["examples"]["high"][0]
@@ -306,7 +350,7 @@ for ax, (level, node) in zip(axes, nodes.items()):
     fc = Y_rec[Y_rec["unique_id"] == node]
     for i, m in enumerate(methods):
         ls = ":" if m == "Base (incoherent)" else "--"
-        ax.plot(fc["ds"], fc[m], ls=ls, lw=1.4, color=gplt.MODEL_COLOURS[i % 7], label=m)
+        ax.plot(fc["ds"], fc[m], ls=ls, lw=1.4, color=gplt._colour(i), label=m)
     ax.axvspan(test_start, hist["ds"].max(), color=gplt.COLOURS["test"], zorder=0)
     ax.set(title=f"{level} {node.split('/')[-1]}", ylabel="units / week")
 axes[0].legend(fontsize=7)
@@ -314,11 +358,12 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 7. The item level on the board
 #
 # The reconciled item forecasts for the scored series, on the board's scale (52-week RMSSE).
-# `GFM_BottomUp` is the base GFM itself (one seed), so it shows how far the single saved seed is
-# from the 3-seed mean on the board.
+# `GFM_BottomUp` is the base GFM itself (one seed), so it shows how far the saved seed is from
+# the 3-seed mean on the board.
 
 # %%
 item_rows = Y_rec[Y_rec["unique_id"].isin(set(items))]
@@ -332,7 +377,9 @@ gd.record(item_fc, test, train, lab="08 hierarchy", fit_seconds=t_rec.seconds,
 gd.median_board()
 
 # %% [markdown]
-# The same items next to `GFM_selected`, the 3-seed mean on the board:
+# <!-- DRAFT: Graeme to edit -->
+# The same items next to `GFM_selected`, the 3-seed mean on the board (F2: histogram,
+# cumulative curve and box plot by class).
 
 # %%
 item_vs_board = item_fc.merge(gd.selected_forecasts(cfg), on=["unique_id", "ds"])
@@ -340,12 +387,16 @@ item_rmsse = gd.per_series(gd.score(item_vs_board, test, train))
 gplt.plot_error_dist(item_rmsse, info)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 8. Apply the rule
+#
+# Each method's worst-level ratio, the tie band and the preference order from section 5.
 
 # %%
 worst = rel.max()
 best = worst.min()
-tied = worst[worst <= best * 1.01].index.tolist()
+TIE_BAND = 1.01             # within 1% of the best worst-level ratio counts as a tie
+tied = worst[worst <= best * TIE_BAND].index.tolist()
 preference = ["MiddleOut", "BottomUp", "TopDown", "MinT-wls_struct", "MinT-ols"]
 chosen = next(m for m in preference if m in tied)
 print(f"worst-level ratio: {worst.round(3).to_dict()} | chosen: {chosen}")
@@ -371,9 +422,10 @@ gd.save_config("08_reconcile", {
 # <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * With a strong item model, BottomUp may now do well at the top too. Compare the total-level
-#   bias of BottomUp here with the original lab, where ETS items made the total ≈29% worse.
-# * TopDown trusts ETS on the total and splits it by forecast proportions. Where does it pay?
+# * With a strong item model, does BottomUp now do well at the top too? If not, look at its
+#   total-level bias: small item biases add up across 17,000 items.
+# * TopDown trusts ETS on the total and splits it by forecast proportions. At which levels does
+#   that pay?
 # * MinT-ols treats every node as equally reliable. With ≈17,000 items and one total, what does
 #   that do to the items?
 #

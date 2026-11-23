@@ -12,11 +12,11 @@
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# # Day 2 · 00 (full data) — Recap: train on everything, score on the sample (10 min)
+# # Day 2 · 00 (full data) — Lab: train on everything, score on the sample (10 min)
 #
-# The original Day 2 labs train and score on a 2,000-series sample so they run on a laptop. Here
-# we **train on every eligible series** and **score on the same 2,000**, so every number below can
-# be put next to the original labs.
+# The original Day 2 labs train and score on a 2,000-series sample, so they run on a laptop.
+# Here we **train on every eligible series** and **score on the same 2,000**. Every number can
+# then sit next to the original labs.
 #
 # | | |
 # |---|---|
@@ -25,17 +25,19 @@
 # | Test window | the final **14 weeks**, from **2025-04-16** |
 # | Lead score | **median** RMSSE, with the mean alongside |
 #
-# This notebook
+# Goals
 #
-# 1. loads the full panel and shows which series were dropped and why,
-# 2. picks the example series every later notebook plots,
-# 3. re-creates the Day 1 reference models on the full panel, and
-# 4. looks at their errors and their wins over the seasonal-naive yardstick.
+# 1. Load the full panel and see which series were dropped, and why.
+# 2. Pick the example series that every later notebook plots.
+# 3. Refit the Day 1 reference models on the full panel.
+# 4. Learn the charts we use all day: price on a second axis, the error ECDF, error by class
+#    and marginal wins.
+#
+# **In the chain:** reads no config, writes `00_baselines`.
 
 # %%
 import lightgbm as lgb
 import pandas as pd
-import polars as pl
 from mlforecast import MLForecast
 from mlforecast.lag_transforms import RollingMean
 from mlforecast.target_transforms import LocalStandardScaler
@@ -53,13 +55,20 @@ gplt.use_style()
 # <!-- DRAFT: Graeme to edit -->
 # ## Intuition: why train on everything if we only score 2,000?
 #
-# A global model learns one shared pattern from many series. More series means more examples of
-# rare things (deep discounts, top sellers, Easter weeks) to learn from. Scoring on a fixed sample
-# keeps the comparison fair and the notebooks quick: the model can be trained on all ≈17,000
-# series, but every lab is judged on the same 2,000.
+# Think of a new member of staff learning what a promotion does to sales. Put them on one aisle
+# and they see a deep discount a few times a year. Walk them round the whole store and they see
+# one every week. A global model is the same: more series means more examples of rare things,
+# such as deep discounts, top sellers and holiday weeks.
+#
+# The exam stays the same, though. Every lab is marked on the same 2,000 series, so the scores
+# are comparable and the notebooks stay quick.
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. The panel and the evaluation sample
+#
+# Load the training panel and the 2,000 scored ids, then count series by sales class. Class A
+# holds the top sellers and class J the slowest movers.
 
 # %%
 panel = gd.train_panel()
@@ -82,20 +91,27 @@ by_class.round(2)
 # <!-- DRAFT: Graeme to edit -->
 # ### Which series are left out, and why
 #
-# The filters are the same as the original labs: no zero or negative prices, enough history for a
+# The filters are those of the original labs: no zero or negative prices, enough history for a
 # 52-week yardstick, and not constant. The last row is **not applied**. It shows what the early
-# research would also have dropped (series with a zero run of 26+ weeks). Later research found
-# that dropping sparse series made the error much worse, so we keep them
-# (`docs/gfm_learnings.md` §2).
+# research would also have dropped: series with a zero run of 26 weeks or more. Later research
+# found that removing sparse series made the error 6–11× worse, so we keep them
+# (`docs/gfm_learnings.md` §2, [100k set]).
 
 # %%
 gd.dropped_series()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 2. Example series: high, medium and low volume
 #
-# Picked once here and reused by every notebook, so you can watch the same series improve.
-# Units are on the left axis; sale price (solid) and regular price (dashed) on the right.
+# Two series per volume tier (high: classes A–B, medium: D–F, low: I–J), picked near the
+# middle of each tier. The first in each tier has a price cut in the test window, so price
+# response shows. They are picked once here and reused by every notebook.
+#
+# **How to read this chart.** Units sit on the left axis, in the lower half. Sale price (solid
+# step line) and regular price (dashed) sit on the right axis, near the top. Blue bands are
+# promo weeks, and the dots in them are coloured by discount depth. The grey area is the test
+# window.
 
 # %%
 examples = gplt.pick_examples(panel)
@@ -103,19 +119,20 @@ gplt.plot_series_price(panel, examples)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# Two axes on one chart can mislead: each axis can be stretched to suggest a link. The same
-# series as two stacked panels shares only the dates:
+# Two axes on one chart can mislead: either scale can be stretched to suggest a link that is
+# not there. Here is the same series as two stacked panels, which share only the dates.
 
 # %%
 gplt.plot_series_panels(panel, examples["high"][0])
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. Day 1 reference models on the full panel
 #
-# Local models (Naive, SeasonalNaive, AutoETS) fit each series on its own, so we only need to fit
-# them on the scored series. LightGBM is global: it is trained on all series.
+# Local models (Naive, SeasonalNaive, AutoETS) fit each series on its own, so we fit them on
+# the scored series only. LightGBM is global, so it trains on all series.
 #
-# `AutoETS(season_length=1)` has no yearly season. ETS cannot carry a 52-week season, which is
+# `AutoETS(season_length=1)` has no yearly season: ETS cannot carry a 52-week season. That is
 # what SeasonalNaive is for.
 
 # %%
@@ -152,19 +169,29 @@ gd.median_board()
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * The board is sorted by **median** RMSSE. The mean is pulled up by a minority of intermittent,
-#   mostly-zero series, so the median tells you about the typical item.
+# * The board is sorted by **median** RMSSE. A minority of intermittent, mostly-zero series pulls
+#   the mean up, so the median describes the typical item.
 # * LightGBM now learns from ≈17,000 series instead of 2,000. Compare its row with the original
-#   lab 00 to see what more data buys a global model.
+#   lab 00 to see what more data buys a global model: median ≈ __ (mean ≈ __).
+#   <!-- TODO: fill after GPU run -->
+# * SeasonalNaive is the yardstick. A model that cannot beat it on the median is not yet useful.
 #
-# *Reference run: full panel, GPU box. Exact numbers vary a little with hardware; the reading
+# *Reference run: full panel, GPU box. Exact numbers vary with seed and hardware; the reading
 # should not.*
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. Where the errors are
 #
-# The same per-series errors, three ways: a histogram (log scale), the share of series at or
-# below each error (ECDF), and the spread by sales class.
+# One score per model hides a lot. These charts show the same per-series errors three ways.
+#
+# * **Histogram** (log scale): the spread of errors, with each model's median dashed.
+# * **ECDF**: for any error on the x axis, the share of series at or below it. A curve that
+#   rises sooner (further left) is better. Where two curves cross, one model wins on the easy
+#   series and the other on the hard ones. The dotted line marks RMSSE = 1.
+# * **Box plot by class**: whether the errors sit in the top sellers or the slow movers.
+#
+# The heatmap after it gives the median error for each sales class and model; greener is better.
 
 # %%
 metrics = gd.score(baselines, test, train)
@@ -175,13 +202,30 @@ gplt.plot_error_dist(rmsse, info)
 gplt.plot_class_heatmap(rmsse, info)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ### Marginal wins over the yardstick
 #
-# How often does LightGBM beat SeasonalNaive, series by series? Counting wins weights every
-# series the same; weighting by volume asks whether the wins are where the sales are.
+# How often does LightGBM beat SeasonalNaive, series by series? The chart has three panels.
+#
+# * **Share won, by class.** Blue bars count wins, so every series gets one vote. Orange bars
+#   weight each series by its mean weekly units, so they ask whether the wins are where the
+#   sales are. The dashed line is 50%.
+# * **Per-series improvement**: (baseline − model) ÷ baseline, clipped to ±100%. Green is a win.
+# * **Head to head**: one dot per series, log axes. Below the diagonal, LightGBM is better.
 
 # %%
 gplt.plot_wins(rmsse, info, model="LightGBM", baseline="SeasonalNaive")
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Look for a gap between the two bars in a class. Many wins by count but fewer by volume means
+#   the model wins on small items and loses on big ones.
+# * LightGBM beats SeasonalNaive on ≈ __% of series, ≈ __% by volume.
+#   <!-- TODO: fill after GPU run -->
+#
+# *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %%
 gd.save_config("00_baselines", {
@@ -200,8 +244,8 @@ gd.save_config("00_baselines", {
 #
 # * Two thirds of the series are class J (slow movers). Mean RMSSE weighs each of them the same
 #   as a top seller. Which business question does the median answer, and which does WAPE answer?
-# * LightGBM wins most series against the yardstick, but look at the volume-weighted bars: are
-#   the wins in the classes that carry the sales?
+# * Where LightGBM wins on count, does it also win on volume? Are the wins in the classes that
+#   carry the sales?
 #
-# **Try it:** change `n_per_tier` in `gplt.pick_examples` and delete `example_ids.json` to pick a
-# different set of examples.
+# **Try it:** change `n_per_tier` in `gplt.pick_examples` and delete `example_ids.json` to pick
+# a different set of examples.

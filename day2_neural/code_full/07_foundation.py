@@ -15,20 +15,39 @@
 # # Day 2 · 07 (full data) — Lab: a foundation model against the selected GFM (20 min)
 #
 # The original lab 04 runs pretrained foundation models on a CPU subset. Here we put the
-# strongest of them, **Chronos-2**, next to the global model we selected in notebook 05
-# (`GFM_selected`), on the same 2,000 evaluation series:
+# strongest of them, **Chronos-2**, next to our selected global model (`GFM_selected`), on the
+# same 2,000 evaluation series. The research listed this comparison as an open question
+# (`docs/gfm_learnings.md` §9), so this is new work.
 #
 # | Variant | What it uses |
 # |---|---|
 # | `Chronos2_zs` | zero-shot, sales history only |
 # | `Chronos2_zs_cov` | zero-shot, with the selected config's future covariates in context |
-# | `Chronos2_ft` | fine-tuned on every training series, forecast with covariates (GPU, optional) |
+# | `Chronos2_ft` | fine-tuned on every training series, with covariates (GPU, optional) |
 #
-# References: `GFM_selected`, LightGBM and SeasonalNaive, read from their saved forecasts.
-# The variants are compared on the **validation** window first; the test window is scored once.
-# See `docs/gfm_learnings.md` §9.
+# The references are `GFM_selected`, LightGBM and SeasonalNaive, read from their saved
+# forecasts.
+#
+# Goals
+#
+# 1. Run the Chronos-2 variants on the validation and test windows.
+# 2. Choose a variant on **validation**, then score the test window once.
+# 3. See where Chronos-2 beats the GFM, and where it does not.
+#
+# **In the chain:** reads the selected config (`gd.selected_config()`) and `00_baselines`,
+# writes `07_foundation`.
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## Intuition: a well-travelled forecaster against a local expert
+#
+# Chronos-2 has seen millions of series from many industries, but never this shop. Shown a
+# series' history, it forecasts the next 14 weeks with no training at all. Our GFM has seen
+# only this shop, but all of it, with prices and promotions. It is the travelling consultant
+# against the shop manager: who wins, and on which items?
 
 # %%
+import functools
 import os
 import tempfile
 
@@ -47,7 +66,10 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# ## Settings
+# <!-- DRAFT: Graeme to edit -->
+# ## 1. Settings
+#
+# These set the model size, whether to fine-tune, and the interval levels.
 #
 # * The full Chronos-2 (≈120M parameters, ≈0.5 GB) on the GPU run; the small one (28M) in a
 #   CPU smoke run. Weights download once to the Hugging Face cache, outside the repo.
@@ -70,17 +92,10 @@ print(f"GPU: {GPU} | model: {CHRONOS_REPO} | fine-tune: {FINETUNE} ({FT_STEPS} s
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ## Intuition: a well-travelled forecaster against a local expert
+# ## 2. Data: the selected config's panel and covariates
 #
-# Chronos-2 has seen millions of series from many industries, but never this shop. Shown a
-# series' history, it forecasts the next 14 weeks with no training at all. Our GFM has seen
-# only this shop, but all of it, with prices and promotions. Which wins, and where?
-
-# %% [markdown]
-# ## 1. Data: the selected config's panel and covariates
-#
-# `gp.prepare` rebuilds exactly the training data of the selected config, so Chronos-2 sees the
-# same (deflated) prices, events and calendar terms as the GFM. The context is each series' full
+# `gp.prepare` rebuilds the selected config's training data exactly, so Chronos-2 sees the same
+# deflated prices, events and calendar terms as the GFM. The context is each series' full
 # training history. For the validation window the data is rebuilt with
 # `cutoff=bc.VALID_START`, so the reference price uses only the weeks before it.
 
@@ -96,9 +111,7 @@ info = gplt.series_table(panel)
 covariates = cfg["futr_exog"]
 
 examples = baselines_cfg["examples"]
-example_ids = []
-for tier_ids in examples.values():
-    example_ids += tier_ids
+example_ids = gplt.example_ids(examples)
 fm_ids = gd.eval_ids()
 if FM_N_SERIES:                      # smoke run: the examples first, then fill up
     rest = [u for u in fm_ids if u not in example_ids]
@@ -106,7 +119,8 @@ if FM_N_SERIES:                      # smoke run: the examples first, then fill 
 print(f"{len(fm_ids):,} series forecast | covariates: {covariates}")
 
 # %% [markdown]
-# ## 2. Chronos-2 in a few lines
+# <!-- DRAFT: Graeme to edit -->
+# ## 3. Chronos-2 in a few lines
 #
 # Chronos-2 reads a long data frame: one row per series and week, the target, and any
 # covariates. Covariates that also appear in `future_df` are treated as **known in advance**
@@ -146,18 +160,20 @@ def finetune(pipe, hist, covariates, seed):
                         output_dir=tmp, remove_printer_callback=True, seed=seed)
 
 # %% [markdown]
-# Each variant runs once per window: the validation window (history before `VALID_START`)
-# to compare the variants, and the test window to score them. Fine-tuning uses the training
-# weeks before `VALID_START` of **all** eligible series, so the same fine-tuned model is honest
-# on both windows. It is the one Chronos-2 variant with a seed, so it runs 3 seeds and the
-# forecast is the seed mean.
+# <!-- DRAFT: Graeme to edit -->
+# Each variant runs once per window: validation (history before `VALID_START`) to compare the
+# variants, and test to score them. Fine-tuning uses the weeks before `VALID_START` of **all**
+# eligible series, so one fine-tuned model is honest on both windows. It is the only variant
+# with a seed, so it runs 3 seeds and the forecast is the seed mean.
 
 # %%
-seconds = {}
+@functools.cache
+def run_chronos() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """All variants on both windows: forecasts (long by ``window``) and the time each step took.
 
-
-def run_chronos() -> pd.DataFrame:
-    """All variants on both windows, long by ``window``; timings go into ``seconds``."""
+    Cached in memory, so the two tables below come from one run when both are computed.
+    """
+    seconds = {}
     pipe = Chronos2Pipeline.from_pretrained(CHRONOS_REPO, device_map=DEVICE)
     variants = {"Chronos2_zs": (pipe, None), "Chronos2_zs_cov": (pipe, covariates)}
     if FINETUNE:
@@ -176,19 +192,27 @@ def run_chronos() -> pd.DataFrame:
             print(f"{window:5s} {alias:22s} {t.seconds:7.1f}s")
             out = f if out is None else out.merge(f, on=["unique_id", "ds"])
         frames.append(out.assign(window=window))
-    return pd.concat(frames, ignore_index=True)
+    timing = pd.DataFrame({"step": list(seconds), "seconds": list(seconds.values())})
+    return pd.concat(frames, ignore_index=True), timing
 
 
-def timing_table() -> pd.DataFrame:
-    """The timings ``run_chronos`` collected, one row per step."""
-    return pd.DataFrame({"step": list(seconds), "seconds": list(seconds.values())})
+def chronos_forecasts() -> pd.DataFrame:
+    """The forecasts from ``run_chronos``."""
+    return run_chronos()[0]
 
 
-fm_all = gd.cached("07_chronos", run_chronos)
-timing = gd.cached("07_chronos_seconds", timing_table)
+def chronos_timing() -> pd.DataFrame:
+    """The timings from ``run_chronos``, one row per step."""
+    return run_chronos()[1]
+
+
+fm_all = gd.cached("07_chronos", chronos_forecasts)
+timing = gd.cached("07_chronos_seconds", chronos_timing)
 
 # %% [markdown]
-# The fine-tuned forecast is the mean of its seeds (point and bands alike).
+# <!-- DRAFT: Graeme to edit -->
+# The fine-tuned forecast is the mean of its seeds, point and bands alike. The table shows how
+# long each step took.
 
 # %%
 ft_cols = [c for c in fm_all.columns if c.startswith("Chronos2_ft_s")]
@@ -203,7 +227,11 @@ fm_test = fm_all[fm_all["window"] == "test"].drop(columns="window")
 timing
 
 # %% [markdown]
-# ## 3. Which variant? Decided on the validation window
+# <!-- DRAFT: Graeme to edit -->
+# ## 4. Which variant? Decided on the validation window
+#
+# The variant with the lowest validation median RMSSE goes forward, with the mean and the
+# cost per 1,000 series alongside. The test window plays no part in the choice.
 
 # %%
 valid_metrics = gd.score(fm_valid[["unique_id", "ds"] + variants + ft_points], valid, fit_part)
@@ -223,14 +251,19 @@ valid_summary[["model", "median_rmsse", "mean_rmsse", "wape", "seconds_per_1k_se
 #
 # * Do the covariates help (`zs_cov` against `zs`)? Chronos-2 reads them in context, with no
 #   training, so a gain here is the price and promotion calendar paying off for free.
-# * If fine-tuning ran: is its gain bigger than the GFM's seed noise (notebook 02's noise
-#   floor)? Fine-tuning costs GPU time on every refresh.
+# * If fine-tuning ran: is its gain bigger than the 02 noise floor? Fine-tuning costs GPU time
+#   on every refresh.
+# * Note the cost column: zero-shot takes ≈ __ s per 1,000 series.
+#   <!-- TODO: fill after GPU run -->
+#
+# *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# ## 4. On the test window, against the selected GFM
+# <!-- DRAFT: Graeme to edit -->
+# ## 5. On the test window, against the selected GFM
 #
-# The Chronos-2 rows go on the board. In a run on a subset of series, their `n_series` says so,
-# and notebook 10 leaves them out of the standings.
+# The Chronos-2 rows go on the board. If they cover only a subset of series, their `n_series`
+# says so, and notebook 10 leaves them out of the standings.
 
 # %%
 fm_seconds = {m: step_seconds.get(f"{m}_test") for m in variants}
@@ -241,6 +274,7 @@ gd.record(fm_test[["unique_id", "ds"] + variants], test, train, lab="07 foundati
 gd.median_board()
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # For a like-for-like comparison, every model is scored on the series Chronos-2 forecast.
 
 # %%
@@ -256,12 +290,26 @@ test_summary = bc.summarise(test_metrics, both, test).sort_values("median_rmsse"
 test_summary[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3)
 
 # %% [markdown]
-# ## 5. Where the errors are
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Median RMSSE first: where does the chosen variant sit against `GFM_selected` (≈ __ against
+#   ≈ __)? <!-- TODO: fill after GPU run --> The mean sits alongside.
+# * The research found LightGBM the most accurate model but untrustworthy on price (§5,
+#   [100k set]). If Chronos-2 is close on accuracy, the same question applies to it.
+#
+# *Exact numbers vary with seed and hardware.*
+#
+# ## 6. Where the errors are
+#
+# Per-series RMSSE for every model (F2): a histogram, a cumulative curve and a box plot by
+# class.
 
 # %%
 gplt.plot_error_dist(rmsse, info, models=variants + references)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # By demand type (as in the original lab): smooth, erratic, intermittent and lumpy series.
 
 # %%
@@ -269,15 +317,20 @@ by_type = rmsse.join(info["demand_type"]).groupby("demand_type")
 by_type.median().round(3).assign(n=by_type.size())
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ### Marginal wins: the best Chronos-2 variant against the selected GFM
+#
+# Bars above 0.5 are classes where Chronos-2 wins more series than it loses.
 
 # %%
 gplt.plot_wins(rmsse, info, model=best_variant, baseline="GFM_selected")
 
 # %% [markdown]
-# ## 6. The example series
+# <!-- DRAFT: Graeme to edit -->
+# ## 7. The example series
 #
-# Chronos-2's 80% band is shaded around its forecast.
+# Chronos-2's 80% band is shaded around its forecast. Watch the promo weeks: does it follow the
+# planned price, or smooth over it?
 
 # %%
 shown = [best_variant, "GFM_selected"]
@@ -286,7 +339,7 @@ gplt.plot_series_price(panel, examples, both, models=shown, bands=bands)
 
 # %%
 test_median = test_summary.set_index("model")["median_rmsse"]
-gd.save_config("07_fm", {
+gd.save_config("07_foundation", {
     "repo": CHRONOS_REPO,
     "n_series": n_fm,
     "covariates": covariates,
@@ -305,12 +358,12 @@ gd.save_config("07_fm", {
 # <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * Chronos-2 sees at most ≈ 100 weekly points per series here. What is it bringing that a
+# * Chronos-2 sees at most ≈ 100 weekly points per series here. What does it bring that a
 #   model trained on 17,000 of this shop's series does not?
-# * Look at the wins by class. A foundation model is often strongest where history is short or
-#   sparse, and weakest where promotions drive the spikes.
-# * Chronos-2 has no price sweep in this notebook: its forecasts could be swept like the GFM's
-#   (`gp.shift_prices` on the future covariates). Would you trust its response?
+# * In the wins by class, is Chronos-2 strongest where history is sparse, and weakest where
+#   promotions drive the spikes? What would that tell you about using both?
+# * This notebook does not sweep Chronos-2's price response. Its forecasts could be swept like
+#   the GFM's (`gp.shift_prices` on the future covariates). Would you trust the answer?
 #
 # **Try it:** set `cross_learning=True` in `chronos_forecast` so Chronos-2 shares information
 # across the series in a batch, and compare the validation table.

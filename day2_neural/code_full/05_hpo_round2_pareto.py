@@ -15,22 +15,26 @@
 # # Day 2 · 05 (full data) — Lab: tuning for accuracy *and* price response (30 min)
 #
 # Notebook 02 tuned for accuracy alone. Here we tune for two things at once: accuracy, and a
-# price response with the right sign and a plausible size. The two pull against each other, so
-# there is no single best setting, only a **front** of settings where you cannot improve one
-# without giving up some of the other.
+# price response with the right sign and a plausible size. The research found these pull
+# against each other (§6, [100k set]). So there is no single best setting, only a **front** of
+# settings where you cannot improve one without giving up some of the other.
 #
-# | Step | What we do |
-# |---|---|
-# | 1 | fix the accuracy limit, the plausibility bound and the selection rule **before** any trial |
-# | 2 | a two-objective Optuna search on the validation window, 3 seeds per trial |
-# | 3 | the Pareto front and its knee, found two ways |
-# | 4 | a confirm run on the test window, once, for a pre-registered set of settings |
+# Goals
 #
-# The research's most important lesson (`docs/gfm_learnings.md` §6): **accuracy transferred
-# from tuning to test; elasticity did not.** This notebook checks whether that holds here.
+# 1. Fix the accuracy limit, the plausibility bound and the selection rule **before** any trial.
+# 2. Run a two-objective Optuna search on the validation window, 3 seeds per trial.
+# 3. Find the Pareto front and its knee, two ways, and choose by a rule on validation numbers.
+# 4. Confirm on the test window, once, for a pre-registered set of settings.
+#
+# The research's most important lesson (`docs/gfm_learnings.md` §6, [100k set]): **accuracy
+# transferred from tuning to test; elasticity did not.** It shrank 7–18×, and no setting could
+# be told apart from zero. This notebook checks whether that holds here.
+#
+# **In the chain:** reads `04_price`, `02_shortlist` and `01_recipe`, writes `05_selected`.
 
 # %%
 import json
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -45,21 +49,26 @@ bc = gd.bc
 gd.status()
 gplt.use_style()
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)  # TPE options
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
 # ## Intuition: a front, not a winner
 #
-# Picture every trial as a dot: accuracy along the bottom, price response up the side, lower is
-# better on both. A dot is on the **front** if no other dot beats it on both. Walking along the
-# front trades accuracy for response. The **knee** is where the trade turns bad: past it, each
-# extra bit of response costs a lot of accuracy.
+# Choosing a car on fuel economy and speed is like this. Some cars are worse on both, and you
+# drop them. The rest form a **front**: to gain speed you must give up economy. The **knee** is
+# the car where the trade turns bad, where a little more speed starts to cost a lot of economy.
+#
+# Here each trial is a car: accuracy along the bottom, price response up the side, lower is
+# better on both. A trial is on the front if no other trial beats it on both.
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 1. Settings carried forward
 #
-# The features, covariates and oversampling come from `04_price`; the noise floor from
-# `02_shortlist`. The incumbent is the model 04 selected.
+# The features, covariates and oversampling come from `04_price`, and the noise floor from
+# `02_shortlist`. The **incumbent** is the model 04 selected. The cell also prints a rough GPU
+# budget from 01's minutes per fit.
 
 # %%
 cfg01 = gd.load_config("01_recipe")
@@ -85,12 +94,14 @@ if minutes:
 print(f"data from 04: {data_cfg}")
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 2. Two windows: tune on validation, confirm on test
 #
+# This is the fix for the research's early mistake of tuning on the test window (§1, [method]).
 # Tuning fits use weeks before `VALID_START` and are scored on the 14 weeks after it. Every
-# per-series statistic, including which series get discount copies, is computed on those inner
-# training weeks only: `gp.prepare(cfg, cutoff=bc.VALID_START)` builds the tuning data that
-# way. The test window is used once, in section 6.
+# per-series statistic, including which series get discount copies, comes from those inner
+# weeks only; `gp.prepare(cfg, cutoff=bc.VALID_START)` builds the tuning data that way. The
+# test window is used once, in section 7.
 
 # %%
 raw = gd.train_panel()
@@ -106,23 +117,11 @@ print(f"report series: {len(valid_report)} (validation), {len(test_report)} (tes
 
 
 # %%
-def e20(el: pd.DataFrame) -> pd.Series:
-    """Per-series arc elasticity at the largest shift."""
-    top = el[el["shift"] == el["shift"].max()]
-    return top.set_index("unique_id")["e_arc"]
-
-
-def seed_mean_sweep(runs: list[dict]) -> pd.DataFrame:
-    """Average the total units of each (series, shift) over seeds, as notebook 04 does."""
-    sweeps = pd.concat([run["sweep"] for run in runs], ignore_index=True)
-    return sweeps.groupby(["unique_id", "shift"], as_index=False)["units"].mean()
-
-
 def fit_config(params: dict, data: gd.NixtlaData, prefix: str, seeds: list[int],
                report: list[str]) -> list[dict]:
     """Fit one setting for each seed (cached by a hash of ``params``), with a price sweep."""
     def build(seed):
-        return gd.build_nbeatsx(params, data, max_steps, seed, "NBEATSx_tuned")
+        return gd.build_nbeatsx(params, data, max_steps, seed, "GFM_selected")
 
     def extras(nf, d):
         return {"sweep": gp.price_sweep(nf, d, report, channel=cfg04["price_channel"])}
@@ -143,32 +142,42 @@ def evaluate(runs: list[dict], window, history) -> dict:
     """
     fcst = gd.seed_forecasts(runs)
     rmsse = gd.per_series(gd.score(fcst, window, history))
-    seed_cols = [c for c in rmsse.columns if not c.endswith("_mean")]
     mean_col = [c for c in rmsse.columns if c.endswith("_mean")][0]
-    seed_e = [float(e20(gp.arc_elasticity(run["sweep"])).median()) for run in runs]
-    mean_e = float(e20(gp.arc_elasticity(seed_mean_sweep(runs))).median())
+    seed_e = []
+    for run in runs:
+        seed_e.append(float(gp.e20(run["sweep"]).median()))
+    mean_e = float(gp.e20(gp.seed_mean_sweep(runs)).median())
     return {"accuracy": float(rmsse[mean_col].median()),
             "mean_rmsse": float(rmsse[mean_col].mean()),
-            "seed_rmsse": rmsse[seed_cols].median().tolist(),
+            "seed_rmsse": gd.seed_medians(runs, window, history).tolist(),
             "seed_e20": seed_e,
             "e20": mean_e,
             "forecast": fcst.rename(columns={mean_col: "seed_mean"})}
 
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 3. The incumbent, and the rules fixed before any trial
 #
-# First the 04 model on the validation window, 3 seeds. Its accuracy sets the limit.
+# First the 04 model on the validation window, with 3 seeds. Its accuracy sets the limit. The
+# plausibility bound comes from the empirical elasticity of the weeks before `VALID_START`,
+# so no validation or test week shapes the objective.
 
 # %%
 incumbent_runs = fit_config(incumbent_params, inner_data, "05_trial", gd.SEEDS, valid_report)
 incumbent = evaluate(incumbent_runs, valid, inner_train)
 
 ACC_LIMIT = 1.10 * incumbent["accuracy"]
-empirical_all = cfg04.get("empirical_all", np.nan)
-PLAUSIBLE_BOUND = 2 * abs(empirical_all) if np.isfinite(empirical_all) else 2.0
+valid_empirical = gp.empirical_elasticity(inner_train, gp.report_ids(inner_train))
+is_all = valid_empirical["sale_class"] == "all"
+empirical_all = float(valid_empirical.loc[is_all, "elasticity"].iloc[0])
+if np.isfinite(empirical_all):
+    PLAUSIBLE_BOUND = 2 * abs(empirical_all)
+else:
+    PLAUSIBLE_BOUND = 2.0
 print(f"incumbent: median RMSSE {incumbent['accuracy']:.4f}, median e20 {incumbent['e20']:.3f}")
-print(f"accuracy limit {ACC_LIMIT:.4f} | plausibility bound |e| <= {PLAUSIBLE_BOUND:.2f}")
+print(f"accuracy limit {ACC_LIMIT:.4f} | empirical elasticity before VALID_START "
+      f"{empirical_all:.2f} | plausibility bound |e| <= {PLAUSIBLE_BOUND:.2f}")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -178,23 +187,27 @@ print(f"accuracy limit {ACC_LIMIT:.4f} | plausibility bound |e| <= {PLAUSIBLE_BO
 #   It never sees elasticity.
 # * **Objective 2, elasticity:** the median arc elasticity at ±20% of the **seed-mean sweep**
 #   (units averaged over seeds for each series and shift, then the arc elasticity, as in 04;
-#   single channel, report series). Set to 0 if it is not finite or `|e|` is above the
-#   plausibility bound: **twice the empirical elasticity from 04**. (The research used 2, but its
-#   empirical value was −0.5; here it is about −3.6.)
-# * **Constraint:** a trial is feasible only if its accuracy is at most **1.10 × the incumbent's**.
+#   single channel, report series). Set to 0 if fewer than two seeds finished, if it is not
+#   finite, or if `|e|` is above the plausibility bound: **twice the empirical elasticity** of
+#   the weeks before `VALID_START`. (The research used 2, but its empirical value was about
+#   −0.5; here it is ≈ −3.6.)
+# * **Constraint:** a trial is feasible only if its accuracy is at most **1.10 × the
+#   incumbent's**.
 # * **Confirm set:** the accuracy-optimal feasible point, the knee by both methods, and the
 #   incumbent as a control. Each is refitted on the full training window and scored on the test
-#   window once, with `CONFIRM_SEEDS`.
-# * **Selection:** a knee wins if its test elasticity is negative in at least 2 of 3 seeds **and**
-#   its test median RMSSE is within the 02 noise floor of the accuracy-optimal point. Otherwise
-#   the accuracy-optimal point wins.
+#   window once, with `CONFIRM_SEEDS`. This reports what transferred; it chooses nothing.
+# * **Selection, on the validation numbers:** a knee wins if its validation elasticity is
+#   negative in at least 2 of 3 seeds **and** its validation median RMSSE is within the 02
+#   noise floor of the accuracy-optimal point's. The gain knee is checked first, then the
+#   distance knee. Otherwise the accuracy-optimal point wins.
 #
 # Weight decay was in the research's search space. It is left out here: the library's default
 # optimiser has none, and adding one would change how every later notebook builds the model.
 
 # %%
-SELECTION_RULE = ("knee (gain first, then distance) if test e20 < 0 in >= 2/3 of seeds and test "
-                  "median RMSSE <= accuracy-optimal + 02 noise floor; else accuracy-optimal")
+SELECTION_RULE = ("on the validation window: knee (gain first, then distance) if e20 < 0 in "
+                  ">= 2/3 of seeds and median RMSSE <= accuracy-optimal + 02 noise floor; "
+                  "else accuracy-optimal")
 BLOCKS = ["1111", "2222", "1221", "3333"]
 COVERAGE_LRS = [1e-4, 5e-4]
 
@@ -238,11 +251,13 @@ def constraint(trial) -> list[float]:
 
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. The search
 #
 # Forced **coverage cells** run first: every block layout at two learning rates, so the search
-# does not miss a region by chance. Then Optuna's TPE sampler takes over. The study is stored in
-# SQLite and every fit is cached by a hash of its settings, so a crash resumes where it stopped.
+# does not miss a region by chance. Then Optuna's TPE sampler takes over. The study is stored
+# in SQLite and every fit is cached by a hash of its settings, so a crash resumes where it
+# stopped.
 
 # %%
 def run_study() -> None:
@@ -289,13 +304,28 @@ if gd.TRAIN:
     with bc.Timer() as t:
         run_study()
     print(f"study: {t.seconds / 60:.1f} min")
+    # the study may have grown since the table was cached, so rebuild it from the study
+    (gd.TABLE_DIR / "05_trials.parquet").unlink(missing_ok=True)
 trials = gd.cached("05_trials", trials_table)
 show_cols = ["trial", "accuracy", "elasticity", "e20_raw", "feasible", "n_blocks", "mlp_size",
              "mlp_depth", "learning_rate", "dropout_prob_theta"]
 trials.sort_values("accuracy")[show_cols].round(4)
 
 # %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 5. The front and the knee
+#
+# **How to read the Pareto chart.** Each dot is one trial: median validation RMSSE along the
+# bottom, median e20 up the side (more negative is a stronger response). Blue dots are
+# feasible and grey dots broke the accuracy limit. The red line joins the front. The open
+# diamond is the incumbent.
+#
+# The knee is found two ways, and both are marked:
+#
+# * **gain** (star): the most elasticity gained per unit of accuracy lost, against the
+#   accuracy-optimal point;
+# * **distance** (plus): the point furthest from the straight line joining the front's two
+#   ends, with both axes scaled 0–1.
 
 # %%
 feasible = trials[trials["feasible"]]
@@ -313,13 +343,22 @@ front[show_cols].round(4)
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Grey dots broke the accuracy limit. Dots at exactly 0 on the vertical axis had an
-#   implausible or undefined response and were scored as "no response".
-# * If the two knee methods disagree, the research's rule was that a person decides. Here both
-#   go into the confirm run, so the test window decides between them under the rule above.
+# * Dots at exactly 0 on the vertical axis had an implausible or undefined response, and were
+#   scored as "no response".
+# * A steep front means a little accuracy buys a lot of response. A flat one means the trade is
+#   poor. Front size ≈ __ of ≈ __ trials; knee e20 ≈ __. <!-- TODO: fill after GPU run -->
+# * If the two knee methods disagree, the research's rule was that a person decides. Here the
+#   rule from section 3 decides between them, on the validation numbers.
+#
+# *Reference run: full panel, GPU box, 3 seeds per trial. Exact numbers vary with seed and
+# hardware; the reading should not.*
 
 # %% [markdown]
-# ## 6. The confirm run: refit on the full training window, score the test window once
+# <!-- DRAFT: Graeme to edit -->
+# ## 6. Applying the selection rule, on the validation numbers
+#
+# The rule from section 3, applied as written to each trial's validation accuracy and its
+# per-seed validation e20. The test window has not been used yet.
 
 # %%
 roles = {}
@@ -327,8 +366,53 @@ if len(front):
     roles["accuracy_optimal"] = front.index[0]          # the front is sorted by accuracy
 for method, idx in knees.items():
     roles[f"knee_{method}"] = idx
+
+valid_rows = []
+for role, idx in roles.items():
+    seed_e = json.loads(trials.loc[idx, "seed_e20"])
+    valid_rows.append({"role": role, "key": trials.loc[idx, "key"],
+                       "valid_rmsse": trials.loc[idx, "accuracy"],
+                       "valid_e20": trials.loc[idx, "e20_raw"],
+                       "valid_share_seeds_negative": float(np.mean(np.array(seed_e) < 0)),
+                       "valid_seed_e20": seed_e})
+valid_rows.append({"role": "incumbent", "key": gd.params_key(incumbent_params),
+                   "valid_rmsse": incumbent["accuracy"], "valid_e20": incumbent["e20"],
+                   "valid_share_seeds_negative":
+                       float(np.mean(np.array(incumbent["seed_e20"]) < 0)),
+                   "valid_seed_e20": incumbent["seed_e20"]})
+valid_table = pd.DataFrame(valid_rows).set_index("role")
+
+if "accuracy_optimal" in valid_table.index:
+    selected_role = "accuracy_optimal"
+else:
+    selected_role = "incumbent"            # no feasible trial: keep the 04 model
+for knee in ("knee_gain", "knee_distance"):
+    if knee not in valid_table.index or selected_role != "accuracy_optimal":
+        continue
+    if valid_table.loc[knee, "key"] == valid_table.loc["accuracy_optimal", "key"]:
+        continue
+    negative = valid_table.loc[knee, "valid_share_seeds_negative"] >= 2 / 3
+    limit = valid_table.loc["accuracy_optimal", "valid_rmsse"] + noise_floor
+    close = valid_table.loc[knee, "valid_rmsse"] <= limit
+    if negative and close:
+        selected_role = knee
+selected_key = valid_table.loc[selected_role, "key"]
+print(f"selected on validation: {selected_role} ({selected_key})")
+valid_table.round(4)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## 7. The confirm run: refit on the full training window, score the test window once
+#
+# Each setting in the confirm set is refitted on all training weeks and scored on test. This
+# reports what transferred; it does not change the choice above. The chart after the table
+# puts validation against test, for accuracy and for elasticity. On the dashed diagonal a
+# setting scored the same on both windows.
+
+# %%
 confirm_params = {role: json.loads(trials.loc[idx, "params"]) for role, idx in roles.items()}
 confirm_params["incumbent"] = incumbent_params
+selected_params = confirm_params[selected_role]
 
 confirm_runs = {}
 confirm_nf = {}
@@ -345,16 +429,14 @@ for role, params in confirm_params.items():
     key = gd.params_key(params)
     res = evaluate(confirm_runs[key], test, train)
     confirm_eval[role] = res
-    if role == "incumbent":
-        tuned = incumbent
-    else:
-        tuned = {"accuracy": trials.loc[roles[role], "accuracy"],
-                 "e20": trials.loc[roles[role], "e20_raw"]}
     rows.append({"role": role, "key": key,
-                 "valid_rmsse": tuned["accuracy"], "test_rmsse": res["accuracy"],
-                 "valid_e20": tuned["e20"], "test_e20": res["e20"],
-                 "share_seeds_negative": float(np.mean(np.array(res["seed_e20"]) < 0)),
-                 "test_seed_e20": res["seed_e20"]})
+                 "valid_rmsse": valid_table.loc[role, "valid_rmsse"],
+                 "test_rmsse": res["accuracy"],
+                 "valid_e20": valid_table.loc[role, "valid_e20"], "test_e20": res["e20"],
+                 "valid_share_seeds_negative":
+                     valid_table.loc[role, "valid_share_seeds_negative"],
+                 "test_share_seeds_negative": float(np.mean(np.array(res["seed_e20"]) < 0)),
+                 "test_seed_e20": res["seed_e20"], "selected": role == selected_role})
 confirm = pd.DataFrame(rows).set_index("role")
 confirm.round(4)
 
@@ -383,15 +465,23 @@ plt.show()
 #
 # * **Accuracy:** if the points keep their order from left to right, tuning on validation
 #   transferred to the test window.
-# * **Elasticity:** in the research the tuned elasticities shrank 7–18× on the new window and no
-#   setting could be told apart from zero. Points far below the dashed line here mean the
-#   response measured during tuning was optimistic.
+# * **Elasticity:** in the research the tuned elasticities shrank 7–18× on the new window, and
+#   no setting could be told apart from zero (§6, [100k set]). Points above the dashed line here
+#   (closer to zero on test) mean the response measured during tuning was optimistic.
+# * Remember the windows differ: validation has no event week, and test opens with Easter.
+# * Knee e20: validation ≈ __, test ≈ __. <!-- TODO: fill after GPU run -->
+#
+# *Exact numbers vary with seed and hardware; the reading should not.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# The confirm set on test, in the strength, by-class and arm comparison charts from notebook 04.
 
 # %%
 strength = {}
 for role, res in confirm_eval.items():
-    mean_sweep = seed_mean_sweep(confirm_runs[confirm.loc[role, "key"]])
-    strength[role] = e20(gp.arc_elasticity(mean_sweep))
+    mean_sweep = gp.seed_mean_sweep(confirm_runs[confirm.loc[role, "key"]])
+    strength[role] = gp.e20(mean_sweep)
 empirical = pd.DataFrame(cfg04["empirical"])
 gplt.plot_elasticity_strength(strength, title="Confirm set: strength of response on test")
 gplt.plot_elasticity_by_class(strength, info, empirical=empirical)
@@ -403,27 +493,11 @@ seed_e20 = {role: res["seed_e20"] for role, res in confirm_eval.items()}
 gplt.plot_arm_comparison(confirm_arms, metrics=seed_rmsse, elasticity=seed_e20, band=band)
 
 # %% [markdown]
-# ## 7. Applying the selection rule
-
-# %%
-if "accuracy_optimal" in confirm.index:
-    selected_role = "accuracy_optimal"
-else:
-    selected_role = "incumbent"            # no feasible trial: keep the 04 model
-for knee in ("knee_gain", "knee_distance"):
-    if knee not in confirm.index or selected_role != "accuracy_optimal":
-        continue
-    if confirm.loc[knee, "key"] == confirm.loc["accuracy_optimal", "key"]:
-        continue
-    negative = confirm.loc[knee, "share_seeds_negative"] >= 2 / 3
-    close = confirm.loc[knee, "test_rmsse"] <= (confirm.loc["accuracy_optimal", "test_rmsse"]
-                                                + noise_floor)
-    if negative and close:
-        selected_role = knee
-selected_key = confirm.loc[selected_role, "key"]
-selected_params = confirm_params[selected_role]
-print(f"selected: {selected_role} ({selected_key})")
-confirm.loc[selected_role]
+# <!-- DRAFT: Graeme to edit -->
+# ## 8. The selected setting on the board
+#
+# The setting chosen in section 6. Its seed-mean test forecast goes on the board as
+# `GFM_selected`, and its first seed is saved for the later notebooks.
 
 # %%
 selected_fcst = confirm_eval[selected_role]["forecast"]
@@ -448,7 +522,7 @@ def save_selected() -> None:
         return
 
     def build(seed):
-        return gd.build_nbeatsx(selected_params, full_data, max_steps, seed, "NBEATSx_tuned")
+        return gd.build_nbeatsx(selected_params, full_data, max_steps, seed, "GFM_selected")
 
     gd.fit_seed(build, CONFIRM_SEEDS[0], full_data, f"05_selected_{selected_key}",
                 save_as="05_selected")
@@ -478,7 +552,12 @@ gd.save_config("05_selected", {
     "confirm": confirm.reset_index().to_dict("records"),
     "median_rmsse": confirm.loc[selected_role, "test_rmsse"],
     "median_e20": confirm.loc[selected_role, "test_e20"],
+    "median_rmsse_valid": confirm.loc[selected_role, "valid_rmsse"],
+    "median_e20_valid": confirm.loc[selected_role, "valid_e20"],
+    "empirical_all_valid": empirical_all,
     "saved_model": "05_selected",
+    "forecasts": "05_selected",
+    "forecast_column": "GFM_selected",
 })
 
 # %% [markdown]
@@ -490,7 +569,9 @@ gd.save_config("05_selected", {
 # * The rule was fixed before the trials. What would have gone wrong if we had looked at the
 #   front first and then decided what "good enough" accuracy meant?
 # * Three seeds per trial is the minimum. The research found a 3-seed mean picked extremes that
-#   did not hold up; how many seeds would you want before quoting an elasticity to a client?
+#   did not hold up, and advised 6+ seeds for elasticity claims (§6). How many would you want
+#   before quoting an elasticity to a pricing team?
 #
-# **Try it:** change `CONFIRM_SEEDS` to five seeds and rerun only section 6. Does the selected
-# setting change?
+# **Try it:** change `CONFIRM_SEEDS` to five seeds and rerun only section 7. The choice cannot
+# change, because it was made on validation. Does the selected setting's test elasticity move,
+# and does its seed spread shrink?

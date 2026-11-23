@@ -257,6 +257,7 @@ lightning_logs/
 mlruns/
 wandb/
 runs/
+!results/day2_full/runs/
 checkpoints/
 
 # Temporary forecasting outputs
