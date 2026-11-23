@@ -15,19 +15,34 @@
 - **Empirical elasticity on this data is ≈ −3.6** (two-way within regression, classes A–I, ≥3 units/week, 680 eval series). That is far stronger than the 100k set's −0.4 to −0.7, because this panel's price variation is mostly temporary promo cuts with large short-term lifts. The elasticity charts use a band computed from this data (`gp.empirical_band`), not the research constant. Framing agreed: this panel's data is cleaner than the later research sets, so a strong, well-identified response is expected.
 - **CPI deflator:** copied from the research repo's weekly deflator for this dataset, trimmed to the data dates and set to 1 on 2025-07-16. Source confirmed: public ABS all-groups CPI.
 
-## GPU run (per notebook, in order)
+## GPU box setup (Linux, once)
+The data (`data/`, `results/eval_ids.csv`, the CPI csv) is committed, so a clone is all that is needed.
 ```bash
-git pull && git checkout <branch>
-uv pip install -r day2_neural/code_full/requirements.txt      # same versions as the laptop
-export BOOTCAMP_ACCELERATOR=gpu
-cd day2_neural/code_full
-jupytext --to ipynb --update <nb>.py
-# 1) train: fits, caches runs/tables/configs under results/day2_full, saves selected models
-GD_TRAIN=1 jupyter nbconvert --to notebook --execute <nb>.ipynb --output /tmp/<nb>_train.ipynb \
-    --ExecutePreprocessor.timeout=-1
-# 2) load: re-execute from the saved results so the committed notebook has clean outputs
-jupyter nbconvert --to notebook --execute --inplace <nb>.ipynb --ExecutePreprocessor.timeout=-1
-cd ../.. && git add -A results/day2_full day2_neural/code_full && git commit -m "run: <nb> on GPU" && git push
+git clone https://github.com/tackes/time-series-forecasting-bootcamp.git
+cd time-series-forecasting-bootcamp
+git checkout graeme/step1-learnings
+
+uv venv --python 3.11 .venv
+source .venv/bin/activate
+uv pip install -r day2_neural/code_full/requirements.txt
+python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # 2.6.0+cu124 True
+GD_SMOKE=1 python -m pytest day2_neural/code_full/tests -q                        # 21 passed
+```
+- **Use a fresh venv in the clone.** Saved models only reload under the same `neuralforecast` / `torch` versions. Installing the pins into another project's venv could change packages that project relies on. To check an existing venv instead, run `uv pip install --dry-run -r day2_neural/code_full/requirements.txt` inside it. Reuse it only if nothing core (`neuralforecast`, `torch`, `numpy`, `pandas`) would change.
+- **Editor:** open the repo folder and pick `.venv/bin/python` as the interpreter and Jupyter kernel. Use it to look at results. Run the training from a terminal inside `tmux`, so a closed editor or dropped SSH session doesn't kill it.
+
+## GPU run
+`run_gpu.sh` runs each notebook twice: a TRAIN pass (fits, caches runs/tables/configs under `results/day2_full`, saves the selected models), then a LOAD pass (re-executes from the saved results so the committed `.ipynb` has clean outputs). It stops at the first failure.
+- **Logs:** the executed TRAIN-pass copies go to `results/day2_full/gpu_logs/`, which is gitignored.
+- **Timings:** wall-clock minutes per pass are appended to `results/day2_full/gpu_timings.csv`.
+```bash
+tmux new -s gd                               # reattach later with: tmux attach -t gd
+source .venv/bin/activate
+bash day2_neural/code_full/run_gpu.sh 00_recap_full 01_gfm_recipe
+# check 01's minutes per fit (printed in the notebook and in configs/01_recipe.json) against the
+# budget below, then:
+bash day2_neural/code_full/run_gpu.sh 02_hpo_round1 03_calendar_hierarchy 04_price_response     05_hpo_round2_pareto 05b_synthetic_discounts 06_cluster_gfms 07_foundation     08_hierarchy_reconcile 09_uncertainty 10_selection_standings
+git add -A results/day2_full day2_neural/code_full && git commit -m "run: code_full on GPU" && git push
 ```
 Models land in `models/day2_full/` (gitignored); upload them to the release or hosting decided in open decision 3.
 

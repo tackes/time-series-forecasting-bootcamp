@@ -293,3 +293,4 @@ gd_instructions/
 # code_full: saved models (hosted outside the repo) and smoke-test output
 models/
 results/day2_full_smoke/
+results/day2_full/gpu_logs/
