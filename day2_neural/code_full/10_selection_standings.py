@@ -446,6 +446,10 @@ gplt.plot_wins(R, info, model=final_model, baseline=rival)
 # above it: bars that end inside it are tied with the best. Green is the final model, grey the
 # Day 1 baselines, orange the ensembles. Ensembles are scored on all series here, so they are
 # flattered (see section 5).
+#
+# The axis stops at `X_MAX`. A few means run into the hundreds or thousands (NBEATSx off the
+# shelf, from a handful of exploding series); those dots sit on the right edge as ▶ with their
+# value written beside them, so the differences between the rest stay visible.
 
 # %%
 all_scores = gd.per_series(gd.score(fc.merge(ens, on=["unique_id", "ds"]), test, train))
@@ -463,7 +467,18 @@ for m in board.index:
         colours.append(gplt.MODEL_COLOURS[0])
 fig, ax = plt.subplots(figsize=(11, 0.35 * len(board) + 1.5))
 ax.barh(board.index, board["median_rmsse"], color=colours)
-ax.scatter(board["mean_rmsse"], board.index, color="black", s=12, zorder=3, label="mean")
+X_MAX = 3                   # RMSSE axis limit; means beyond it are marked at the edge
+off_scale = board["mean_rmsse"] > X_MAX
+on_scale = board[~off_scale]
+ax.scatter(on_scale["mean_rmsse"], on_scale.index, color="black", s=12, zorder=3, label="mean")
+if off_scale.any():
+    ax.scatter(np.full(off_scale.sum(), X_MAX), board.index[off_scale], marker=">",
+               color="black", s=30, zorder=3, clip_on=False,
+               label=f"mean off the scale (> {X_MAX})")
+for m in board.index[off_scale]:
+    ax.annotate(f"mean {board.loc[m, 'mean_rmsse']:,.1f}", (X_MAX, m), xytext=(-8, 0),
+                textcoords="offset points", ha="right", va="center", fontsize=8)
+ax.set_xlim(0, X_MAX)
 if noise_floor:
     ax.axvspan(best_median, best_median + noise_floor, color=gplt.COLOURS["band"], alpha=0.2,
                label="within the noise floor of the best single model")
