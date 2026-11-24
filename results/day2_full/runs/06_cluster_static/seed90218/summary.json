@@ -1,0 +1,14 @@
+{
+  "name": "06_cluster_static",
+  "seed": 90218,
+  "alias": "GFM_cluster_static",
+  "fit_seconds": 370.8,
+  "max_steps": 11718,
+  "n_train_series": 40079,
+  "neg_share": 0.027857142857142858,
+  "oscillation": 0.00912670725494406,
+  "best_step": 5548,
+  "best_frac": 0.47345963474995734,
+  "best_valid": 3051.6708984375,
+  "final_over_best": 1.0509093698988548
+}

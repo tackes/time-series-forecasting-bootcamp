@@ -1,0 +1,14 @@
+{
+  "name": "09_quantile",
+  "seed": 46335,
+  "alias": "GFM_quantile",
+  "fit_seconds": 397.9,
+  "max_steps": 11718,
+  "n_train_series": 40079,
+  "neg_share": 0.22692142857142858,
+  "oscillation": 0.2000534031418552,
+  "best_step": 8468,
+  "best_frac": 0.7226489161973033,
+  "best_valid": 5035.4619140625,
+  "final_over_best": 1.2404910252732912
+}

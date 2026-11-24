@@ -1,0 +1,241 @@
+{
+  "params": {
+    "input_size": 14,
+    "stack_types": [
+      "identity",
+      "trend",
+      "seasonality",
+      "exogenous"
+    ],
+    "n_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "mlp_size": 512,
+    "mlp_depth": 2,
+    "n_harmonics": 3,
+    "n_polynomials": 3,
+    "dropout_prob_theta": 0.257,
+    "learning_rate": 0.000483,
+    "batch_size": 256,
+    "scaler_type": "robust"
+  },
+  "features": {
+    "deflate": true,
+    "events": false,
+    "fourier_k": 0,
+    "hierarchy_level": null
+  },
+  "futr_exog": [
+    "promo",
+    "discount_depth",
+    "price_index"
+  ],
+  "y_shift": 1.0,
+  "oversample": {
+    "rule": "rolling",
+    "cap": 15,
+    "multiplier": 5
+  },
+  "price_channel": "price_index",
+  "arms": {
+    "A_features": {
+      "features": {
+        "deflate": false,
+        "events": false,
+        "fourier_k": 0,
+        "hierarchy_level": null
+      },
+      "oversample": null
+    },
+    "B_cpi": {
+      "features": {
+        "deflate": true,
+        "events": false,
+        "fourier_k": 0,
+        "hierarchy_level": null
+      },
+      "oversample": null
+    },
+    "C_cpi_over": {
+      "features": {
+        "deflate": true,
+        "events": false,
+        "fourier_k": 0,
+        "hierarchy_level": null
+      },
+      "oversample": {
+        "rule": "rolling",
+        "cap": 15,
+        "multiplier": 5
+      }
+    }
+  },
+  "elasticity": {
+    "A_features (compound)": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -0.9384547472000122,
+      "share_perverse": 0.016176470588235296,
+      "share_flat": 0.14705882352941177,
+      "invariance": 2.0162172317504883,
+      "median_e5": -1.892128586769104,
+      "median_e10": -1.4302046298980713
+    },
+    "A_features": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -0.6009697318077087,
+      "share_perverse": 0.010294117647058823,
+      "share_flat": 0.16470588235294117,
+      "invariance": 1.7006936073303223,
+      "median_e5": -1.0220654010772705,
+      "median_e10": -0.8134549856185913
+    },
+    "B_cpi": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -1.1270101070404053,
+      "share_perverse": 0.0058823529411764705,
+      "share_flat": 0.011764705882352941,
+      "invariance": 1.2790852785110474,
+      "median_e5": -1.4415420293807983,
+      "median_e10": -1.2946579456329346
+    },
+    "C_cpi_over": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -1.2533841133117676,
+      "share_perverse": 0.0014705882352941176,
+      "share_flat": 0.010294117647058823,
+      "invariance": 1.2122164964675903,
+      "median_e5": -1.5193729400634766,
+      "median_e10": -1.4214801788330078
+    },
+    "LightGBM": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -0.6606696226045877,
+      "share_perverse": 0.008823529411764706,
+      "share_flat": 0.0,
+      "invariance": 0.8923858667166851,
+      "median_e5": -0.5895722337813802,
+      "median_e10": -0.6865708870879738
+    }
+  },
+  "elasticity_valid": {
+    "A_features": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -0.5442606210708618,
+      "share_perverse": 0.011764705882352941,
+      "share_flat": 0.15,
+      "invariance": 1.9339261054992676,
+      "median_e5": -1.0525598526000977,
+      "median_e10": -0.8137078285217285
+    },
+    "B_cpi": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -1.0420305728912354,
+      "share_perverse": 0.0029411764705882353,
+      "share_flat": 0.0014705882352941176,
+      "invariance": 1.314563512802124,
+      "median_e5": -1.3698153495788574,
+      "median_e10": -1.2073637247085571
+    },
+    "C_cpi_over": {
+      "n": 680,
+      "n_estimable": 680,
+      "median_e20": -1.332137107849121,
+      "share_perverse": 0.0014705882352941176,
+      "share_flat": 0.0,
+      "invariance": 1.2366557121276855,
+      "median_e5": -1.6473948955535889,
+      "median_e10": -1.5929946899414062
+    }
+  },
+  "empirical": [
+    {
+      "sale_class": "all",
+      "elasticity": -3.638015633996177,
+      "n_series": 680
+    },
+    {
+      "sale_class": "A",
+      "elasticity": -4.623394180424577,
+      "n_series": 4
+    },
+    {
+      "sale_class": "B",
+      "elasticity": -3.760800160399815,
+      "n_series": 10
+    },
+    {
+      "sale_class": "C",
+      "elasticity": -5.7318652221627575,
+      "n_series": 19
+    },
+    {
+      "sale_class": "D",
+      "elasticity": -4.227285624609624,
+      "n_series": 31
+    },
+    {
+      "sale_class": "E",
+      "elasticity": -4.981646312681834,
+      "n_series": 46
+    },
+    {
+      "sale_class": "F",
+      "elasticity": -3.07084524522087,
+      "n_series": 67
+    },
+    {
+      "sale_class": "G",
+      "elasticity": -3.1703308057827453,
+      "n_series": 96
+    },
+    {
+      "sale_class": "H",
+      "elasticity": -3.709049483532,
+      "n_series": 148
+    },
+    {
+      "sale_class": "I",
+      "elasticity": -3.4366867081753685,
+      "n_series": 259
+    }
+  ],
+  "empirical_all": -3.638015633996177,
+  "empirical_band": [
+    -4.623394180424577,
+    -3.4366867081753685
+  ],
+  "n_report_series": 680,
+  "regular_price_check": {
+    "share above regular": 0.3486,
+    "share < 0.9 \u00d7 regular": 0.2702,
+    "share discount_depth \u2265 0.10": 0.0852
+  },
+  "median_rmsse": {
+    "A_features": 0.5679256765678931,
+    "B_cpi": 0.540340683740375,
+    "C_cpi_over": 0.5533247690475739
+  },
+  "median_rmsse_valid": {
+    "A_features": 0.6059870950897317,
+    "B_cpi": 0.6004153093187979,
+    "C_cpi_over": 0.5928927893503072
+  },
+  "selection_rule": "on the validation window: lowest share perverse among arms with median e20 < 0 and median RMSSE <= arm A + 02 noise floor; else A",
+  "selected_arm": "C_cpi_over",
+  "max_steps": 11718,
+  "seeds": [
+    46335,
+    11207,
+    90218
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "06_per_cluster_c4",
+  "seed": 11207,
+  "alias": "GFM_per_cluster",
+  "fit_seconds": 57.3,
+  "max_steps": 2000,
+  "n_train_series": 2341,
+  "neg_share": 0.05890538033395176,
+  "oscillation": 0.0026207774429217526,
+  "best_step": 450,
+  "best_frac": 0.225,
+  "best_valid": 140.03318786621094,
+  "final_over_best": 1.0140195037383346
+}

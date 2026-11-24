@@ -1,0 +1,14 @@
+{
+  "name": "04_B_cpi",
+  "seed": 11207,
+  "alias": "NBEATSx_B_cpi",
+  "fit_seconds": 520.5,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.022892857142857142,
+  "oscillation": 0.0052013451802240245,
+  "best_step": 9928,
+  "best_frac": 0.8472435569209763,
+  "best_valid": 1093.7088623046875,
+  "final_over_best": 1.0159541714906017
+}

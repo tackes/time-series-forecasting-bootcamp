@@ -1,0 +1,14 @@
+{
+  "name": "05b_synthetic",
+  "seed": 90218,
+  "alias": "GFM_synthetic",
+  "fit_seconds": 367.7,
+  "max_steps": 11718,
+  "n_train_series": 40079,
+  "neg_share": 0.02567857142857143,
+  "oscillation": 0.015290925514294413,
+  "best_step": 9636,
+  "best_frac": 0.8223246287762417,
+  "best_valid": 3051.93701171875,
+  "final_over_best": 1.04599937891647
+}

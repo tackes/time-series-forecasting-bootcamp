@@ -1,0 +1,14 @@
+{
+  "name": "03_valid_calendar",
+  "seed": 46335,
+  "alias": "NBEATSx_calendar",
+  "fit_seconds": 527.2,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.03567857142857143,
+  "oscillation": 0.00684692803652095,
+  "best_step": 3212,
+  "best_frac": 0.27410820959208054,
+  "best_valid": 1669.592041015625,
+  "final_over_best": 1.039555034919909
+}

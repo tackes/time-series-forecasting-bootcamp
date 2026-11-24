@@ -26,7 +26,7 @@
 # | Level | Base forecast |
 # |---|---|
 # | total, department, class, subclass | `AutoETS(season_length=1)`, as in the original lab |
-# | item | the selected GFM, target shift removed, clipped at 0 |
+# | item | the selected GFM, target shift removed, clipped at 0 and at 3× its largest week |
 #
 # | Method | Idea |
 # |---|---|
@@ -113,6 +113,31 @@ def bottom_forecasts() -> pd.DataFrame:
 bottom = gd.cached("08_bottom_forecasts", bottom_forecasts)
 bottom["ds"] = pd.to_datetime(bottom["ds"])
 print(f"{bottom['unique_id'].nunique():,} items forecast by {cfg['saved_model']}")
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### A guard: cap each item at a multiple of its largest training week
+#
+# The eval sample hides a problem that sums over every item expose. On the full run a handful
+# of the 17,000 item forecasts exploded (one item that sells ≈130 units a week was forecast at
+# millions), and on its own that put the bottom-up store total ≈ 47% too high. We cap each
+# item's forecast at `CAP` times its largest training week. Real sales above 3× that happened in
+# ≈ 0.5% of test weeks, so the cap seldom cuts a real spike. The cell prints how many it touches.
+
+# %%
+CAP = 3                     # item forecast ceiling, as a multiple of its largest training week
+train_max = train.group_by("unique_id").agg(pl.col("y").max().alias("train_max")).to_pandas()
+bottom = bottom.merge(train_max, on="unique_id", how="left")
+ceiling = CAP * bottom["train_max"]
+over = bottom["Base"] > ceiling
+n_capped = int(bottom.loc[over, "unique_id"].nunique())
+print(f"{over.sum():,} item-weeks in {n_capped} items capped "
+      f"at {CAP}x their largest training week")
+bottom.loc[over, ["unique_id", "ds", "Base", "train_max"]].nlargest(5, "Base")
+
+# %%
+bottom["Base"] = bottom["Base"].clip(upper=ceiling).astype("float32")
+bottom = bottom.drop(columns="train_max")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -406,6 +431,8 @@ gd.save_config("08_reconcile", {
     "selected_from": cfg.get("forecasts", "05_selected"),
     "bottom_model": cfg["saved_model"],
     "upper_model": "AutoETS(season_length=1), Naive fallback",
+    "item_cap": {"multiple_of_train_max": CAP, "item_weeks": int(over.sum()),
+                 "items": n_capped},
     "levels": {level: len(ids) for level, ids in zip(LEVELS, tags.values())},
     "methods": methods,
     "dropped_incoherent": incoherent,
