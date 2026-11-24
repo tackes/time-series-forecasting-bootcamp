@@ -253,8 +253,7 @@ valid_summary[["model", "median_rmsse", "mean_rmsse", "wape", "seconds_per_1k_se
 #   training, so a gain here is the price and promotion calendar paying off for free.
 # * If fine-tuning ran: is its gain bigger than the 02 noise floor? Fine-tuning costs GPU time
 #   on every refresh.
-# * Note the cost column: zero-shot takes ≈ __ s per 1,000 series.
-#   <!-- TODO: fill after GPU run -->
+# * Note the cost column: zero-shot takes ≈ 0.8 s per 1,000 series (≈ 1.4 s with covariates).
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -293,8 +292,8 @@ test_summary[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Median RMSSE first: where does the chosen variant sit against `GFM_selected` (≈ __ against
-#   ≈ __)? <!-- TODO: fill after GPU run --> The mean sits alongside.
+# * Median RMSSE first: where does the chosen variant sit against `GFM_selected` (≈ 0.512
+#   against ≈ 0.546)? The mean sits alongside.
 # * The research found LightGBM the most accurate model but untrustworthy on price (§5,
 #   [100k set]). If Chronos-2 is close on accuracy, the same question applies to it.
 #

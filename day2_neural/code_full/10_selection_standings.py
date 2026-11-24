@@ -180,8 +180,7 @@ ratings.round(3)
 # * The mean is pulled by the hardest (mostly intermittent) series; the median and the ratings
 #   count every series once. A model that ranks well on the median but poorly on the mean is
 #   strong on ordinary series and fragile on a few.
-# * Look at where `GFM_selected` sits: rating ≈ __ against LightGBM's ≈ __.
-#   <!-- TODO: fill after GPU run -->
+# * Look at where `GFM_selected` sits: Bradley–Terry rating ≈ 1071 against LightGBM's ≈ 1043.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -255,8 +254,8 @@ held_scores[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3
 # ### Reading the result
 #
 # * Averaging lets the models' mistakes partly cancel. Does the top-3 average beat every
-#   single model on the held-out half, and by more than the noise floor (≈ __ against ≈ __)?
-#   <!-- TODO: fill after GPU run -->
+#   single model on the held-out half, and by more than the noise floor (≈ 0.507 against
+#   Chronos-2's ≈ 0.514)? Yes, just: the gap of ≈ 0.007 is above the noise floor of ≈ 0.005.
 # * Per-class selection often fails to carry over to the held-out half. Selection overfits;
 #   averaging does not.
 # * The ensembles go on the board scored on **all** series, half of which chose them, so their
@@ -370,8 +369,8 @@ else:
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Compare the GFM's median elasticity (≈ __) with the empirical ≈ −3.6 on this data.
-#   <!-- TODO: fill after GPU run --> The research's −0.4 to −0.7 came from a different panel
+# * Compare the GFM's median elasticity (≈ −1.28) with the empirical ≈ −3.6 on this data.
+#   The research's −0.4 to −0.7 came from a different panel
 #   [100k set] and is not the target here.
 # * If LightGBM appears, expect a response that shrinks as the shock grows and goes flat
 #   outside the prices it has seen: an artefact of tree splits, not of demand (§5).
@@ -521,18 +520,18 @@ gd.save_config("10_final", {
 #
 # ### What we learnt on Day 2
 #
-# <!-- TODO: fill the ≈ __ numbers after the GPU run -->
-#
 # * **Training is most of the battle.** Scaled steps, warm-up, clipping and best-weights
 #   retention took the research from 3 usable runs in 6 to 6 in 6 (§3, [100k set]); 01 tests
 #   the recipe here. Seed noise then sets the bar: a gap below the 02 noise floor is a tie, not
 #   a finding [method].
-# * **Accuracy.** The final model reaches a median RMSSE of ≈ __ (mean ≈ __), against ≈ __ for
-#   SeasonalNaive and ≈ __ for LightGBM on the same 2,000 series.
+# * **Accuracy.** The final model, Chronos-2 zero-shot with the price and promotion covariates,
+#   reaches a median RMSSE of ≈ 0.512 (mean ≈ 1.04), against ≈ 0.929 for SeasonalNaive and
+#   ≈ 0.568 for LightGBM on the same evaluation series. The best trained GFM is ≈ 0.537.
 # * **Price response is a separate test.** An accurate model can ignore price or respond the
 #   wrong way. In the research the most accurate trials had the weakest elasticity (§6), and
 #   LightGBM, the most accurate model, had an artefactual response (§5) [100k set]. Here the
-#   final model's median elasticity is ≈ __ against an empirical ≈ −3.6, with ≈ __% perverse.
+#   selected GFM's median elasticity is ≈ −1.28 against an empirical ≈ −3.6, with ≈ 0.7%
+#   perverse. The final model, Chronos-2, has no price sweep yet, so its response is untested.
 # * **Tune on validation, test once.** The research's early tuning was scored on its test
 #   window (§1). Once it tuned properly, accuracy carried to a new window but elasticity did
 #   not (§6). So trust accuracy gains across windows more than elasticity gains.
@@ -540,7 +539,7 @@ gd.save_config("10_final", {
 #   GFM-based reconciliation (08) and conformal bands (09) go beyond the research. Read their
 #   results as leads.
 # * **Average rather than select.** In the original lab, averaging beat picking a model per
-#   segment. Here the top-3 average reaches ≈ __ on the held-out half.
+#   segment. Here the top-3 average reaches ≈ 0.507 on the held-out half.
 #
 # **Try it:** change the selection half (`bc.RANDOM_SEED` in the split) and see whether the
 # top 3 and the per-class choice stay the same.

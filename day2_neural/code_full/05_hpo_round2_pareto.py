@@ -347,7 +347,7 @@ front[show_cols].round(4)
 # * Dots at exactly 0 on the vertical axis had an implausible or undefined response, and were
 #   scored as "no response".
 # * A steep front means a little accuracy buys a lot of response. A flat one means the trade is
-#   poor. Front size ≈ __ of ≈ __ trials; knee e20 ≈ __. <!-- TODO: fill after GPU run -->
+#   poor. Front size 3 of 30 trials; knee e20 ≈ −1.44 (gain) and −1.39 (distance).
 # * If the two knee methods disagree, the research's rule was that a person decides. Here the
 #   rule from section 3 decides between them, on the validation numbers.
 #
@@ -469,7 +469,7 @@ plt.show()
 #   no setting could be told apart from zero (§6, [100k set]). Points above the dashed line here
 #   (closer to zero on test) mean the response measured during tuning was optimistic.
 # * Remember the windows differ: validation has no event week, and test opens with Easter.
-# * Knee e20: validation ≈ __, test ≈ __. <!-- TODO: fill after GPU run -->
+# * Knee e20: validation ≈ −1.44 (gain) and −1.39 (distance), test ≈ −1.30 and −1.41.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 

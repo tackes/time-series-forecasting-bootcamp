@@ -364,8 +364,8 @@ plt.show()
 # * If 05b's line sits near the planted one, the model learnt the rule. That shows it *can*
 #   learn a price response from data like this, not that the shop's customers behave so.
 # * The probe moves only the price channel. A planted cut also changed the discount depth, so
-#   a partial echo is expected. At a 20% cut, look for 05b's lift moving from 05's ≈ __ towards
-#   the planted +60%. <!-- TODO: fill after GPU run -->
+#   a partial echo is expected. At a 20% cut, look for 05b's lift moving from 05's ≈ +35%
+#   towards the planted +60%. Here it reaches ≈ +41% (sustained cut).
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -454,8 +454,9 @@ gplt.plot_wins(rmsse, info, model="GFM_synthetic", baseline="GFM_selected")
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ __ against
-#   ≈ __)? <!-- TODO: fill after GPU run --> The mean sits alongside on the board.
+# * Lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ 0.543 against
+#   ≈ 0.546)? Yes: the gap is smaller than the noise floor (≈ 0.005). The mean sits alongside
+#   on the board.
 # * A win share near 0.5 in every class means the cuts left ordinary forecasts alone. Losses
 #   bunched in one class point to where the made-up rule hurts.
 #

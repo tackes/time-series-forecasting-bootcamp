@@ -409,8 +409,7 @@ pd.DataFrame(transfer_rows).set_index("arm").round(4)
 #   deeper discount" and "a lower price" at once. The two inputs move together in training, so
 #   the network may have split the effect between them in any proportion. Moving both reads off
 #   a mixture that can even have the wrong sign. In the research it gave +0.45 (§5, [100k set]).
-# * Median e20: compound ≈ __, single channel ≈ __; B ≈ __, C ≈ __.
-#   <!-- TODO: fill after GPU run -->
+# * Median e20: compound ≈ −0.94, single channel ≈ −0.60; B ≈ −1.13, C ≈ −1.25.
 #
 # *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
 # reading should not.*
@@ -514,7 +513,7 @@ shrink.round(3)
 #   by the size of the move makes the "elasticity" shrink as the shift grows. Small moves can
 #   also stay inside one leaf and read as zero. The shape comes from the splits, not shoppers.
 # * In the research, price features carried ≈ 1.5% of LightGBM's split gain, against over 60%
-#   for a 13-week rolling mean (§5). Here: ≈ __%. <!-- TODO: fill after GPU run -->
+#   for a 13-week rolling mean (§5). Here: ≈ 38%.
 # * So: use LightGBM for accuracy and the network for price response.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
@@ -587,8 +586,7 @@ gplt.plot_elasticity_by_class(strength, info, empirical=empirical)
 #
 # * Read the strength chart from the right. The orange "perverse" share is what we most want to
 #   shrink. Does CPI deflation (B) or oversampling (C) shrink it? In the research both did
-#   (§1, [single store]). Perverse share: A ≈ __, B ≈ __, C ≈ __.
-#   <!-- TODO: fill after GPU run -->
+#   (§1, [single store]). Perverse share: A ≈ 1.0%, B ≈ 0.6%, C ≈ 0.1%.
 # * Expect the empirical line to sit well below the models. The regression credits price with
 #   part of the promo's lift; the models see the promo flag as a separate input, held fixed in
 #   the sweep.

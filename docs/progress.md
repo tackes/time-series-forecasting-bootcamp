@@ -162,5 +162,6 @@ Median RMSSE on the 2,000-series eval sample, test window, 3-seed means unless n
 - **10 standings:** `final_model` is Chronos2_zs_cov (0.512), beating the selected GFM by more
   than the noise floor. On the held-out half, the mean of the top three (Chronos-2, GFM_synthetic,
   NHITS) scores 0.507, the best of all.
-- **Notebook TODOs:** the prose placeholders (`__`, `TODO: fill after GPU run`) are not filled
-  in; the numbers above are the source for them.
+- **Notebook blanks filled (24 Nov):** every `≈ __` / `TODO: fill after GPU run` placeholder now
+  holds the number from the executed notebook. 10's summary quotes the selected GFM's elasticity,
+  because the final model (Chronos-2) has no price sweep. The DRAFT tags stay for the prose edit.

@@ -337,8 +337,9 @@ gd.median_board()
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Median RMSSE first. Is either gain over pooled bigger than the noise floor (≈ __)?
-#   <!-- TODO: fill after GPU run --> If not, it is a tie.
+# * Median RMSSE first. Is either gain over pooled bigger than the noise floor (≈ 0.005)?
+#   If not, it is a tie. Here neither arm gains: cluster static ≈ 0.551 and per cluster
+#   ≈ 0.570, against pooled ≈ 0.546.
 # * Compare each arm's seed spread with the gain. A gain smaller than the spread could vanish
 #   with a new seed.
 #

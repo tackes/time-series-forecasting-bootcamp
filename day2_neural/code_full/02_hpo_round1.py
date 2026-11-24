@@ -269,8 +269,8 @@ gplt.plot_error_dist(valid_wide, info)
 #
 # * Compare each gap in the heatmap with the noise floor. A cell that wins by less than one
 #   noise floor is a tie with the incumbent, not a better model.
-# * Noise floor ≈ __; best cell ≈ __ against the incumbent's ≈ __ (median validation RMSSE).
-#   <!-- TODO: fill after GPU run -->
+# * Noise floor ≈ 0.005; best cell ≈ 0.613 against the incumbent's ≈ 0.613 (median validation
+#   RMSSE): the best cell is the incumbent, and no other cell is within one noise floor of it.
 # * The one-at-a-time table says which settings deserve search budget in round 2. A spread of
 #   a few noise floors is a real but small effect.
 # * Check `best_frac` before trusting a cell. If its kept weights come from the very end, it

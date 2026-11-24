@@ -341,7 +341,7 @@ scores.round(3)
 #
 # * Coverage first: is each method close to its promise (0.80 and 0.95)? Under-coverage means
 #   the intervals are too narrow to trust; over-coverage means they are wider than they need
-#   to be. The class × week conformal reaches ≈ __ at 80%. <!-- TODO: fill after GPU run -->
+#   to be. The class × week conformal reaches ≈ 0.79 at 80%.
 # * Then the scores: among the methods that keep their promise, lower interval score and CRPS
 #   are better. Width alone is not a score.
 # * Expect `ETS_conf` to under-cover at 95%, for the reason given in section 4.
