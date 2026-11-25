@@ -1,0 +1,17 @@
+# Versions the Day 1 notebooks were run with (Python 3.12, conda env packt_2day_cohort_2026).
+# Day 2 installs the latest releases; these are the latest at the time of the run.
+statsforecast==2.1.1
+mlforecast==1.1.0
+utilsforecast==0.2.17
+neuralforecast==3.3.1
+hierarchicalforecast==1.5.3
+lightgbm==4.7.0
+catboost==1.2.10
+pandas==2.3.3
+numpy==2.5.4
+pyarrow==26.0.1
+polars==2.1.0
+matplotlib==3.11.2
+ipykernel
+nbconvert
+pytest
