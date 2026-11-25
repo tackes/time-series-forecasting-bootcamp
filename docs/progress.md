@@ -1,5 +1,8 @@
 # Day 2 `code_full`: progress and GPU runs
 
+The summary of what we did and found is `docs/day2_full_findings.md`; this file is
+the running log.
+
 ## Status
 | Step | What | State |
 |---|---|---|
@@ -158,9 +161,9 @@ Median RMSSE on the 2,000-series eval sample, test window, 3-seed means unless n
 - **09 intervals:** at 80%, conformal by step hits the target (0.791 coverage, interval score
   3.56); the quantile GFM over-covers (0.864, 3.60). At 95%, conformal's interval score is 4–9×
   worse than the quantile GFM's (31.9 against 7.1): a few large misses dominate the mean.
-- **10 standings:** `final_model` is Chronos2_zs_cov (0.512), beating the selected GFM by more
-  than the noise floor. On the held-out half, the mean of the top three (Chronos-2, GFM_synthetic,
-  NHITS) scores 0.507, the best of all.
+- **10 standings:** `final_model` was Chronos2_zs_cov (0.512), beating the selected GFM by more
+  than the noise floor. Since 07b (25 Nov, below) it is T0gamma_zs_cov (0.502), and the held-out
+  top-3 mean (t0-gamma, Chronos-2, Timestral) scores 0.495.
 - **Notebook blanks filled (24 Nov):** every `≈ __` / `TODO: fill after GPU run` placeholder now
   holds the number from the executed notebook. The DRAFT tags stay for the prose edit.
 
@@ -197,9 +200,9 @@ headline is a one-week 20% cut, every input rebuilt (`pulse_all`). The sweep sta
   weeks, but it is the least consistent (≈ 10% of calendar cuts do not lift its forecast).
 - **RMSSE in 10's table** is on the 1,996 series every model covers, so GFM_synthetic shows 0.543
   there (0.546 on all 1,999): the four series dropped sit near its median.
-- **Stale cache folders:** `runs/05b_valid_05`, `runs/05b_valid_05b`, `runs/05b_synthetic` and
-  `tables/05b_reference_sweep`, `tables/05b_reference_probe` hold the old-method fits. Nothing
-  reads them now (the new runs carry the `_p7b` suffix); delete them to save space.
+- **Stale cache folders:** the old-method fits (`runs/05b_valid_05`, `runs/05b_valid_05b`,
+  `runs/05b_synthetic`, `tables/05b_reference_*`) and the old `tables/08_upper_base` were
+  deleted on 25 Nov; the current runs carry the `_p7b` suffix.
 
 ## Hierarchy: price-aware upper nodes, two item models, fixed MinT (25 Nov)
 08 now gives the upper nodes their items' sales-weighted price, promotion and event inputs
