@@ -302,7 +302,7 @@ gd.save_forecasts(board_fcst, "02_tuned")
 gd.record(board_fcst, test, train, lab="02 HPO round 1 (3-seed mean)",
           fit_seconds={"NBEATSx_tuned": gd.summaries(tuned_runs)["fit_seconds"].mean()},
           notes=f"best cell on validation: {best_label}; fit_seconds is per seed")
-gd.median_board()
+gd.median_board("02")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

@@ -354,7 +354,7 @@ for arm, runs in arms.items():
 gd.save_forecasts(board_fcst, "04_price")
 gd.record(board_fcst, test_a, train_a, lab=f"04 price arms ({len(gd.SEEDS)}-seed mean)",
           fit_seconds=fit_seconds, notes="fit_seconds is per seed")
-gd.median_board()
+gd.median_board("04")
 
 # %%
 health_cols = ["arm", "seed", "fit_seconds", "n_train_series", "oscillation", "best_frac",

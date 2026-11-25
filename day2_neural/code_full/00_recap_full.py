@@ -163,7 +163,7 @@ def baseline_forecasts() -> pd.DataFrame:
 baselines = gd.cached("00_baselines", baseline_forecasts)
 gd.save_forecasts(baselines, "00_baselines")
 gd.record(baselines, test, train, lab="00 baselines (full panel)")
-gd.median_board()
+gd.median_board("00")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

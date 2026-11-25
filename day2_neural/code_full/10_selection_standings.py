@@ -254,8 +254,9 @@ held_scores[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3
 # ### Reading the result
 #
 # * Averaging lets the models' mistakes partly cancel. Does the top-3 average beat every
-#   single model on the held-out half, and by more than the noise floor (≈ 0.507 against
-#   Chronos-2's ≈ 0.514)? Yes, just: the gap of ≈ 0.007 is above the noise floor of ≈ 0.005.
+#   single model on the held-out half, and by more than the noise floor? Yes: the three
+#   foundation models averaged (t0-gamma, Chronos-2, Timestral) reach ≈ 0.495, against
+#   t0-gamma's ≈ 0.507 alone. The gap of ≈ 0.012 is more than twice the noise floor (≈ 0.005).
 # * Per-class selection often fails to carry over to the held-out half. Selection overfits;
 #   averaging does not.
 # * The ensembles go on the board scored on **all** series, half of which chose them, so their
@@ -267,7 +268,7 @@ held_scores[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(3
 gd.save_forecasts(ens, "10_ensembles")
 gd.record(ens, test, train, lab="10 ensembles",
           notes=f"top3={top3}; chosen on half the series (median RMSSE)")
-gd.median_board()
+gd.median_board("10")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -397,7 +398,8 @@ else:
 # | `right sign` | share of cuts that lift sales, random promotion calendars |
 # | `lift 10/20/30%` | median lift in the cut week, random calendars, by cut depth |
 #
-# The GFM rows are 3-seed means (refitted in 05b); Chronos-2 comes from 07, LightGBM from 04.
+# The GFM rows are 3-seed means (refitted in 05b); Chronos-2 comes from 07, Timestral and
+# t0-gamma from 07b, LightGBM from 04. A model whose probe tables are missing is left out.
 # The last rows are references: the lift the data's own elasticity implies, and the lift 05b
 # planted in its training copies.
 
@@ -409,6 +411,9 @@ def probe_sources() -> dict:
         return pd.read_parquet(path) if path.exists() else None
 
     sources = {"Chronos2_zs_cov": (table("07_chronos_probe"), table("07_chronos_calendar")),
+               "Timestral_zs_cov": (table("07b_timestral_probe"),
+                                    table("07b_timestral_calendar")),
+               "T0gamma_zs_cov": (table("07b_t0_probe"), table("07b_t0_calendar")),
                "LightGBM": (table("04_lgbm_probe"), table("04_lgbm_calendar"))}
     if (gd.CONFIG_DIR / "05b_synthetic.json").exists():
         runs_by = gd.load_config("05b_synthetic").get("probe_runs", {})
@@ -467,11 +472,12 @@ gplt.plot_lift_by_depth(lift_curves, references=references,
 # * The most accurate model need not have the most believable response. A model used to plan
 #   promotions should be good on both.
 # * On this run, every model is right-signed and every model is too weak. For a one-week 20%
-#   cut the data implies a lift of ≈ +125%. The GFMs forecast ≈ +48%, Chronos-2 ≈ +37% and
-#   LightGBM ≈ +28%. 05b's planted lift (+60%) sits between the models and the data.
+#   cut the data implies a lift of ≈ +125%. Timestral forecasts ≈ +50%, the GFMs ≈ +48%,
+#   Chronos-2 ≈ +37%, t0-gamma ≈ +30% and LightGBM ≈ +28%. 05b's planted lift (+60%) sits
+#   between the models and the data.
 # * The GFMs are the most consistent (≈ 99% of calendar cuts right-signed), then LightGBM
-#   (≈ 98%), then Chronos-2 (≈ 90%). The most accurate model, Chronos-2, has the weakest and
-#   least consistent response of the neural models.
+#   (≈ 98%), then the three foundation models (≈ 89–90%). The most accurate model, t0-gamma,
+#   has the weakest response of the neural models.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -621,16 +627,19 @@ gd.save_config("10_final", {
 #   retention took the research from 3 usable runs in 6 to 6 in 6 (§3, [100k set]); 01 tests
 #   the recipe here. Seed noise then sets the bar: a gap below the 02 noise floor is a tie, not
 #   a finding [method].
-# * **Accuracy.** The final model, Chronos-2 zero-shot with the price and promotion covariates,
-#   reaches a median RMSSE of ≈ 0.512 (mean ≈ 1.04), against ≈ 0.929 for SeasonalNaive and
-#   ≈ 0.568 for LightGBM on the same evaluation series. The best trained GFM is ≈ 0.537.
+# * **Accuracy.** The final model, t0-gamma zero-shot with the price and promotion covariates
+#   (07b), reaches a median RMSSE of ≈ 0.502 (mean ≈ 1.03), against ≈ 0.512 for Chronos-2,
+#   ≈ 0.929 for SeasonalNaive and ≈ 0.568 for LightGBM on the same evaluation series. The best
+#   trained GFM is ≈ 0.537.
 # * **Price response is a separate test.** An accurate model can ignore price or respond the
 #   wrong way. In the research the most accurate trials had the weakest elasticity (§6), and
 #   LightGBM, the most accurate model, had an artefactual response (§5) [100k set]. Here the
 #   phase 7b probes (a one-week 20% cut with every price input rebuilt) give the selected GFM
-#   a median elasticity of ≈ −1.79 (lift ≈ +49%) and the final model, Chronos-2, ≈ −1.43
-#   (≈ +37%), against ≈ −3.5 (≈ +125%) implied by the data. Chronos-2 lifts ≈ 90% of random
-#   promotion cuts, the GFM ≈ 99%. Every model is right-signed and too weak.
+#   a median elasticity of ≈ −1.79 (lift ≈ +49%) and the final model, t0-gamma, ≈ −1.19
+#   (≈ +30%), against ≈ −3.5 (≈ +125%) implied by the data. t0-gamma lifts ≈ 89% of random
+#   promotion cuts, the GFM ≈ 99%. Every model is right-signed and too weak, and the most
+#   accurate one responds least: forecast with t0-gamma, but ask the GFM what a new price
+#   would do.
 # * **Tune on validation, test once.** The research's early tuning was scored on its test
 #   window (§1). Once it tuned properly, accuracy carried to a new window but elasticity did
 #   not (§6). So trust accuracy gains across windows more than elasticity gains.
@@ -638,7 +647,7 @@ gd.save_config("10_final", {
 #   GFM-based reconciliation (08) and conformal bands (09) go beyond the research. Read their
 #   results as leads.
 # * **Average rather than select.** In the original lab, averaging beat picking a model per
-#   segment. Here the top-3 average reaches ≈ 0.507 on the held-out half.
+#   segment. Here the top-3 average reaches ≈ 0.495 on the held-out half.
 #
 # **Try it:** change the selection half (`bc.RANDOM_SEED` in the split) and see whether the
 # top 3 and the per-class choice stay the same.

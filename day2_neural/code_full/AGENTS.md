@@ -10,6 +10,8 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
 - **Same evaluation.**
   - Score with `gd.record` / `gd.score`. They restrict `bc.record` / `bc.score` to the eval ids.
   - Sort and discuss the board by **median** RMSSE, with the mean alongside.
+  - Show it with `gd.median_board("<NN>")`, passing the notebook's own number ("07b"): a
+    notebook's board shows only its own and earlier notebooks' rows, never later ones.
 - **Tune on validation, test once.**
   - HPO and model choice use the window from `bc.VALID_START`. Pass `cutoff=` explicitly to `bc.split`.
   - Per-series statistics use training weeks only: scaling, statics, oversampling counts, the reference price and clusters.
@@ -42,6 +44,23 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
     model works through a `predict(futr)` function (`gp.gfm_predict` for a GFM). Check
     `gp.rebuild_check` is ≈ 0 before trusting a probe on new data.
   - Probes need the model in memory: compute them as `fit_seed` extras, or from a saved model.
+- **Chronos-2.** Load it with `gd.chronos_pipeline()` and forecast long frames with
+  `gd.chronos_forecast` (07 and 08 share them), so every notebook uses the same model and
+  settings.
+- **Hierarchy (08).** Upper nodes get their items' sales-weighted price and promotion inputs
+  from `gp.aggregate_covariates` (weights from training weeks only). MinT's past errors come
+  from `gd.rolling_one_step`; `gd.floor_residual_sd` guards a node whose errors are exactly
+  zero.
+  - Use `gd.MinTraceDirect`, never the library's `MinTraceSparse`, for sparse MinT. The
+    library's iterative solve ignores non-convergence and gave forecasts in the millions under
+    `wls_var` here; `MinTraceDirect` solves exactly.
+  - An arm whose chosen method is BottomUp and whose items are already on the board
+    (Chronos-2) is not added again.
+- **Newer foundation models (07b).** Timestral and t0-gamma load with `gd.foundation_model`
+  and forecast long frames with `gd.foundation_forecast`, beside Chronos-2. Their main
+  setup (the price covariates) was fixed before the results and goes on the board; the
+  other setups stay in 07b's tables. Timestral's weights are not free for commercial use
+  above $20M monthly revenue.
 - **Public repo.** No client names, internal system names, people's names or client-identifying figures.
 
 ## Style
@@ -76,6 +95,7 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
 | `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `role` (chosen on validation), `selection_rule`, `confirm`, `saved_model`, `forecasts`, `forecast_column` |
 | `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
+| `07b_new_foundation` | 07b | `models`, `setups`, `main_setup`, `board_columns`, `chronos_gap_to_07`, `median_rmsse_valid` / `median_rmsse_test` (model → setup), `wilcoxon`, `hard_weeks`, `history`, `probes`, `calendar`, `headline`, `pairs`, `seconds`, `licences` |
 | `06_clusters`, `07_foundation`, `08_reconcile`, `09_intervals`, `10_final` | 06–10 | free-form, documented in the notebook |
 
 Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.

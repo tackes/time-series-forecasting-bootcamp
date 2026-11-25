@@ -426,7 +426,7 @@ gd.save_forecasts(point_fcst, "09_intervals")
 gd.record(point_fcst, test, train, lab="09 uncertainty",
           fit_seconds={"GFM_quantile": quantile_seconds},
           notes=f"median of the quantile GFM, {len(QUANTILE_SEEDS)} seed(s)")
-gd.median_board()
+gd.median_board("09")
 
 # %%
 gd.save_config("09_intervals", {

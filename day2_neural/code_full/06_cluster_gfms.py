@@ -331,7 +331,7 @@ gd.save_forecasts(board, "06_clusters")
 gd.record(board, test, train, lab=f"06 clusters ({len(gd.SEEDS)}-seed mean)",
           fit_seconds=fit_seconds,
           notes="per seed; per cluster = sum over clusters")
-gd.median_board()
+gd.median_board("06")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

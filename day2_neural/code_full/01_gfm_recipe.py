@@ -215,7 +215,7 @@ for name, runs in arms.items():
 gd.save_forecasts(board_fcst, "01_recipe")
 gd.record(board_fcst, test, train, lab="01 recipe (3-seed mean)", fit_seconds=fit_seconds,
           notes="fit_seconds is per seed")
-gd.median_board()
+gd.median_board("01")
 
 # %%
 baselines = pd.read_parquet(gd.FORECAST_DIR / "00_baselines.parquet")

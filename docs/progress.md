@@ -5,8 +5,8 @@
 |---|---|---|
 | 0 | Pinned env (`day2_neural/code_full/requirements.txt`), `AGENTS.md`, README | done (laptop); GPU box to check |
 | 1 | `docs/gfm_learnings.md` | approved (23 Nov) |
-| 2 | `gd_helpers.py`, `gd_price.py`, `gd_plots.py` + `tests/` (34 passing) | done |
-| 3+ | notebooks 00 → 10 (+05b) | built, prose drafted, style-reviewed; full GPU run done (23–24 Nov), outputs committed |
+| 2 | `gd_helpers.py`, `gd_price.py`, `gd_plots.py` + `tests/` (42 passing) | done |
+| 3+ | notebooks 00 → 10 (+05b, 07b) | built, prose drafted, style-reviewed; full GPU run done (23–24 Nov), outputs committed |
 
 ## Findings from the build so far
 - **Panel:** 18,692 series in the data, 17,241 pass the original labs' filters, 2,000 in the eval sample (`results/eval_ids.csv`). By class: A 35, B 90, C 161, D 266, E 400, F 575, G 829, H 1,277, I 2,231, J 11,377.
@@ -43,7 +43,7 @@ source .venv/bin/activate
 bash day2_neural/code_full/run_gpu.sh 00_recap_full 01_gfm_recipe
 # check 01's minutes per fit (printed in the notebook and in configs/01_recipe.json) against the
 # budget below, then:
-bash day2_neural/code_full/run_gpu.sh 02_hpo_round1 03_calendar_hierarchy 04_price_response     05_hpo_round2_pareto 05b_synthetic_discounts 06_cluster_gfms 07_foundation     08_hierarchy_reconcile 09_uncertainty 10_selection_standings
+bash day2_neural/code_full/run_gpu.sh 02_hpo_round1 03_calendar_hierarchy 04_price_response     05_hpo_round2_pareto 05b_synthetic_discounts 06_cluster_gfms 07_foundation     07b_new_foundation 08_hierarchy_reconcile 09_uncertainty 10_selection_standings
 git add -A results/day2_full day2_neural/code_full && git commit -m "run: code_full on GPU" && git push
 ```
 Models land in `models/day2_full/` (gitignored); upload them to the release or hosting decided in open decision 3.
@@ -62,7 +62,8 @@ Models land in `models/day2_full/` (gitignored); upload them to the release or h
 | 05b | 9 | 05 vs 05b on validation (6, the choice) + 05b on test (3) |
 | 06 | ~6–7 equivalents | cluster static × 3 + per-cluster models |
 | 07 | 0 (+3 opt-in) | Chronos-2 zero-shot; fine-tune only with `GD_FM_FINETUNE=1` |
-| 08 | 0 | one prediction for all series + AutoETS on ~2,100 upper nodes |
+| 07b | 0 | Chronos-2, Timestral, t0-gamma zero-shot: 4 setups × 2 windows + history and probes |
+| 08 | 0 | two item models; ETS, ARIMAX and Chronos-2 on ~2,100 upper nodes; 52 rolling one-step origins |
 | 09 | ~4 | quantile model (1 seed) + 3 calibration fits |
 | 10 | 0 | |
 
@@ -199,3 +200,67 @@ headline is a one-week 20% cut, every input rebuilt (`pulse_all`). The sweep sta
 - **Stale cache folders:** `runs/05b_valid_05`, `runs/05b_valid_05b`, `runs/05b_synthetic` and
   `tables/05b_reference_sweep`, `tables/05b_reference_probe` hold the old-method fits. Nothing
   reads them now (the new runs carry the `_p7b` suffix); delete them to save space.
+
+## Hierarchy: price-aware upper nodes, two item models, fixed MinT (25 Nov)
+08 now gives the upper nodes their items' sales-weighted price, promotion and event inputs
+(`gp.aggregate_covariates`) and chooses the upper model on validation from ETS, ARIMAX and
+Chronos-2. It reconciles two item models (the selected GFM, one seed, and Chronos-2), adds
+`MinT-wls_var` on the full tree and `MinT-shrink-sub` (dense `mint_shrink` to subclass, items
+split by share), with MinT's past errors from 52 rolling one-step forecasts.
+
+| Test, median RMSSE | total | department | class | subclass | item |
+|---|---|---|---|---|---|
+| GFM items, BottomUp | 0.843 | 0.811 | 0.822 | 0.778 | **0.725** |
+| GFM items, MinT-wls_var | 0.857 | 0.829 | **0.811** | **0.751** | 0.727 |
+| GFM items, MinT-shrink-sub | **0.660** | **0.810** | 0.786 | 0.775 | 0.731 |
+| Chronos-2 items, BottomUp | 0.767 | 0.693 | 0.684 | 0.676 | 0.676 |
+
+- **Upper model: ETS.** Chronos-2 with the node inputs beat it by ≈ 28% at department, class
+  and subclass on validation, but was 4% worse at the total; the worst-level rule picks ETS.
+  ARIMAX was more than twice as bad at the total (1.38 against 0.57).
+- **Both item models choose BottomUp.** With GFM items, `MinT-wls_var` is inside the 1% tie
+  band (worst level 0.3% behind, at the item level) and the preference order picks BottomUp.
+- **Library bug, worked around:** `MinTraceSparse` solves its system with unpreconditioned
+  `bicgstab` and ignores the exit code. With this panel's spread of error variances it stopped
+  early: `wls_var` forecasts reached the millions and each reconcile took ≈ 37 min.
+  `gd.MinTraceDirect` keeps the library's weights and solves exactly (Woodbury identity, one
+  2,118 × 2,118 Cholesky factor): ≈ 16 s per item model, and on a 4,000-item test tree it
+  agrees with an exact least-squares solve to 1e-14 where the library is off by 3.4×.
+  `MinT-ols` moved slightly too (it had not fully converged either).
+- **Board:** only `HIER_GFM_BottomUp` goes on it. `HIER_Chronos_BottomUp` would be
+  `Chronos2_zs_cov` again, capped, so 08 no longer adds it.
+- **Cost:** the first train pass took 93 min: ≈ 74 of them the library's failing solve, and
+  ≈ 16 Chronos-2's rolling one-step forecasts. Everything is cached, so with the fixed solve a
+  pass now takes ≈ 1 min.
+
+## Newer foundation models: Timestral and t0-gamma (07b, 25 Nov)
+Zero-shot on the 2,000 eval series, with Chronos-2 rerun as the reference (it reproduces 07's
+forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `discount_depth`,
+`price_index`) was fixed before the results and goes on the board.
+
+| Main setup | Validation | Test | Promo weeks* | Above the history* | One-week 20% cut lift | Licence (weights) |
+|---|---|---|---|---|---|---|
+| t0-gamma | **0.536** | **0.502** | 3.81 | 60.6 | +30% | Apache-2.0 |
+| Chronos-2 | 0.575 | 0.512 | 3.67 | 58.8 | +37% | Apache-2.0 |
+| Timestral-209M | 0.557 | 0.523 | **3.36** | 52.1 | +50% | Modified MIT ($20M/month cap) |
+| GFM_selected | | 0.546 | 3.47 | **51.0** | +49% | |
+
+\* mean absolute error scaled by the 52-week seasonal-naive error (the RMSSE scale).
+
+- **t0-gamma is the new final model in 10** (median 0.502 on 10's 1,996 series). Its lead over
+  Chronos-2 is real: twice the noise floor, Wilcoxon p ≈ 0, better on 54% of series.
+  Timestral against Chronos-2 is not a real difference (p = 0.88).
+- **It uses the price inputs** (validation 0.703 without them), but responds least to a price
+  cut of the three; every model gives back well under half the lift the data implies (+125%).
+  Agreed framing: t0-gamma for the forecast, with the price-response caveat stated; the GFM
+  stays the reference for price questions.
+- **The extra inputs matter little:** events and the tree-style columns move each model by
+  0.025 or less, in no consistent direction. Every model needs the full history (13 or 26
+  weeks: ≈ 0.60).
+- **Averages of two** beat both members (t0-gamma + Chronos-2: 0.492), but per-series errors
+  correlate at 0.99.
+- **Cost:** the train pass took 11 min on one GPU. Main setup ≈ 3 s per window for Chronos-2,
+  6 s for t0-gamma, 13 s for Timestral (2,000 series).
+- **Board filter:** each notebook's board now shows only its own and earlier notebooks' rows
+  (`gd.median_board("<NN>")`), and 07b's significance column is "real difference" (gap above
+  the noise floor and p < 0.05).

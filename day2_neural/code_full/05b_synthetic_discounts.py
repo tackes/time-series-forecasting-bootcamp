@@ -519,7 +519,7 @@ gd.save_forecasts(forecasts_b[["unique_id", "ds", "GFM_synthetic"]], "05b_synthe
 gd.record(forecasts_b[["unique_id", "ds", "GFM_synthetic"]], test, train,
           lab=f"05b synthetic ({len(gd.SEEDS)}-seed mean)", fit_seconds=fit_seconds,
           notes="fit_seconds is per seed")
-gd.median_board()
+gd.median_board("05b")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

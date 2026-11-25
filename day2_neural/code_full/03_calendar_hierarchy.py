@@ -244,7 +244,7 @@ base_fcst = pd.read_parquet(gd.FORECAST_DIR / "02_tuned.parquet")
 base_fcst = base_fcst[["unique_id", "ds", "NBEATSx_tuned"]].rename(
     columns={"NBEATSx_tuned": base_col})
 test_fcst = base_fcst.merge(challenger_fcst, on=["unique_id", "ds"])
-gd.median_board()
+gd.median_board("03")
 
 # %%
 rmsse = gd.per_series(gd.score(test_fcst, test, train))

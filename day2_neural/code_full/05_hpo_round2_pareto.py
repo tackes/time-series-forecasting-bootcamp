@@ -508,7 +508,7 @@ gd.save_forecasts(selected_fcst, "05_selected")
 gd.record(selected_fcst, test, train,
           lab=f"05 selected ({len(CONFIRM_SEEDS)}-seed mean)",
           fit_seconds=fit_seconds, notes=f"{selected_role}; fit_seconds is per seed")
-gd.median_board()
+gd.median_board("05")
 
 # %%
 if gd.TRAIN:   # the selected setting's first confirm seed, saved when it was fitted
