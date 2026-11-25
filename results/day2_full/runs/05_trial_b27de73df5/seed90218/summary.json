@@ -1,0 +1,14 @@
+{
+  "name": "05_trial_b27de73df5",
+  "seed": 90218,
+  "alias": "GFM_selected",
+  "fit_seconds": 382.5,
+  "max_steps": 11718,
+  "n_train_series": 38251,
+  "neg_share": 0.030535714285714284,
+  "oscillation": 0.004421449455803897,
+  "best_step": 11388,
+  "best_frac": 0.9718381976446493,
+  "best_valid": 3782.98974609375,
+  "final_over_best": 1.002582037732381
+}

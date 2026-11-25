@@ -1,0 +1,440 @@
+{
+  "selected_from": "05_selected",
+  "bottom_model": "05_selected",
+  "item_models": {
+    "GFM": "05_selected",
+    "Chronos": "Chronos2_zs_cov (zero-shot)"
+  },
+  "item_cap": {
+    "multiple_of_train_max": 3,
+    "GFM": {
+      "item_weeks": 568,
+      "items": 135
+    },
+    "Chronos": {
+      "item_weeks": 253,
+      "items": 46
+    }
+  },
+  "upper_inputs": [
+    "promo",
+    "discount_depth",
+    "price_index",
+    "ev_easter",
+    "ev_anzac",
+    "ev_mothers_day",
+    "ev_christmas"
+  ],
+  "upper_candidates": [
+    "ETS",
+    "ARIMAX",
+    "Chronos"
+  ],
+  "upper_valid": {
+    "total": {
+      "ETS": 0.5744,
+      "ARIMAX": 1.3831,
+      "Chronos": 0.5982
+    },
+    "department": {
+      "ETS": 1.0032,
+      "ARIMAX": 0.7819,
+      "Chronos": 0.7203
+    },
+    "class": {
+      "ETS": 0.9869,
+      "ARIMAX": 0.7894,
+      "Chronos": 0.7154
+    },
+    "subclass": {
+      "ETS": 1.0216,
+      "ARIMAX": 0.8073,
+      "Chronos": 0.7535
+    }
+  },
+  "upper_rule": "smallest worst-level ratio to ETS (median RMSSE, validation); ties within 1% -> ETS, ARIMAX, Chronos",
+  "upper_model": "ETS",
+  "upper_test": {
+    "total": {
+      "ETS": 0.8909,
+      "ETS (chosen)": 0.8909
+    },
+    "department": {
+      "ETS": 0.9638,
+      "ETS (chosen)": 0.9638
+    },
+    "class": {
+      "ETS": 0.911,
+      "ETS (chosen)": 0.911
+    },
+    "subclass": {
+      "ETS": 0.8926,
+      "ETS (chosen)": 0.8926
+    }
+  },
+  "resid_weeks": 52,
+  "levels": {
+    "total": 1,
+    "department": 148,
+    "class": 502,
+    "subclass": 1467,
+    "item": 17216
+  },
+  "methods": [
+    "Base (incoherent)",
+    "BottomUp",
+    "TopDown",
+    "MiddleOut",
+    "MinT-ols",
+    "MinT-wls_struct",
+    "MinT-wls_var",
+    "MinT-shrink-sub"
+  ],
+  "dropped_incoherent": [],
+  "median_rmsse_by_level": {
+    "GFM": {
+      "total": {
+        "Base (incoherent)": 0.8909,
+        "BottomUp": 0.8432,
+        "TopDown": 0.8909,
+        "MiddleOut": 1.0094,
+        "MinT-ols": 0.8916,
+        "MinT-wls_struct": 0.9266,
+        "MinT-wls_var": 0.8572,
+        "MinT-shrink-sub": 0.6595
+      },
+      "department": {
+        "Base (incoherent)": 0.9638,
+        "BottomUp": 0.8108,
+        "TopDown": 0.9583,
+        "MiddleOut": 0.9565,
+        "MinT-ols": 1.1111,
+        "MinT-wls_struct": 0.8798,
+        "MinT-wls_var": 0.8293,
+        "MinT-shrink-sub": 0.8097
+      },
+      "class": {
+        "Base (incoherent)": 0.911,
+        "BottomUp": 0.8215,
+        "TopDown": 0.911,
+        "MiddleOut": 0.911,
+        "MinT-ols": 1.2097,
+        "MinT-wls_struct": 0.8745,
+        "MinT-wls_var": 0.8108,
+        "MinT-shrink-sub": 0.786
+      },
+      "subclass": {
+        "Base (incoherent)": 0.8926,
+        "BottomUp": 0.7783,
+        "TopDown": 0.8911,
+        "MiddleOut": 0.9088,
+        "MinT-ols": 1.0974,
+        "MinT-wls_struct": 0.8457,
+        "MinT-wls_var": 0.7512,
+        "MinT-shrink-sub": 0.7745
+      },
+      "item": {
+        "Base (incoherent)": 0.7247,
+        "BottomUp": 0.7247,
+        "TopDown": 0.7962,
+        "MiddleOut": 0.7987,
+        "MinT-ols": 1.0073,
+        "MinT-wls_struct": 0.8928,
+        "MinT-wls_var": 0.7271,
+        "MinT-shrink-sub": 0.7308
+      }
+    },
+    "Chronos": {
+      "total": {
+        "Base (incoherent)": 0.8909,
+        "BottomUp": 0.7672,
+        "TopDown": 0.8909,
+        "MiddleOut": 1.0094,
+        "MinT-ols": 0.8916,
+        "MinT-wls_struct": 0.9211,
+        "MinT-wls_var": 0.8214,
+        "MinT-shrink-sub": 0.7659
+      },
+      "department": {
+        "Base (incoherent)": 0.9638,
+        "BottomUp": 0.693,
+        "TopDown": 0.9583,
+        "MiddleOut": 0.9565,
+        "MinT-ols": 1.109,
+        "MinT-wls_struct": 0.8537,
+        "MinT-wls_var": 0.74,
+        "MinT-shrink-sub": 0.7575
+      },
+      "class": {
+        "Base (incoherent)": 0.911,
+        "BottomUp": 0.6838,
+        "TopDown": 0.911,
+        "MiddleOut": 0.911,
+        "MinT-ols": 1.2084,
+        "MinT-wls_struct": 0.8371,
+        "MinT-wls_var": 0.7131,
+        "MinT-shrink-sub": 0.742
+      },
+      "subclass": {
+        "Base (incoherent)": 0.8926,
+        "BottomUp": 0.6757,
+        "TopDown": 0.8911,
+        "MiddleOut": 0.9088,
+        "MinT-ols": 1.1069,
+        "MinT-wls_struct": 0.8288,
+        "MinT-wls_var": 0.7056,
+        "MinT-shrink-sub": 0.7256
+      },
+      "item": {
+        "Base (incoherent)": 0.6764,
+        "BottomUp": 0.6764,
+        "TopDown": 0.8005,
+        "MiddleOut": 0.8064,
+        "MinT-ols": 1.0179,
+        "MinT-wls_struct": 0.8797,
+        "MinT-wls_var": 0.6816,
+        "MinT-shrink-sub": 0.7037
+      }
+    }
+  },
+  "mean_rmsse_by_level": {
+    "GFM": {
+      "total": {
+        "Base (incoherent)": 0.8909,
+        "BottomUp": 0.8432,
+        "TopDown": 0.8909,
+        "MiddleOut": 1.0094,
+        "MinT-ols": 0.8916,
+        "MinT-wls_struct": 0.9266,
+        "MinT-wls_var": 0.8572,
+        "MinT-shrink-sub": 0.6595
+      },
+      "department": {
+        "Base (incoherent)": 1.337,
+        "BottomUp": 1.2373,
+        "TopDown": 1.3168,
+        "MiddleOut": 1.3121,
+        "MinT-ols": 1.9254,
+        "MinT-wls_struct": 1.2347,
+        "MinT-wls_var": 1.2023,
+        "MinT-shrink-sub": 1.1694
+      },
+      "class": {
+        "Base (incoherent)": 1.2776,
+        "BottomUp": 1.2401,
+        "TopDown": 1.2771,
+        "MiddleOut": 1.2776,
+        "MinT-ols": 2.1083,
+        "MinT-wls_struct": 1.3165,
+        "MinT-wls_var": 1.1549,
+        "MinT-shrink-sub": 1.1534
+      },
+      "subclass": {
+        "Base (incoherent)": 1.2954,
+        "BottomUp": 1.2007,
+        "TopDown": 1.3022,
+        "MiddleOut": 1.3065,
+        "MinT-ols": 2.0768,
+        "MinT-wls_struct": 1.3314,
+        "MinT-wls_var": 1.1559,
+        "MinT-shrink-sub": 1.171
+      },
+      "item": {
+        "Base (incoherent)": 1.8531,
+        "BottomUp": 1.8531,
+        "TopDown": 1.9579,
+        "MiddleOut": 1.9606,
+        "MinT-ols": 6.7637,
+        "MinT-wls_struct": 5.0602,
+        "MinT-wls_var": 1.8639,
+        "MinT-shrink-sub": 1.8607
+      }
+    },
+    "Chronos": {
+      "total": {
+        "Base (incoherent)": 0.8909,
+        "BottomUp": 0.7672,
+        "TopDown": 0.8909,
+        "MiddleOut": 1.0094,
+        "MinT-ols": 0.8916,
+        "MinT-wls_struct": 0.9211,
+        "MinT-wls_var": 0.8214,
+        "MinT-shrink-sub": 0.7659
+      },
+      "department": {
+        "Base (incoherent)": 1.337,
+        "BottomUp": 0.9436,
+        "TopDown": 1.3168,
+        "MiddleOut": 1.3121,
+        "MinT-ols": 1.92,
+        "MinT-wls_struct": 1.1676,
+        "MinT-wls_var": 1.0523,
+        "MinT-shrink-sub": 1.0459
+      },
+      "class": {
+        "Base (incoherent)": 1.2776,
+        "BottomUp": 0.9806,
+        "TopDown": 1.2771,
+        "MiddleOut": 1.2776,
+        "MinT-ols": 2.0743,
+        "MinT-wls_struct": 1.2476,
+        "MinT-wls_var": 1.0294,
+        "MinT-shrink-sub": 1.0356
+      },
+      "subclass": {
+        "Base (incoherent)": 1.2954,
+        "BottomUp": 1.0188,
+        "TopDown": 1.3022,
+        "MiddleOut": 1.3065,
+        "MinT-ols": 2.1545,
+        "MinT-wls_struct": 1.3911,
+        "MinT-wls_var": 1.0489,
+        "MinT-shrink-sub": 1.0637
+      },
+      "item": {
+        "Base (incoherent)": 1.8314,
+        "BottomUp": 1.8314,
+        "TopDown": 2.0953,
+        "MiddleOut": 2.0987,
+        "MinT-ols": 7.7721,
+        "MinT-wls_struct": 5.7656,
+        "MinT-wls_var": 1.8393,
+        "MinT-shrink-sub": 1.8923
+      }
+    }
+  },
+  "bias_by_level": {
+    "GFM": {
+      "total": {
+        "Base (incoherent)": 0.0155,
+        "BottomUp": 0.0346,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0157,
+        "MinT-wls_struct": 0.0325,
+        "MinT-wls_var": 0.0334,
+        "MinT-shrink-sub": 0.0065
+      },
+      "department": {
+        "Base (incoherent)": 0.0437,
+        "BottomUp": 0.0346,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0169,
+        "MinT-wls_struct": 0.0325,
+        "MinT-wls_var": 0.0334,
+        "MinT-shrink-sub": 0.0066
+      },
+      "class": {
+        "Base (incoherent)": 0.0371,
+        "BottomUp": 0.0346,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0194,
+        "MinT-wls_struct": 0.0325,
+        "MinT-wls_var": 0.0334,
+        "MinT-shrink-sub": 0.0068
+      },
+      "subclass": {
+        "Base (incoherent)": 0.0317,
+        "BottomUp": 0.0346,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0219,
+        "MinT-wls_struct": 0.0327,
+        "MinT-wls_var": 0.0335,
+        "MinT-shrink-sub": 0.0074
+      },
+      "item": {
+        "Base (incoherent)": 0.0346,
+        "BottomUp": 0.0346,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0516,
+        "MinT-wls_struct": 0.0469,
+        "MinT-wls_var": 0.0356,
+        "MinT-shrink-sub": 0.0074
+      }
+    },
+    "Chronos": {
+      "total": {
+        "Base (incoherent)": 0.0155,
+        "BottomUp": 0.0211,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0157,
+        "MinT-wls_struct": 0.0298,
+        "MinT-wls_var": 0.0264,
+        "MinT-shrink-sub": 0.0264
+      },
+      "department": {
+        "Base (incoherent)": 0.0437,
+        "BottomUp": 0.0211,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0169,
+        "MinT-wls_struct": 0.0298,
+        "MinT-wls_var": 0.0264,
+        "MinT-shrink-sub": 0.0264
+      },
+      "class": {
+        "Base (incoherent)": 0.0371,
+        "BottomUp": 0.0211,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0193,
+        "MinT-wls_struct": 0.0299,
+        "MinT-wls_var": 0.0264,
+        "MinT-shrink-sub": 0.0265
+      },
+      "subclass": {
+        "Base (incoherent)": 0.0317,
+        "BottomUp": 0.0211,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0218,
+        "MinT-wls_struct": 0.03,
+        "MinT-wls_var": 0.0264,
+        "MinT-shrink-sub": 0.0266
+      },
+      "item": {
+        "Base (incoherent)": 0.0211,
+        "BottomUp": 0.0211,
+        "TopDown": 0.0155,
+        "MiddleOut": 0.0371,
+        "MinT-ols": 0.0511,
+        "MinT-wls_struct": 0.0439,
+        "MinT-wls_var": 0.027,
+        "MinT-shrink-sub": 0.0266
+      }
+    }
+  },
+  "worst_level_ratio": {
+    "GFM": {
+      "BottomUp": 1.0,
+      "TopDown": 1.0986,
+      "MiddleOut": 1.133,
+      "MinT-ols": 1.3899,
+      "MinT-wls_struct": 1.232,
+      "MinT-wls_var": 1.0033,
+      "MinT-shrink-sub": 1.0085
+    },
+    "Chronos": {
+      "BottomUp": 1.0,
+      "TopDown": 1.1835,
+      "MiddleOut": 1.1922,
+      "MinT-ols": 1.505,
+      "MinT-wls_struct": 1.3007,
+      "MinT-wls_var": 1.0078,
+      "MinT-shrink-sub": 1.0403
+    }
+  },
+  "rule": "per item model: smallest worst-level ratio to base (median RMSSE); ties within 1% -> MiddleOut",
+  "chosen": {
+    "GFM": "BottomUp",
+    "Chronos": "BottomUp"
+  },
+  "board_columns": [
+    "HIER_GFM_BottomUp"
+  ]
+}

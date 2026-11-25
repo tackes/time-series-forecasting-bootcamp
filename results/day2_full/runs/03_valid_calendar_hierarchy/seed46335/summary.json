@@ -1,0 +1,14 @@
+{
+  "name": "03_valid_calendar_hierarchy",
+  "seed": 46335,
+  "alias": "NBEATSx_cal_hier",
+  "fit_seconds": 497.1,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.031142857142857142,
+  "oscillation": 0.006651809317020887,
+  "best_step": 3504,
+  "best_frac": 0.29902713773681516,
+  "best_valid": 1670.1033935546875,
+  "final_over_best": 1.012063454798444
+}

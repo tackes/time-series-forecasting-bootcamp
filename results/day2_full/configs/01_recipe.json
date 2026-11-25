@@ -1,0 +1,61 @@
+{
+  "model": "NBEATSx",
+  "params": {
+    "input_size": 14,
+    "stack_types": [
+      "identity",
+      "trend",
+      "seasonality",
+      "exogenous"
+    ],
+    "n_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "mlp_size": 512,
+    "mlp_depth": 2,
+    "n_harmonics": 3,
+    "n_polynomials": 3,
+    "dropout_prob_theta": 0.257,
+    "learning_rate": 0.000483,
+    "batch_size": 256,
+    "scaler_type": "robust"
+  },
+  "recipe": true,
+  "y_shift": 1.0,
+  "futr_exog": [
+    "promo",
+    "discount_depth",
+    "price_index"
+  ],
+  "stat_exog": [
+    "log_mean_sales",
+    "share_zero_weeks",
+    "share_promo_weeks"
+  ],
+  "max_steps": 11718,
+  "seeds": [
+    46335,
+    11207,
+    90218
+  ],
+  "minutes_per_fit": {
+    "NBEATSx_off_mean": 8.49,
+    "NBEATSx_recipe_mean": 8.45,
+    "NHITS_recipe_mean": 4.16
+  },
+  "median_rmsse": {
+    "NBEATSx_off": 0.7728951397884578,
+    "NBEATSx_recipe": 0.5679256765678931,
+    "NHITS_recipe": 0.5385321119845964
+  },
+  "seed_spread": {
+    "NBEATSx_off": 0.0522,
+    "NBEATSx_recipe": 0.0117,
+    "NHITS_recipe": 0.0094
+  },
+  "saved_model": "01_nbeatsx_recipe",
+  "selected": "NBEATSx_recipe"
+}

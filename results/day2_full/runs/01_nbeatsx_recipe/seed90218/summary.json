@@ -1,0 +1,14 @@
+{
+  "name": "01_nbeatsx_recipe",
+  "seed": 90218,
+  "alias": "NBEATSx_recipe",
+  "fit_seconds": 511.7,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.01842857142857143,
+  "oscillation": 0.007982616944514513,
+  "best_step": 11096,
+  "best_frac": 0.9469192694999147,
+  "best_valid": 1156.99560546875,
+  "final_over_best": 1.0095412502157604
+}

@@ -1,0 +1,55 @@
+{
+  "params": {
+    "input_size": 14,
+    "stack_types": [
+      "identity",
+      "trend",
+      "seasonality",
+      "exogenous"
+    ],
+    "n_blocks": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "mlp_size": 512,
+    "mlp_depth": 2,
+    "n_harmonics": 3,
+    "n_polynomials": 3,
+    "dropout_prob_theta": 0.257,
+    "learning_rate": 0.000483,
+    "batch_size": 256,
+    "scaler_type": "robust"
+  },
+  "features": {
+    "deflate": false,
+    "events": false,
+    "fourier_k": 0,
+    "hierarchy_level": null
+  },
+  "futr_exog": [
+    "promo",
+    "discount_depth",
+    "price_index"
+  ],
+  "y_shift": 1.0,
+  "max_steps": 11718,
+  "seeds": [
+    46335,
+    11207,
+    90218
+  ],
+  "median_rmsse": {
+    "valid": {
+      "base": 0.6131,
+      "calendar": 0.7174,
+      "calendar_hierarchy": 0.7032
+    },
+    "test": {
+      "NBEATSx_base": 0.5679,
+      "NBEATSx_cal_hier": 0.6473
+    }
+  },
+  "arm": "base"
+}

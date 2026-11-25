@@ -1,0 +1,14 @@
+{
+  "name": "05b_valid_05_p7b",
+  "seed": 90218,
+  "alias": "GFM_selected",
+  "fit_seconds": 369.3,
+  "max_steps": 11718,
+  "n_train_series": 38251,
+  "neg_share": 0.03514285714285714,
+  "oscillation": 0.0059765882792746205,
+  "best_step": 11096,
+  "best_frac": 0.9469192694999147,
+  "best_valid": 3724.371826171875,
+  "final_over_best": 1.007343284282617
+}
