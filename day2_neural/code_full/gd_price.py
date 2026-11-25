@@ -814,3 +814,41 @@ def gfm_probes(nf, data, ids: list[str], calendars: pd.DataFrame | None = None) 
     if calendars is not None:
         out["calendar"] = calendar_probe(predict, hist, futr, gd.only(calendars, ids))
     return out
+
+
+# ============================================================================
+# AGGREGATED COVARIATES FOR THE HIERARCHY (08)
+# ============================================================================
+
+NODE_COVARIATES = ["promo", "discount_depth", "price_index"]
+
+
+def aggregate_covariates(items: pl.DataFrame, levels: list[list[str]], cutoff=bc.TEST_START,
+                         covariates: list[str] = NODE_COVARIATES,
+                         events: bool = True) -> pd.DataFrame:
+    """Price and promotion inputs for every node above the items, plus event dummies.
+
+    ``items`` holds one row per item and week: the hierarchy columns named in ``levels`` (e.g.
+    ``[["total"], ["total", "department"], ...]``, as for ``hierarchicalforecast.aggregate``),
+    ``ds``, ``y`` and ``covariates``. Each node's value is the **sales-weighted mean** of its
+    items' values, each item weighted by its mean weekly sales before ``cutoff`` (training
+    weeks only). So ``promo`` becomes the share of the node's usual sales on promotion that
+    week, and ``discount_depth`` its average depth. Node ids join the level values with "/",
+    as ``aggregate`` does. Known in advance, as the item prices are planned.
+    """
+    weights = (items.filter(pl.col("ds") < cutoff).group_by("unique_id")
+               .agg((pl.col("y").mean() + 1e-6).alias("_w")))
+    frame = items.join(weights, on="unique_id", how="inner")
+    sums = [(pl.col(c) * pl.col("_w")).sum().alias(c) for c in covariates]
+    frames = []
+    for cols in levels:
+        node = pl.concat_str([pl.col(c) for c in cols], separator="/").alias("unique_id")
+        agg = (frame.group_by([node, "ds"])
+               .agg(sums + [pl.col("_w").sum().alias("_wsum")])
+               .with_columns([pl.col(c) / pl.col("_wsum") for c in covariates])
+               .drop("_wsum"))
+        frames.append(agg)
+    out = pl.concat(frames).sort(["unique_id", "ds"])
+    if events:
+        out = add_events(out)
+    return out.to_pandas()

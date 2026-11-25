@@ -80,15 +80,15 @@ gplt.use_style()
 # %%
 GPU = torch.cuda.is_available()
 DEVICE = "cuda" if GPU else "cpu"
-CHRONOS_REPO = "autogluon/chronos-2-small" if gd.SMOKE else "amazon/chronos-2"
+CHRONOS_REPO = gd.CHRONOS_REPO               # the small model in a smoke run
 FM_N_SERIES = 20 if gd.SMOKE else None        # None: every eval series
 FINETUNE = os.environ.get("GD_FM_FINETUNE") == "1"
 FT_STEPS = 5 if gd.SMOKE else 1_000
 FT_LR = 1e-6                                  # the library's recommendation for full fine-tuning
 FT_BATCH = 32 if gd.SMOKE else 256
-BATCH = 256                                   # series (target + covariates) per predict batch
+BATCH = gd.CHRONOS_BATCH                      # series (target + covariates) per predict batch
 LEVELS = [80, 95]
-QUANTILES = {0.025: "-lo-95", 0.1: "-lo-80", 0.9: "-hi-80", 0.975: "-hi-95"}
+QUANTILES = gd.CHRONOS_QUANTILES              # level -> column suffix
 print(f"GPU: {GPU} | model: {CHRONOS_REPO} | fine-tune: {FINETUNE} ({FT_STEPS} steps)")
 
 # %% [markdown]
@@ -136,14 +136,7 @@ def chronos_forecast(pipe, hist, future, ids, alias, covariates=None) -> pd.Data
     future_df = None
     if covariates:
         future_df = gd.only(bc.to_nixtla(future, covariates).drop(columns="y"), ids)
-        future_df = future_df.sort_values(["unique_id", "ds"])
-    out = pipe.predict_df(df, future_df=future_df, id_column="unique_id", timestamp_column="ds",
-                          target="y", prediction_length=bc.H, quantile_levels=list(QUANTILES),
-                          batch_size=BATCH, freq=bc.FREQ)
-    names = {"predictions": alias}
-    for q, suffix in QUANTILES.items():
-        names[str(q)] = f"{alias}{suffix}"
-    return out.rename(columns=names)[["unique_id", "ds"] + list(names.values())]
+    return gd.chronos_forecast(pipe, df, future_df, alias=alias, quantiles=QUANTILES)
 
 
 def finetune(pipe, hist, covariates, seed):
@@ -271,7 +264,7 @@ gd.save_forecasts(fm_test[["unique_id", "ds"] + variants], "07_foundation")
 gd.record(fm_test[["unique_id", "ds"] + variants], test, train, lab="07 foundation",
           fit_seconds=fm_seconds,
           notes=f"{n_fm} series; {CHRONOS_REPO}; fine-tuned: {bool(ft_points)}")
-gd.median_board()
+gd.median_board("07")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

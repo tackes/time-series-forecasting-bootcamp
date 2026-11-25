@@ -45,6 +45,9 @@ import pandas as pd
 import polars as pl
 import pytorch_lightning as pl_lightning
 import torch
+from hierarchicalforecast.methods import MinTraceSparse
+from scipy import sparse
+from scipy.sparse.linalg import LinearOperator
 
 CODE_FULL = Path(__file__).resolve().parent
 ROOT = CODE_FULL.parents[1]
@@ -270,9 +273,18 @@ def record(fcst, test, train, lab: str, **kwargs) -> pd.DataFrame:
     return bc.record(only(fcst, ids), only(test, ids), only(train, ids), lab=lab, **kwargs)
 
 
-def median_board() -> pd.DataFrame:
-    """The full-data leaderboard, sorted by median RMSSE (mean alongside)."""
+def median_board(upto: str | None = None) -> pd.DataFrame:
+    """The full-data leaderboard, sorted by median RMSSE (mean alongside).
+
+    ``upto`` is the calling notebook's number ("07", "07b"): only rows from that notebook and
+    earlier ones are kept, so a notebook's board never shows models that come after it. Every
+    lab label starts with its notebook number, and plain string order is notebook order
+    ("05" < "05b" < "06").
+    """
     board = bc.leaderboard(include_day1=False)
+    if upto is not None:
+        number = board["lab"].astype(str).str.split().str[0]
+        board = board[number <= upto]
     cols = ["model", "median_rmsse", "mean_rmsse", "wape", "n_series", "lab", "fit_seconds"]
     board = board[[c for c in cols if c in board.columns]]
     return board.sort_values("median_rmsse").reset_index(drop=True).round(3)
@@ -852,3 +864,223 @@ def knee_by_distance(front: pd.DataFrame, x: str = "accuracy", y: str = "elastic
     dist = np.abs((p[:, 0] - a[0]) * chord[1] - (p[:, 1] - a[1]) * chord[0])
     return front.index[int(np.argmax(dist))]
 
+
+
+# ============================================================================
+# CHRONOS-2 (07, 08)
+# ============================================================================
+
+CHRONOS_REPO = "autogluon/chronos-2-small" if SMOKE else "amazon/chronos-2"
+CHRONOS_BATCH = 256           # series (target + covariates) per predict batch
+CHRONOS_QUANTILES = {0.025: "-lo-95", 0.1: "-lo-80", 0.9: "-hi-80", 0.975: "-hi-95"}
+
+
+def chronos_pipeline(repo: str = CHRONOS_REPO):
+    """The Chronos-2 pipeline, on the GPU when there is one (weights cache outside the repo)."""
+    from chronos import Chronos2Pipeline
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    return Chronos2Pipeline.from_pretrained(repo, device_map=device)
+
+
+def chronos_forecast(pipe, df: pd.DataFrame, future_df: pd.DataFrame | None = None,
+                     alias: str = "Chronos2", h: int = bc.H,
+                     quantiles: dict | None = None) -> pd.DataFrame:
+    """Chronos-2 forecasts of the ``h`` weeks after each series in ``df``.
+
+    ``df`` is long (``unique_id``, ``ds``, ``y`` and any covariates); covariates also in
+    ``future_df`` are known in advance. Returns the point forecast as ``alias`` and, for each
+    level in ``quantiles`` ({level: suffix}), a column ``alias + suffix``.
+    """
+    quantiles = quantiles or {}
+    df = df.sort_values(["unique_id", "ds"])
+    if future_df is not None:
+        future_df = future_df.sort_values(["unique_id", "ds"])
+    out = pipe.predict_df(df, future_df=future_df, id_column="unique_id", timestamp_column="ds",
+                          target="y", prediction_length=h,
+                          quantile_levels=list(quantiles) or [0.5],
+                          batch_size=CHRONOS_BATCH, freq=bc.FREQ)
+    names = {"predictions": alias}
+    for q, suffix in quantiles.items():
+        names[str(q)] = f"{alias}{suffix}"
+    return out.rename(columns=names)[["unique_id", "ds"] + list(names.values())]
+
+
+# ============================================================================
+# TIMESTRAL AND T0-GAMMA (07b)
+# ============================================================================
+
+FOUNDATION_REPOS = {"timestral": "mistralai/Timestral-209M", "t0": "theforecastingcompany/t0-gamma"}
+FOUNDATION_BATCH = 256        # series per forward pass
+
+
+def foundation_model(kind: str, device: str | None = None):
+    """Timestral (``kind="timestral"``) or t0-gamma (``"t0"``), weights from the HF cache."""
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    if kind == "timestral":
+        from timestral import TimestralForecaster
+        return TimestralForecaster.from_pretrained(FOUNDATION_REPOS[kind], device=device)
+    from t0 import T0Forecaster
+    return T0Forecaster.from_pretrained(FOUNDATION_REPOS[kind]).to(device).eval()
+
+
+def panel_arrays(hist: pd.DataFrame, future: pd.DataFrame | None, covariates: list[str],
+                 h: int) -> tuple[list, np.ndarray, np.ndarray | None, list]:
+    """Long frames to the arrays Timestral and t0 read.
+
+    Returns ``(ids, context, known, future_weeks)``: ``context`` is ``(B, T)`` sales, NaN
+    before a series starts; ``known`` is ``(B, C, T + h)`` covariates over the context and the
+    ``h`` future weeks (``None`` without covariates), filled across a series' missing start.
+    Every series must share the same ``h`` future weeks.
+    """
+    weeks = np.sort(pd.to_datetime(hist["ds"]).unique())
+    hist = hist.assign(ds=pd.to_datetime(hist["ds"]))
+    ids = sorted(hist["unique_id"].unique())
+    context = (hist.pivot(index="unique_id", columns="ds", values="y")
+               .reindex(index=ids, columns=weeks).to_numpy(dtype=np.float32))
+    future_weeks = list(pd.date_range(pd.Timestamp(weeks[-1]) + pd.Timedelta(weeks=1),
+                                      periods=h, freq=bc.FREQ))
+    if not covariates:
+        return ids, context, None, future_weeks
+    both = pd.concat([hist[["unique_id", "ds"] + covariates],
+                      future.assign(ds=pd.to_datetime(future["ds"]))[["unique_id", "ds"]
+                                                                      + covariates]])
+    known = []
+    for col in covariates:
+        wide = (both.pivot(index="unique_id", columns="ds", values=col)
+                .reindex(index=ids, columns=list(weeks) + future_weeks))
+        known.append(wide.ffill(axis=1).bfill(axis=1).fillna(0.0).to_numpy(dtype=np.float32))
+    return ids, context, np.stack(known, axis=1), future_weeks
+
+
+def foundation_forecast(kind: str, model, hist: pd.DataFrame, future: pd.DataFrame | None = None,
+                        alias: str = "FM", h: int = bc.H,
+                        covariates: list[str] | None = None) -> pd.DataFrame:
+    """Zero-shot forecasts from Timestral or t0-gamma, in long form.
+
+    Uses the developers' recommended settings: symmetric averaging and clipping at 0 for a
+    series that never went negative (both models), plus, for t0, integer snapping and the
+    missing start read as padding. Returns ``alias`` (median) and the 80% band
+    (``alias-lo-80``, ``alias-hi-80``).
+    """
+    covariates = list(covariates or [])
+    ids, context, known, future_weeks = panel_arrays(hist, future, covariates, h)
+    out = []
+    for start in range(0, len(ids), FOUNDATION_BATCH):
+        part = slice(start, start + FOUNDATION_BATCH)
+        cov = None if known is None else known[part]
+        if kind == "timestral":
+            with torch.inference_mode():
+                fc = model.forecast(context[part], prediction_length=h, known_covariates=cov)
+            q = fc.quantiles[:, 0].float().cpu().numpy()                 # (B, H, Q)
+            levels = np.array(fc.quantile_levels)
+            cols = [int(np.abs(levels - lvl).argmin()) for lvl in (0.1, 0.5, 0.9)]
+            q = q[..., cols]
+        else:
+            fc = model.predict(context[part], h, quantile_levels=(0.1, 0.5, 0.9),
+                               future_covariates=cov, trim_leading_missing=True,
+                               symmetric_averaging=True, clip_nonnegative=True,
+                               snap_integers=True)
+            q = fc.quantiles.float().cpu().numpy()                         # (B, H, 3)
+        out.append(q)
+    q = np.concatenate(out)
+    frame = pd.DataFrame({"unique_id": np.repeat(ids, h), "ds": np.tile(future_weeks, len(ids)),
+                          f"{alias}-lo-80": q[..., 0].ravel(), alias: q[..., 1].ravel(),
+                          f"{alias}-hi-80": q[..., 2].ravel()})
+    return frame[["unique_id", "ds", alias, f"{alias}-lo-80", f"{alias}-hi-80"]]
+
+
+# ============================================================================
+# HIERARCHY (08)
+# ============================================================================
+
+def rolling_one_step(predict, frame: pd.DataFrame, origins) -> pd.DataFrame:
+    """One-step-ahead forecasts at each week in ``origins``, for MinT's residuals.
+
+    ``frame`` is long (``unique_id``, ``ds``, ``y`` and covariates) and covers the origins and
+    the ``bc.H`` weeks after the last one. For each origin, ``predict(hist, futr)`` sees only
+    the rows before it (``hist``) and the covariates of the ``bc.H`` weeks from it (``futr``,
+    no ``y``) and returns ``unique_id``, ``ds``, ``yhat``; the forecast for the origin week is
+    kept. Returns ``unique_id``, ``ds`` (= origin), ``yhat``.
+    """
+    frame = frame.assign(ds=pd.to_datetime(frame["ds"]))
+    weeks = np.sort(frame["ds"].unique())
+    out = []
+    for origin in pd.to_datetime(list(origins)):
+        hist = frame[frame["ds"] < origin]
+        ahead = weeks[(weeks >= origin)][:bc.H]
+        futr = frame[frame["ds"].isin(ahead) & frame["unique_id"].isin(set(hist["unique_id"]))]
+        fc = predict(hist, futr.drop(columns="y"))
+        fc = fc.assign(ds=pd.to_datetime(fc["ds"]))
+        out.append(fc.loc[fc["ds"] == origin, ["unique_id", "ds", "yhat"]])
+    return pd.concat(out, ignore_index=True)
+
+
+class MinTraceDirect(MinTraceSparse):
+    """``MinTraceSparse`` with an exact, direct solve in place of the library's iterative one.
+
+    The library solves ``S' W^-1 S x = S' W^-1 y`` with plain ``bicgstab`` and ignores its exit
+    code. Under ``wls_var`` the error variances in this panel span many orders of
+    magnitude, so that solve stops early and returns forecasts in the millions without a
+    warning. Here the bottom rows of ``S`` are the identity, so ``S' W^-1 S`` is a diagonal
+    (the items) plus one low-rank term per upper node, and the Woodbury identity solves it
+    with one Cholesky factor of an (upper nodes x upper nodes) matrix: 2,118 x 2,118 in 08.
+    ``W`` is the library's own, so the method is unchanged; only the solve is.
+    """
+
+    def _get_PW_matrices(self, S, y_hat, y_insample=None, y_hat_insample=None):
+        from scipy.linalg import cho_factor, cho_solve
+        _, W = super()._get_PW_matrices(S, y_hat, y_insample, y_hat_insample)
+        S = sparse.csr_matrix(S)
+        n_nodes, n_bottom = S.shape
+        upper = S[: n_nodes - n_bottom]
+        if (S[n_nodes - n_bottom:] != sparse.identity(n_bottom)).nnz:
+            raise ValueError("MinTraceDirect needs the bottom rows of S to be the identity")
+        var = W.diagonal()
+        var_up, var_bottom = var[: n_nodes - n_bottom], var[n_nodes - n_bottom:]
+        # (D + U C U')^-1 = D^-1 - D^-1 U (C^-1 + U' D^-1 U)^-1 U' D^-1, with D = 1/var_bottom,
+        # U = upper', C = 1/var_up.
+        inner = (upper @ sparse.diags(var_bottom) @ upper.T).toarray() + np.diag(var_up)
+        factor = cho_factor(inner)
+
+        def solve(y):
+            v = (S.T @ (np.ravel(y) / var)) * var_bottom       # D^-1 S' W^-1 y
+            return v - var_bottom * (upper.T @ cho_solve(factor, upper @ v))
+
+        return LinearOperator((n_bottom, n_nodes), matvec=solve), W
+
+
+def floor_residual_sd(insample: pd.DataFrame, col: str = "Base",
+                      min_sd: float = 1e-3) -> pd.DataFrame:
+    """Give every node's in-sample residual at least ``min_sd`` spread.
+
+    MinT's ``wls_var`` and ``mint_shrink`` divide by each node's residual variance, so a node
+    whose forecast always equals its sales (an item that never sold, forecast at 0) breaks
+    them. For such nodes only, ``±min_sd`` is added to the in-sample forecast in alternate
+    weeks: far below a unit, so their weight in the reconciliation is simply very high.
+    """
+    out = insample.sort_values(["unique_id", "ds"]).reset_index(drop=True)
+    sd = (out["y"] - out[col]).groupby(out["unique_id"]).transform("std").fillna(0)
+    flat = sd < min_sd
+    sign = np.where(out.groupby("unique_id").cumcount() % 2 == 0, 1.0, -1.0)
+    out.loc[flat, col] = out.loc[flat, col] + min_sd * sign[flat.to_numpy()]
+    return out
+
+
+def split_by_share(parent_fc: pd.DataFrame, child_base: pd.DataFrame, parent_of: pd.Series,
+                   col: str) -> pd.DataFrame:
+    """Split each parent's forecast ``col`` to its children by their base-forecast shares.
+
+    ``parent_fc``: ``unique_id`` (parent), ``ds``, ``col``. ``child_base``: ``unique_id``
+    (child), ``ds``, ``Base``. ``parent_of`` maps child id -> parent id. A parent whose
+    children's base forecasts sum to 0 is split equally. The children sum to their parent.
+    """
+    child = child_base.assign(parent=child_base["unique_id"].map(parent_of))
+    grp = child.groupby(["parent", "ds"])["Base"]
+    total = grp.transform("sum")
+    count = grp.transform("size")
+    share = np.where(total > 0, child["Base"] / total.where(total > 0, 1.0), 1.0 / count)
+    parent = parent_fc.rename(columns={"unique_id": "parent", col: "_parent"})
+    child = child.assign(share=share).merge(parent[["parent", "ds", "_parent"]],
+                                            on=["parent", "ds"], how="left")
+    child[col] = child["share"] * child["_parent"]
+    return child[["unique_id", "ds", col]]
