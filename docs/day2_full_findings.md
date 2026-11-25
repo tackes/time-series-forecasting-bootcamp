@@ -52,6 +52,34 @@ On the held-out half, the average of the top three (t0-gamma, Chronos-2, Timestr
 0.495, against 0.507 for t0-gamma alone: the only ensemble that beats the best single model
 by more than the noise floor.
 
+## Every series, not just the sample (11)
+The v1 labs score on all 17,238 scorable series, not the 2,000-series sample. 11 rescores our
+main models on all of them.
+
+| Model | Median RMSSE, all / sample | WAPE, all / sample | v1 labs, all series |
+|---|---|---|---|
+| Top-3 average | 0.488 / 0.486 | 0.203 / 0.203 | 0.498 / 0.219 (their own top 3) |
+| t0-gamma | 0.496 / 0.502 | 0.208 / 0.205 | |
+| Chronos-2 + price | 0.510 / 0.512 | 0.221 / 0.216 | 0.511 / 0.229 |
+| NHITS, our recipe (3 seeds) | 0.534 / 0.538 | 0.244 / 0.251 | NHITSx 0.572 / 0.275 |
+| GFM selected (3 seeds) | 0.540 / 0.546 | 0.258 / 0.257 | |
+| LightGBM | 0.569 / 0.569 | 0.291 / 0.295 | 0.569 / 0.291 |
+| SeasonalNaive | 0.913 / 0.929 | 0.446 / 0.438 | 0.913 / 0.446 |
+
+All forecasts capped at 3× the item's largest training week, as in 08.
+
+- **The sample was a good stand-in.** Medians are within 0.03 (mostly 0.01) and the order of
+  the models holds. WAPE moves by up to ≈ 5 points, because it follows the best sellers.
+- **Same data, same scoring as the v1 labs:** the baselines, LightGBM and Chronos-2 match them
+  to three decimals. Our neural models are better because they train ≈ 20× longer with the
+  research recipe, over 3 seeds; the v1 labs use 500 steps and library defaults to suit a
+  laptop.
+- **The N-BEATSx models explode on a few hundred items outside the sample** (up to ≈ 8,000×
+  the item's largest week). Uncapped, the selected GFM's WAPE on all series is 0.404, not
+  0.258. The likely cause is the robust window scaler, which also scales the price and
+  promotion inputs: an input that never moved in the 14 input weeks has no spread. The
+  standard scaler avoids it but was clearly worse in the research, so we cap, in 08 and 11.
+
 ## What each notebook found
 - **00 Baselines.** LightGBM 0.569 is the bar to beat; SeasonalNaive 0.929.
 - **01 The recipe.** Training is most of the battle: NBEATSx off the shelf scores 0.773 (seed
@@ -110,9 +138,10 @@ by more than the noise floor.
   +28% with the discount depth rebuilt. That is why the probes rebuild every input.
 
 ## Things that went wrong, and the fixes
-- **Exploding item forecasts in 08.** A handful of items were forecast at up to ≈ 2,900× their
-  sales, which put the bottom-up total 47% too high. Fixed by capping each item at 3× its
-  largest training week. The likely cause, the robust scaler on spiky series, is still open.
+- **Exploding item forecasts.** On every series (08, 11) a few hundred N-BEATSx item forecasts
+  explode, which put the bottom-up total 47% too high and the GFM's all-series WAPE from 0.26
+  to 0.40. Fixed by capping each item at 3× its largest training week, applied to every model.
+  The likely cause is the robust scaler on inputs that did not move in the input window.
 - **A silent library bug in sparse MinT.** `hierarchicalforecast`'s `MinTraceSparse` solves its
   system iteratively and ignores whether it converged. With this panel's spread of error
   variances, `wls_var` returned forecasts in the millions and took 37 min per reconcile.

@@ -16,7 +16,7 @@ set -euo pipefail
 
 ORDER=(00_recap_full 01_gfm_recipe 02_hpo_round1 03_calendar_hierarchy 04_price_response
        05_hpo_round2_pareto 05b_synthetic_discounts 06_cluster_gfms 07_foundation 07b_new_foundation
-       08_hierarchy_reconcile 09_uncertainty 10_selection_standings)
+       08_hierarchy_reconcile 09_uncertainty 10_selection_standings 11_all_series)
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"

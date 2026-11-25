@@ -267,3 +267,21 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Board filter:** each notebook's board now shows only its own and earlier notebooks' rows
   (`gd.median_board("<NN>")`), and 07b's significance column is "real difference" (gap above
   the noise floor and p < 0.05).
+
+## Every series: 11 rescores the main models on all 17,238 (25 Nov)
+- **Same evaluation as the v1 labs:** the baselines, LightGBM and Chronos-2 match their
+  all-series numbers to three decimals, so the panel, filter, windows and WAPE are the same.
+- **Our lead is the training:** NHITS with our recipe (≈ 10k steps, Huber, warm-up, clip,
+  best weights, 3 seeds) scores WAPE 0.244 against the v1 NHITSx's 0.275 (500 steps, MAE,
+  standard scaler, 1 seed).
+- **Exploding N-BEATSx forecasts** outside the sample: every seed has some (65–129 items above
+  3× their largest week, up to ≈ 8,000×); the saved seed 46335 is worst (uncapped WAPE 0.699).
+  NHITS barely has them. Cap at 3× the item's largest training week (08's rule) applied to
+  every model in 11; on the sample the cap changes nothing at three decimals, so 00–10 stand.
+- **Refits repeat their originals:** GFM_selected seeds 11207, 90218 and the three NHITS seeds
+  reproduce the cached runs' sample scores to four decimals.
+- **Left out:** GFM_synthetic (its saved model predates 05b's final refit).
+- **Cost:** 30 min on one GPU (5 refits, 4–6 min each; foundation models and baselines are
+  minutes). Scores in `results/day2_full/leaderboard_all_series.csv`, forecasts in
+  `results/day2_full/all_series/`.
+

@@ -1,0 +1,493 @@
+{
+  "n_series_forecast": 17241,
+  "n_series_scored": 17238,
+  "models": [
+    "Naive",
+    "SeasonalNaive",
+    "AutoETS",
+    "LightGBM",
+    "Chronos2_zs",
+    "Chronos2_zs_cov",
+    "Timestral_zs_cov",
+    "T0gamma_zs_cov",
+    "GFM_selected",
+    "NHITS_recipe",
+    "NBEATSx_recipe",
+    "GFM_quantile",
+    "ENS_mean_top3"
+  ],
+  "top3": [
+    "T0gamma_zs_cov",
+    "Chronos2_zs_cov",
+    "Timestral_zs_cov"
+  ],
+  "left_out": {
+    "GFM_synthetic": "saved model predates 05b's final refit"
+  },
+  "seeds": {
+    "GFM_selected": [
+      46335,
+      11207,
+      90218
+    ],
+    "NHITS_recipe": [
+      46335,
+      11207,
+      90218
+    ],
+    "NBEATSx_recipe": [
+      46335
+    ],
+    "GFM_quantile": [
+      46335
+    ]
+  },
+  "saved_gap_05_selected": 0.0078125,
+  "cap": {
+    "multiple_of_train_max": 3,
+    "applied_to": "every model",
+    "touched": {
+      "Naive": {
+        "item-weeks capped": 0,
+        "items capped": 0,
+        "of them in the sample": 0
+      },
+      "SeasonalNaive": {
+        "item-weeks capped": 0,
+        "items capped": 0,
+        "of them in the sample": 0
+      },
+      "AutoETS": {
+        "item-weeks capped": 380,
+        "items capped": 133,
+        "of them in the sample": 13
+      },
+      "LightGBM": {
+        "item-weeks capped": 0,
+        "items capped": 0,
+        "of them in the sample": 0
+      },
+      "Chronos2_zs": {
+        "item-weeks capped": 533,
+        "items capped": 63,
+        "of them in the sample": 7
+      },
+      "Chronos2_zs_cov": {
+        "item-weeks capped": 253,
+        "items capped": 46,
+        "of them in the sample": 7
+      },
+      "Timestral_zs_cov": {
+        "item-weeks capped": 342,
+        "items capped": 67,
+        "of them in the sample": 7
+      },
+      "T0gamma_zs_cov": {
+        "item-weeks capped": 64,
+        "items capped": 15,
+        "of them in the sample": 1
+      },
+      "GFM_selected": {
+        "item-weeks capped": 466,
+        "items capped": 101,
+        "of them in the sample": 10
+      },
+      "NHITS_recipe": {
+        "item-weeks capped": 72,
+        "items capped": 16,
+        "of them in the sample": 4
+      },
+      "NBEATSx_recipe": {
+        "item-weeks capped": 23,
+        "items capped": 9,
+        "of them in the sample": 1
+      },
+      "GFM_quantile": {
+        "item-weeks capped": 948,
+        "items capped": 232,
+        "of them in the sample": 30
+      },
+      "ENS_mean_top3": {
+        "item-weeks capped": 158,
+        "items capped": 31,
+        "of them in the sample": 2
+      }
+    }
+  },
+  "repeat_check": [
+    {
+      "model": "GFM_selected",
+      "seed": 11207,
+      "original": 0.5602,
+      "refit": 0.5602,
+      "gap": 0.0
+    },
+    {
+      "model": "GFM_selected",
+      "seed": 90218,
+      "original": 0.554,
+      "refit": 0.554,
+      "gap": 0.0
+    },
+    {
+      "model": "NHITS_recipe",
+      "seed": 46335,
+      "original": 0.5503,
+      "refit": 0.5503,
+      "gap": 0.0
+    },
+    {
+      "model": "NHITS_recipe",
+      "seed": 11207,
+      "original": 0.5542,
+      "refit": 0.5542,
+      "gap": 0.0
+    },
+    {
+      "model": "NHITS_recipe",
+      "seed": 90218,
+      "original": 0.5448,
+      "refit": 0.5448,
+      "gap": 0.0
+    }
+  ],
+  "scores_all": {
+    "ENS_mean_top3": {
+      "median_rmsse": 0.4878,
+      "mean_rmsse": 1.2203,
+      "wape": 0.2027,
+      "n_series": 17238
+    },
+    "Timestral_zs_cov": {
+      "median_rmsse": 0.5157,
+      "mean_rmsse": 1.2411,
+      "wape": 0.217,
+      "n_series": 17238
+    },
+    "T0gamma_zs_cov": {
+      "median_rmsse": 0.4963,
+      "mean_rmsse": 1.2514,
+      "wape": 0.2077,
+      "n_series": 17238
+    },
+    "Chronos2_zs_cov": {
+      "median_rmsse": 0.5103,
+      "mean_rmsse": 1.2682,
+      "wape": 0.221,
+      "n_series": 17238
+    },
+    "NHITS_recipe": {
+      "median_rmsse": 0.5337,
+      "mean_rmsse": 1.281,
+      "wape": 0.244,
+      "n_series": 17238
+    },
+    "GFM_selected": {
+      "median_rmsse": 0.5404,
+      "mean_rmsse": 1.2919,
+      "wape": 0.2579,
+      "n_series": 17238
+    },
+    "NBEATSx_recipe": {
+      "median_rmsse": 0.5874,
+      "mean_rmsse": 1.346,
+      "wape": 0.2915,
+      "n_series": 17238
+    },
+    "LightGBM": {
+      "median_rmsse": 0.5689,
+      "mean_rmsse": 1.3536,
+      "wape": 0.2911,
+      "n_series": 17238
+    },
+    "GFM_quantile": {
+      "median_rmsse": 0.5818,
+      "mean_rmsse": 1.3567,
+      "wape": 0.2933,
+      "n_series": 17238
+    },
+    "Chronos2_zs": {
+      "median_rmsse": 0.6304,
+      "mean_rmsse": 1.3909,
+      "wape": 0.3029,
+      "n_series": 17238
+    },
+    "AutoETS": {
+      "median_rmsse": 0.6948,
+      "mean_rmsse": 1.4791,
+      "wape": 0.4021,
+      "n_series": 17238
+    },
+    "Naive": {
+      "median_rmsse": 0.745,
+      "mean_rmsse": 1.516,
+      "wape": 0.42,
+      "n_series": 17238
+    },
+    "SeasonalNaive": {
+      "median_rmsse": 0.9128,
+      "mean_rmsse": 1.7093,
+      "wape": 0.4456,
+      "n_series": 17238
+    }
+  },
+  "scores_sample": {
+    "ENS_mean_top3": {
+      "median_rmsse": 0.4857,
+      "mean_rmsse": 1.0194,
+      "wape": 0.2034,
+      "n_series": 1999
+    },
+    "Timestral_zs_cov": {
+      "median_rmsse": 0.5225,
+      "mean_rmsse": 1.0383,
+      "wape": 0.2268,
+      "n_series": 1999
+    },
+    "T0gamma_zs_cov": {
+      "median_rmsse": 0.5023,
+      "mean_rmsse": 1.06,
+      "wape": 0.2053,
+      "n_series": 1999
+    },
+    "NHITS_recipe": {
+      "median_rmsse": 0.5385,
+      "mean_rmsse": 1.0639,
+      "wape": 0.2508,
+      "n_series": 1999
+    },
+    "GFM_selected": {
+      "median_rmsse": 0.5464,
+      "mean_rmsse": 1.0681,
+      "wape": 0.2567,
+      "n_series": 1999
+    },
+    "Chronos2_zs_cov": {
+      "median_rmsse": 0.5122,
+      "mean_rmsse": 1.0755,
+      "wape": 0.2164,
+      "n_series": 1999
+    },
+    "GFM_quantile": {
+      "median_rmsse": 0.5927,
+      "mean_rmsse": 1.1461,
+      "wape": 0.2909,
+      "n_series": 1999
+    },
+    "NBEATSx_recipe": {
+      "median_rmsse": 0.5921,
+      "mean_rmsse": 1.1506,
+      "wape": 0.3095,
+      "n_series": 1999
+    },
+    "LightGBM": {
+      "median_rmsse": 0.5693,
+      "mean_rmsse": 1.1608,
+      "wape": 0.2947,
+      "n_series": 1999
+    },
+    "Chronos2_zs": {
+      "median_rmsse": 0.645,
+      "mean_rmsse": 1.1916,
+      "wape": 0.3055,
+      "n_series": 1999
+    },
+    "AutoETS": {
+      "median_rmsse": 0.7081,
+      "mean_rmsse": 1.2832,
+      "wape": 0.4255,
+      "n_series": 1999
+    },
+    "Naive": {
+      "median_rmsse": 0.7708,
+      "mean_rmsse": 1.3321,
+      "wape": 0.4697,
+      "n_series": 1999
+    },
+    "SeasonalNaive": {
+      "median_rmsse": 0.9289,
+      "mean_rmsse": 1.5248,
+      "wape": 0.4377,
+      "n_series": 1999
+    }
+  },
+  "scores_all_no_cap": {
+    "ENS_mean_top3": {
+      "median_rmsse": 0.4878,
+      "mean_rmsse": 1.2263,
+      "wape": 0.2062,
+      "n_series": 17238
+    },
+    "Timestral_zs_cov": {
+      "median_rmsse": 0.5157,
+      "mean_rmsse": 1.2482,
+      "wape": 0.2205,
+      "n_series": 17238
+    },
+    "T0gamma_zs_cov": {
+      "median_rmsse": 0.4963,
+      "mean_rmsse": 1.2551,
+      "wape": 0.208,
+      "n_series": 17238
+    },
+    "Chronos2_zs_cov": {
+      "median_rmsse": 0.5103,
+      "mean_rmsse": 1.2856,
+      "wape": 0.2279,
+      "n_series": 17238
+    },
+    "NHITS_recipe": {
+      "median_rmsse": 0.5337,
+      "mean_rmsse": 1.2947,
+      "wape": 0.2444,
+      "n_series": 17238
+    },
+    "NBEATSx_recipe": {
+      "median_rmsse": 0.5874,
+      "mean_rmsse": 1.3465,
+      "wape": 0.2915,
+      "n_series": 17238
+    },
+    "LightGBM": {
+      "median_rmsse": 0.5689,
+      "mean_rmsse": 1.3536,
+      "wape": 0.2911,
+      "n_series": 17238
+    },
+    "Chronos2_zs": {
+      "median_rmsse": 0.6304,
+      "mean_rmsse": 1.4319,
+      "wape": 0.3107,
+      "n_series": 17238
+    },
+    "AutoETS": {
+      "median_rmsse": 0.6948,
+      "mean_rmsse": 1.4815,
+      "wape": 0.4024,
+      "n_series": 17238
+    },
+    "Naive": {
+      "median_rmsse": 0.745,
+      "mean_rmsse": 1.516,
+      "wape": 0.42,
+      "n_series": 17238
+    },
+    "SeasonalNaive": {
+      "median_rmsse": 0.9128,
+      "mean_rmsse": 1.7093,
+      "wape": 0.4456,
+      "n_series": 17238
+    },
+    "GFM_quantile": {
+      "median_rmsse": 0.5818,
+      "mean_rmsse": 2.4996,
+      "wape": 0.5821,
+      "n_series": 17238
+    },
+    "GFM_selected": {
+      "median_rmsse": 0.5404,
+      "mean_rmsse": 2.7529,
+      "wape": 0.4036,
+      "n_series": 17238
+    }
+  },
+  "versus_v1": [
+    {
+      "model": "ENS_mean_top3",
+      "median_rmsse": 0.4878,
+      "mean_rmsse": 1.2203,
+      "wape": 0.2027,
+      "wape (no cap)": 0.2062,
+      "v1 model": "ENS_mean_top3",
+      "v1 mean_rmsse": 1.164,
+      "v1 median_rmsse": 0.498,
+      "v1 wape": 0.219,
+      "WAPE gap (ours \u2212 v1)": -0.0163
+    },
+    {
+      "model": "Chronos2_zs_cov",
+      "median_rmsse": 0.5103,
+      "mean_rmsse": 1.2682,
+      "wape": 0.221,
+      "wape (no cap)": 0.2279,
+      "v1 model": "Chronos2_zs_cov",
+      "v1 mean_rmsse": 1.294,
+      "v1 median_rmsse": 0.511,
+      "v1 wape": 0.229,
+      "WAPE gap (ours \u2212 v1)": -0.008
+    },
+    {
+      "model": "LightGBM",
+      "median_rmsse": 0.5689,
+      "mean_rmsse": 1.3536,
+      "wape": 0.2911,
+      "wape (no cap)": 0.2911,
+      "v1 model": "LightGBM",
+      "v1 mean_rmsse": 1.354,
+      "v1 median_rmsse": 0.569,
+      "v1 wape": 0.291,
+      "WAPE gap (ours \u2212 v1)": 0.0001
+    },
+    {
+      "model": "Chronos2_zs",
+      "median_rmsse": 0.6304,
+      "mean_rmsse": 1.3909,
+      "wape": 0.3029,
+      "wape (no cap)": 0.3107,
+      "v1 model": "Chronos2_zs",
+      "v1 mean_rmsse": 1.432,
+      "v1 median_rmsse": 0.63,
+      "v1 wape": 0.311,
+      "WAPE gap (ours \u2212 v1)": -0.0081
+    },
+    {
+      "model": "AutoETS",
+      "median_rmsse": 0.6948,
+      "mean_rmsse": 1.4791,
+      "wape": 0.4021,
+      "wape (no cap)": 0.4024,
+      "v1 model": "AutoETS",
+      "v1 mean_rmsse": 1.482,
+      "v1 median_rmsse": 0.695,
+      "v1 wape": 0.402,
+      "WAPE gap (ours \u2212 v1)": 0.0001
+    },
+    {
+      "model": "Naive",
+      "median_rmsse": 0.745,
+      "mean_rmsse": 1.516,
+      "wape": 0.42,
+      "wape (no cap)": 0.42,
+      "v1 model": "Naive",
+      "v1 mean_rmsse": 1.516,
+      "v1 median_rmsse": 0.745,
+      "v1 wape": 0.42,
+      "WAPE gap (ours \u2212 v1)": 0.0
+    },
+    {
+      "model": "SeasonalNaive",
+      "median_rmsse": 0.9128,
+      "mean_rmsse": 1.7093,
+      "wape": 0.4456,
+      "wape (no cap)": 0.4456,
+      "v1 model": "SeasonalNaive",
+      "v1 mean_rmsse": 1.709,
+      "v1 median_rmsse": 0.913,
+      "v1 wape": 0.446,
+      "WAPE gap (ours \u2212 v1)": -0.0004
+    },
+    {
+      "model": "NHITS_recipe",
+      "median_rmsse": 0.5337,
+      "mean_rmsse": 1.281,
+      "wape": 0.244,
+      "wape (no cap)": 0.2444,
+      "v1 model": "NHITSx",
+      "v1 mean_rmsse": 1.303,
+      "v1 median_rmsse": 0.572,
+      "v1 wape": 0.275,
+      "WAPE gap (ours \u2212 v1)": -0.031
+    }
+  ],
+  "board": "results/day2_full/leaderboard_all_series.csv"
+}

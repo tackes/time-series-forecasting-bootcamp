@@ -61,6 +61,10 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   setup (the price covariates) was fixed before the results and goes on the board; the
   other setups stay in 07b's tables. Timestral's weights are not free for commercial use
   above $20M monthly revenue.
+- **All series (11).** 11 rescores the main models on all 17,238 scorable series and writes
+  its own board (`leaderboard_all_series.csv`) and forecasts (`results/day2_full/all_series/`),
+  never `forecasts/` (10 would read them). Every model there is capped at 3× the item's
+  largest training week, as in 08: some N-BEATSx forecasts explode outside the sample.
 - **Public repo.** No client names, internal system names, people's names or client-identifying figures.
 
 ## Style
@@ -97,6 +101,7 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
 | `07b_new_foundation` | 07b | `models`, `setups`, `main_setup`, `board_columns`, `chronos_gap_to_07`, `median_rmsse_valid` / `median_rmsse_test` (model → setup), `wilcoxon`, `hard_weeks`, `history`, `probes`, `calendar`, `headline`, `pairs`, `seconds`, `licences` |
 | `06_clusters`, `07_foundation`, `08_reconcile`, `09_intervals`, `10_final` | 06–10 | free-form, documented in the notebook |
+| `11_all_series` | 11 | `models`, `cap`, `repeat_check`, `scores_all`, `scores_sample`, `scores_all_no_cap`, `versus_v1`, `left_out` |
 
 Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.
 - **Forecasts:** read them with `gd.selected_forecasts()`, which returns the column as `GFM_selected` whichever notebook won. 05b saves its own file and column (`GFM_synthetic`), named in its config's `forecasts` and `forecast_column` keys.

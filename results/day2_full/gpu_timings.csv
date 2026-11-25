@@ -52,3 +52,7 @@ notebook,pass,minutes,finished
 08_hierarchy_reconcile,load,1,2026-11-25T14:49:45+00:00
 10_selection_standings,train,0,2026-11-25T14:50:07+00:00
 10_selection_standings,load,0,2026-11-25T14:50:28+00:00
+11_all_series,train,29,2026-11-25T16:03:27+00:00
+11_all_series,load,0,2026-11-25T16:03:47+00:00
+11_all_series,train,0,2026-11-25T16:17:56+00:00
+11_all_series,load,0,2026-11-25T16:18:21+00:00
