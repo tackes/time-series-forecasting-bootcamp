@@ -16,6 +16,7 @@ F8    ``plot_training``           loss curves with warm-up end and best-weights 
 F9    ``plot_arm_comparison``     seeds and arms: curves, oscillation, accuracy, elasticity
 F10   ``plot_pareto``             accuracy against elasticity, the front and the knees
 F11   ``plot_probe``              lift by shock size, sustained vs one-week pulse
+F13   ``plot_lift_by_depth``      lift by cut depth (random calendars), against references
 ====  ==========================  ==========================================================
 
 F12 (forecasts at -20% / base / +20% price) is ``plot_series_price`` with scenario columns.
@@ -583,21 +584,48 @@ def plot_pareto(trials: pd.DataFrame, front: pd.DataFrame, knees: dict,
 def plot_probe(summary: pd.DataFrame, title: str = "") -> None:
     """F11: median lift by shock size, sustained vs pulse; spill for the pulse."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-    for i, (mode, g) in enumerate(summary.groupby("mode")):
+    colour = {mode: _colour(i) for i, mode in enumerate(sorted(summary["mode"].unique()))}
+    for mode, g in summary.groupby("mode"):
         g = g.sort_values("shock")
-        axes[0].plot(g["shock"] * 100, g["median_lift"] * 100, "o-", color=_colour(i), label=mode)
+        axes[0].plot(g["shock"] * 100, g["median_lift"] * 100, "o-", color=colour[mode],
+                     label=mode)
     axes[0].axhline(0, color="0.3", lw=0.8)
     axes[0].axvline(0, color="0.3", lw=0.8)
     axes[0].set(xlabel="price shock, %", ylabel="median lift in units, %",
                 title="Lift by shock (a cut should lift sales)")
     axes[0].legend()
-    pulse = summary[summary["mode"] == "pulse"].sort_values("shock")
-    axes[1].bar((pulse["shock"] * 100).astype(int).astype(str), pulse["median_spill"] * 100,
-                color=_colour(2))
+    pulse_modes = [m for m in summary["mode"].unique() if str(m).startswith("pulse")]
+    for mode in pulse_modes:
+        g = summary[summary["mode"] == mode].sort_values("shock")
+        axes[1].plot(g["shock"] * 100, g["median_spill"] * 100, "o-", color=colour[mode],
+                     label=mode)
     axes[1].axhline(0, color="0.3", lw=0.8)
+    if len(pulse_modes) > 1:
+        axes[1].legend()
     axes[1].set(xlabel="price shock, %", ylabel="median change in other weeks, %",
                 title="Pulse spill into weeks not shocked (ideally ~0)")
     if title:
         fig.suptitle(title)
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_lift_by_depth(curves: dict[str, pd.Series], references: dict[str, pd.Series] | None = None,
+                       title: str = "Lift by cut depth (random promotion calendars)") -> None:
+    """F13: median lift in the cut week against the depth of a one-week cut.
+
+    ``curves``: model -> Series of median lift indexed by depth (``calendar_report``), drawn
+    solid. ``references``: name -> Series of lift by depth (the planted lift, the lift the
+    empirical elasticity implies), drawn dashed in greys.
+    """
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    for i, (name, lift) in enumerate(curves.items()):
+        ax.plot(lift.index * 100, lift.values * 100, "o-", color=_colour(i), lw=1.8, label=name)
+    for i, (name, lift) in enumerate((references or {}).items()):
+        ax.plot(lift.index * 100, lift.values * 100, "s--", color=("0.15", "0.55")[i % 2],
+                lw=1.5, label=name)
+    ax.axhline(0, color="0.3", lw=0.8)
+    ax.set(xlabel="one-week price cut, %", ylabel="median lift in that week, %", title=title)
+    ax.legend(fontsize=8)
     fig.tight_layout()
     plt.show()

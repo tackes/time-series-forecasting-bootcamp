@@ -25,7 +25,7 @@
 # | Starts from | the selected 05 model |
 # | Adds | two one-week cuts per oversampled copy, 10–30% deep, with a planted lift |
 # | Originals | untouched: only the copies get synthetic weeks |
-# | Measured | the same sweep and probes as 04/05, plus an **echo check** |
+# | Measured | the sweep, the phase 7b probes and calendars, and an **echo check** |
 # | Decides | whether 06–10 use 05 or 05b, by a rule written before the results |
 #
 # Goals
@@ -147,16 +147,23 @@ planted_table.round(2)
 #
 # Notebooks 06–10 use 05b **only if all three hold**; otherwise they keep 05. Every check reads
 # the **validation window**: 05's config and 05b's are each fitted with 3 seeds on the weeks
-# before `VALID_START`, and swept and probed on that window's report series.
+# before `VALID_START`, and probed on that window's report series (seed-mean responses).
 #
-# 1. 05b's median arc elasticity at ±20% (`median_e20`, seed-mean sweep) is **more negative**
-#    than 05's;
-# 2. its share of right-signed series under the **sustained** probes (averaged over the four
-#    shocks) is **higher** than 05's;
+# 1. 05b's median elasticity for a **one-week 20% cut** is **more negative** than 05's. The
+#    price falls in one week and every input built from price (`discount_depth`) is rebuilt to
+#    match, as in a real discount week (`gp.price_probes`, mode `pulse_all`).
+# 2. its share of **right-signed cuts** under **random promotion calendars** is **higher**
+#    than 05's: three one-week cuts per series, 10–30% deep, in ordinary weeks, five draws
+#    (`gp.promo_calendars`).
 # 3. its median validation RMSSE is no more than the 02 noise floor above 05's.
 #
-# The first two ask for a stronger, more consistent price response. The third says it must not
-# cost real accuracy. The test window is scored once afterwards, as the reported outcome.
+# The first two ask for a stronger, more consistent price response, measured as the forecasts
+# would be used: a discount week with all its inputs. The third says it must not cost real
+# accuracy. The test window is scored once afterwards, as the reported outcome.
+#
+# *An earlier version of this rule moved `price_index` alone, over all 14 weeks, so a cut came
+# with no discount depth. The probes in `gp` explain the difference; `median_e20` from the old
+# sweep is still reported alongside.*
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -170,15 +177,19 @@ _, inner_train, valid, valid_a = gp.prepare(cfg_a, panel=raw, cutoff=bc.VALID_ST
 valid_b = gp.prepare(cfg_b, panel=raw, synthetic_seed=synthetic_seed,
                      cutoff=bc.VALID_START)[3]
 valid_report_ids = gp.report_ids(inner_train)
+valid_calendars = gp.promo_calendars(valid_a.futr_df, valid_report_ids)
 max_steps_a = cfg_a["max_steps"]
 print(f"validation: {valid_b.fit_df['unique_id'].nunique():,} training series incl. copies | "
-      f"{len(valid_report_ids):,} report series")
+      f"{len(valid_report_ids):,} report series | {len(valid_calendars):,} calendar cuts")
+print("price inputs rebuilt from price_index, largest gap from the data:",
+      gp.rebuild_check(gd.only(valid_a.predict_df, valid_report_ids),
+                       gd.only(valid_a.futr_df, valid_report_ids)))
 
 
 def valid_extras(nf, data):
-    """Sweep and probes on the validation window, computed while the model is in memory."""
+    """Sweep and phase 7b probes on the validation window, while the model is in memory."""
     return {"sweep": gp.price_sweep(nf, data, valid_report_ids, channel=price_channel),
-            "probe": gp.probe(nf, data, valid_report_ids, channel=price_channel)}
+            **gp.gfm_probes(nf, data, valid_report_ids, valid_calendars)}
 
 
 def model_05_valid(seed):
@@ -189,10 +200,11 @@ def model_05b_valid(seed):
     return gd.build_nbeatsx(params, valid_b, max_steps, seed, "GFM_synthetic")
 
 
+PROBE_RUNS = "_p7b"          # run-name suffix: fits cached with the phase 7b probes
 with bc.Timer() as t:
-    valid_runs = {"05": gd.fit_seeds(model_05_valid, valid_a, "05b_valid_05",
+    valid_runs = {"05": gd.fit_seeds(model_05_valid, valid_a, "05b_valid_05" + PROBE_RUNS,
                                      extras=valid_extras),
-                  "05b": gd.fit_seeds(model_05b_valid, valid_b, "05b_valid_05b",
+                  "05b": gd.fit_seeds(model_05b_valid, valid_b, "05b_valid_05b" + PROBE_RUNS,
                                       extras=valid_extras)}
 if gd.TRAIN:
     print(f"validation fits: {t.seconds / 60:.1f} min")
@@ -204,29 +216,32 @@ def seed_mean(frames: list[pd.DataFrame], keys: list[str]) -> pd.DataFrame:
     return pd.concat(frames).groupby(keys, as_index=False).mean(numeric_only=True)
 
 
-def right_sign_share(summary: pd.DataFrame) -> float:
-    """Mean share of right-signed series over the sustained probes."""
-    return float(summary[summary["mode"] == "sustained"]["share_right_sign"].mean())
+def response_numbers(runs: list[dict]) -> dict:
+    """The rule's response numbers for the seed-mean model of ``runs``."""
+    probes = gp.probe_report(gp.seed_mean_q([r["probe7b"] for r in runs], gp.PROBE_KEYS))
+    calendar = gp.probe_response(gp.seed_mean_q([r["calendar"] for r in runs], gp.CAL_KEYS))
+    return {"cut20_elasticity": gp.headline(probes)["median_elasticity"],
+            "cut20_lift": gp.headline(probes)["median_lift"],
+            "calendar_right_sign": float(calendar["right_sign"].mean()),
+            "median_e20": gp.elasticity_report(gp.arc_elasticity(gp.seed_mean_sweep(runs)))
+            ["median_e20"]}
 
 
 valid_numbers = {}
 for name, runs in valid_runs.items():
-    sweep = gp.seed_mean_sweep(runs)
-    probe = seed_mean([r["probe"] for r in runs], ["unique_id", "shock", "mode"])
     fcst = gd.seed_forecasts(runs)
     mean_col = [c for c in fcst.columns if c.endswith("_mean")][0]
     rmsse = gd.per_series(gd.score(fcst[["unique_id", "ds", mean_col]], valid, inner_train))
-    report = gp.elasticity_report(gp.arc_elasticity(sweep))
-    valid_numbers[name] = {"median_e20": report["median_e20"],
-                           "share_right_sign": right_sign_share(gp.probe_summary(probe)),
+    valid_numbers[name] = {**response_numbers(runs),
                            "median_rmsse": float(rmsse[mean_col].median())}
 valid_numbers = pd.DataFrame(valid_numbers).T
 
 checks = {
-    "stronger response (median_e20 more negative)":
-        valid_numbers.loc["05b", "median_e20"] < valid_numbers.loc["05", "median_e20"],
-    "more right-signed series (sustained probes)":
-        valid_numbers.loc["05b", "share_right_sign"] > valid_numbers.loc["05", "share_right_sign"],
+    "stronger response (one-week 20% cut, more negative)":
+        valid_numbers.loc["05b", "cut20_elasticity"] < valid_numbers.loc["05", "cut20_elasticity"],
+    "more right-signed cuts (random calendars)":
+        valid_numbers.loc["05b", "calendar_right_sign"]
+        > valid_numbers.loc["05", "calendar_right_sign"],
     "accuracy within the noise floor":
         valid_numbers.loc["05b", "median_rmsse"] - valid_numbers.loc["05", "median_rmsse"]
         <= noise_floor,
@@ -240,17 +255,38 @@ pd.Series(checks)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * The one-week 20% cut is a tie: both models give a median elasticity of ≈ −1.77 (a lift of
+#   ≈ +49%), equal to the third decimal. The planted cuts did not make the response stronger.
+# * Under the random calendars 05b gets slightly more cuts right-signed (≈ 99.6% against
+#   ≈ 99.4%), but both are close to every cut.
+# * 05b's validation RMSSE is ≈ 0.593 against 05's ≈ 0.583, a gap of about twice the noise
+#   floor (≈ 0.005). So 05b fails two of the three checks and later notebooks keep 05.
+#
+# *Exact numbers vary with seed and hardware.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## 4. Fit 05's model on the synthetic data, all training weeks (3 seeds)
 #
 # The choice is made; these fits are the reported result. While each model is in memory, we
-# run the single-channel sweep and the probes on the report series, and the price scenarios
-# on the example series. Only the first seed is saved, for later notebooks.
+# run the single-channel sweep and the phase 7b probes on the report series, and the price
+# scenarios on the example series. Only the first seed is saved, for later notebooks. The
+# random calendars are drawn once, so every model and seed meets the same promotions.
 
 # %%
+calendars = gp.promo_calendars(data_a.futr_df, report_ids)
+print(f"test window: {len(calendars):,} calendar cuts over {gp.CAL_DRAWS} draws | price inputs "
+      "rebuilt, largest gap from the data:",
+      gp.rebuild_check(gd.only(data_a.predict_df, report_ids),
+                       gd.only(data_a.futr_df, report_ids)))
+
+
 def price_extras(nf, data):
     """Sweep, probes and example scenarios, computed while the model is in memory."""
     return {"sweep": gp.price_sweep(nf, data, report_ids, channel=price_channel),
-            "probe": gp.probe(nf, data, report_ids, channel=price_channel),
+            **gp.gfm_probes(nf, data, report_ids, calendars),
             "scenarios": gp.scenario_forecasts(nf, data, example_ids, channel=price_channel)}
 
 
@@ -258,9 +294,10 @@ def synthetic_model(seed):
     return gd.build_nbeatsx(params, data_b, max_steps, seed, "GFM_synthetic")
 
 
-run_name = "05b_synthetic"
+run_name = "05b_synthetic" + PROBE_RUNS
+save_as = None if (gd.MODEL_DIR / "05b_synthetic").exists() else "05b_synthetic"
 runs = [gd.fit_seed(synthetic_model, gd.SEEDS[0], data_b, run_name, extras=price_extras,
-                    save_as="05b_synthetic")]
+                    save_as=save_as)]
 runs += gd.fit_seeds(synthetic_model, data_b, run_name, seeds=gd.SEEDS[1:], extras=price_extras)
 health_cols = ["seed", "fit_seconds", "oscillation", "best_frac", "final_over_best", "neg_share"]
 gd.summaries(runs)[health_cols].round(3)
@@ -270,48 +307,58 @@ gplt.plot_training(runs, warmup=gd.warmup_steps(max_steps), title="05b: every se
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ### 05's reference numbers
+# ### 05's reference numbers (3 seeds)
 #
-# The same sweep and probes on the test window, on 05's saved model (one seed). They are
-# computed here, so this notebook does not depend on how 05 stored its runs. Against 05b's
-# 3-seed mean this is not quite like for like, which is why the choice was made on validation,
-# with 3 seeds of each.
+# 05 kept one model, but its probes need the model in memory. So we refit 05's selected setting
+# here, with the same 3 seeds and the same data, and probe each fit. Training is deterministic
+# for a given seed, so these are 05's own models: the check below compares their forecasts with
+# the ones 05 stored.
 
 # %%
-def reference_sweep() -> pd.DataFrame:
-    return gp.price_sweep(gd.load_model(cfg_a["saved_model"]), data_a, report_ids,
-                          channel=price_channel)
+def model_05(seed):
+    return gd.build_nbeatsx(params, data_a, cfg_a["max_steps"], seed, "GFM_selected")
 
 
-def reference_probe() -> pd.DataFrame:
-    return gp.probe(gd.load_model(cfg_a["saved_model"]), data_a, report_ids,
-                    channel=price_channel)
+def reference_extras(nf, data):
+    """05's sweep and probes on the test window."""
+    return {"sweep": gp.price_sweep(nf, data, report_ids, channel=price_channel),
+            **gp.gfm_probes(nf, data, report_ids, calendars)}
 
 
-sweep_a = gd.cached("05b_reference_sweep", reference_sweep)
-probe_a = gd.cached("05b_reference_probe", reference_probe)
+runs_a = gd.fit_seeds(model_05, data_a, "05b_reference_05" + PROBE_RUNS,
+                      extras=reference_extras)
+refit = gd.seed_forecasts(runs_a)[["unique_id", "ds", "GFM_selected_mean"]]
+stored = gd.selected_forecasts(cfg_a)
+gap = refit.merge(stored, on=["unique_id", "ds"])
+print("refit against 05's stored forecasts, largest difference (units):",
+      float((gap["GFM_selected_mean"] - gap["GFM_selected"]).abs().max()))
+sweep_a = gp.seed_mean_sweep(runs_a)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# For 05b, each series' sweep and probe are averaged over the three seeds first, then
-# summarised: the response of the seed-mean model. The per-seed table shows the spread. The
+# For both models, each series' sweep and probes are averaged over the three seeds first,
+# then summarised: the response of the seed-mean model. The per-seed table shows the spread. The
 # research found each run tends to be all-negative or all-positive in its response (§6), so
 # watch for one seed that disagrees with the others.
 
 # %%
 sweep_b = seed_mean([r["sweep"] for r in runs], ["unique_id", "shift"])
-probe_b = seed_mean([r["probe"] for r in runs], ["unique_id", "shock", "mode"])
 el_a = gp.arc_elasticity(sweep_a)
 el_b = gp.arc_elasticity(sweep_b)
 
 per_seed = []
-for r in runs:
-    report = gp.elasticity_report(gp.arc_elasticity(r["sweep"]))
-    per_seed.append({"seed": r["summary"]["seed"], **report})
+for name, model_runs in (("05", runs_a), ("05b", runs)):
+    for r in model_runs:
+        report = gp.elasticity_report(gp.arc_elasticity(r["sweep"]))
+        cut20 = gp.headline(gp.probe_report(r["probe7b"]))
+        per_seed.append({"model": name, "seed": r["summary"]["seed"],
+                         "cut20_elasticity": cut20["median_elasticity"],
+                         "median_e20": report["median_e20"],
+                         "share_perverse": report["share_perverse"]})
 per_seed = pd.DataFrame(per_seed)
 reports = pd.DataFrame({"05 selected": gp.elasticity_report(el_a),
                         "05b synthetic": gp.elasticity_report(el_b)}).T
-per_seed[["seed", "median_e20", "share_perverse", "share_flat"]].round(3)
+per_seed.round(3)
 
 # %%
 reports.round(3)
@@ -320,40 +367,36 @@ reports.round(3)
 # <!-- DRAFT: Graeme to edit -->
 # ## 5. The echo check: does the model give back the planted lift?
 #
-# A one-week **pulse** probe is the same experiment as a planted cut: the price falls for one
-# week and nothing else changes. We compare the lift planted at 10%, 20% and 30% with the
-# median lift each model predicts in the pulse week.
+# The random promotion calendars are the measuring twin of the planted cuts: one-week cuts of
+# 10–30% in ordinary weeks, with every price input rebuilt, exactly as 05b's copies were built.
+# So we compare, depth by depth, the lift we planted with the median lift each model predicts
+# in the cut week. We also draw the lift the data's own elasticity (≈ −3.6) implies.
 #
-# In the chart, the x-axis is the size of the one-week cut and the y-axis the median lift in
-# that week. The black dashed line is what we planted; the coloured lines are what 05 and 05b
-# give back.
+# In the chart (F13), the x-axis is the depth of the one-week cut and the y-axis the median
+# lift in that week. Dashed lines are references; solid lines are what 05 and 05b give back.
 
 # %%
-summary_a = gp.probe_summary(probe_a)
-summary_b = gp.probe_summary(probe_b)
+summary_a = gp.probe_report(gp.seed_mean_q([r["probe7b"] for r in runs_a], gp.PROBE_KEYS))
+summary_b = gp.probe_report(gp.seed_mean_q([r["probe7b"] for r in runs], gp.PROBE_KEYS))
+calendar_a = gp.calendar_report(gp.seed_mean_q([r["calendar"] for r in runs_a], gp.CAL_KEYS))
+calendar_b = gp.calendar_report(gp.seed_mean_q([r["calendar"] for r in runs], gp.CAL_KEYS))
+empirical_all = gp.empirical_elasticity(train, report_ids).iloc[0]["elasticity"]
 
-echo_rows = []
-for depth in (0.10, 0.20, 0.30):
-    row = {"depth": depth, "planted": gp.SYNTHETIC_LIFT[depth]}
-    for name, summ in (("05", summary_a), ("05b", summary_b)):
-        for mode in ("pulse", "sustained"):
-            hit = summ[(summ["mode"] == mode) & np.isclose(summ["shock"], -depth)]
-            row[f"{name} {mode}"] = float(hit["median_lift"].iloc[0])
-    echo_rows.append(row)
-echo = pd.DataFrame(echo_rows).set_index("depth")
+echo = pd.DataFrame({"planted": pd.Series(gp.SYNTHETIC_LIFT),
+                     "data (empirical e)": pd.Series(
+                         gp.implied_lift(empirical_all, gp.CAL_DEPTHS), index=gp.CAL_DEPTHS),
+                     "05": calendar_a.set_index("depth")["median_lift"],
+                     "05b": calendar_b.set_index("depth")["median_lift"],
+                     "depth the model saw": calendar_b.set_index("depth")["median_seen_depth"]})
+echo.index.name = "depth"
 echo.round(3)
 
 # %%
-fig, ax = plt.subplots(figsize=(8, 4))
-x = echo.index * 100
-ax.plot(x, echo["planted"] * 100, "s--", color="black", lw=2, label="planted")
-ax.plot(x, echo["05 pulse"] * 100, "o-", color=gplt.MODEL_COLOURS[0], label="05, pulse")
-ax.plot(x, echo["05b pulse"] * 100, "o-", color=gplt.MODEL_COLOURS[1], label="05b, pulse")
-ax.set(xlabel="one-week price cut, %", ylabel="median lift in that week, %",
-       title="Echo check: planted lift against the lift the model predicts")
-ax.legend()
-fig.tight_layout()
-plt.show()
+gplt.plot_lift_by_depth({"05 selected": echo["05"], "05b synthetic": echo["05b"]},
+                        references={"planted (05b's copies)": echo["planted"],
+                                    f"implied by the data (e ≈ {empirical_all:.1f})":
+                                        echo["data (empirical e)"]},
+                        title="Echo check: lift by cut depth, random promotion calendars")
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -363,9 +406,14 @@ plt.show()
 #   per copy.
 # * If 05b's line sits near the planted one, the model learnt the rule. That shows it *can*
 #   learn a price response from data like this, not that the shop's customers behave so.
-# * The probe moves only the price channel. A planted cut also changed the discount depth, so
-#   a partial echo is expected. At a 20% cut, look for 05b's lift moving from 05's ≈ +35%
-#   towards the planted +60%. Here it reaches ≈ +41% (sustained cut).
+# * The calendar cut changes the price and the discount depth together, as a planted cut did.
+#   The last column shows the depth the model was actually given: the data defines depth
+#   against a 4-week rolling mean that includes the cut week, so a 20% cut reads as ≈ 16%
+#   at most, less when an earlier cut is still in the mean.
+# * Here the two solid lines lie on top of each other: ≈ +26% at a 10% cut, ≈ +56% at 20%,
+#   ≈ +90% at 30%. 05 already gives back about the planted lift up to 20%, so the copies had
+#   little to teach it there; at 25–30% both fall well short of the planted +100% and +150%.
+#   Both stay far below the lift the data implies (≈ +125% at 20%).
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -373,12 +421,14 @@ plt.show()
 # <!-- DRAFT: Graeme to edit -->
 # ## 6. Probes: sustained against pulse (F11)
 #
-# The probes are the research's phase 7 price shocks: −10%, −20%, −30% and +20%, applied to
-# every test week (**sustained**) or to one week only (**pulse**). Each chart has two panels:
+# The probes are the research's phase 7b price shocks: −10%, −20%, −30% and +20%, applied to
+# every test week (**sustained**) or to one week only (**pulse**, test week 5, the first after
+# the three event weeks). `_price` moves `price_index` alone; `_all` rebuilds every input built
+# from price; `pulse_all_promo` also sets the promotion flag. Each chart has two panels:
 #
 # * **left, lift:** median change in units against the shock. A cut should lift sales, so the
 #   points should sit above zero for the cuts and below zero for the +20% rise.
-# * **right, spill:** for the pulse only, the median change in the weeks that were *not*
+# * **right, spill:** for the pulses only, the median change in the weeks that were *not*
 #   shocked. Ideally about zero. A large spill means the model smears one week's price across
 #   the horizon.
 #
@@ -454,8 +504,9 @@ gplt.plot_wins(rmsse, info, model="GFM_synthetic", baseline="GFM_selected")
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ 0.543 against
-#   ≈ 0.546)? Yes: the gap is smaller than the noise floor (≈ 0.005). The mean sits alongside
+# * Lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ 0.546 against
+#   ≈ 0.546)? Yes: the two are equal to the third decimal, well inside the noise floor
+#   (≈ 0.005). The mean sits alongside
 #   on the board.
 # * A win share near 0.5 in every class means the cuts left ordinary forecasts alone. Losses
 #   bunched in one class point to where the made-up rule hurts.
@@ -488,20 +539,33 @@ gplt.plot_series_price(panel, examples, scenarios, models=["-20% price", "base",
 # ## 10. The same checks on the test window (report only)
 #
 # The three checks from section 2, now on the test window. They do not change `use`, which
-# was set on validation in section 3; they show whether the choice held. Remember that 05's
-# test numbers come from one saved seed.
+# was set on validation in section 3; they show whether the choice held.
 
 # %%
+test_numbers = pd.DataFrame({"05": response_numbers(runs_a),
+                             "05b": response_numbers(runs)}).T
 test_checks = {
-    "stronger response (median_e20 more negative)":
-        reports.loc["05b synthetic", "median_e20"] < reports.loc["05 selected", "median_e20"],
-    "more right-signed series (sustained probes)":
-        right_sign_share(summary_b) > right_sign_share(summary_a),
+    "stronger response (one-week 20% cut, more negative)":
+        test_numbers.loc["05b", "cut20_elasticity"] < test_numbers.loc["05", "cut20_elasticity"],
+    "more right-signed cuts (random calendars)":
+        test_numbers.loc["05b", "calendar_right_sign"]
+        > test_numbers.loc["05", "calendar_right_sign"],
     "accuracy within the noise floor":
         accuracy["05b median RMSSE"] - accuracy["05 median RMSSE"] <= noise_floor,
 }
 print(f"later notebooks use: {use} (chosen on validation)")
 pd.DataFrame({"validation (chose)": checks, "test (report)": test_checks})
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * On the test window the accuracy check passes, but the response checks do not: 05b's
+#   one-week 20% cut gives ≈ −1.73 against 05's ≈ −1.79, and the calendars are right-signed
+#   ≈ 99.3% of the time for both. The validation choice holds: the copies cost nothing in
+#   accuracy here and add no price response.
+#
+# *Exact numbers vary with seed and hardware.*
 
 # %%
 gd.save_config("05b_synthetic", {
@@ -517,8 +581,13 @@ gd.save_config("05b_synthetic", {
     "checks": {k: bool(v) for k, v in checks.items()},
     "checks_test": {k: bool(v) for k, v in test_checks.items()},
     "valid": valid_numbers.round(4).to_dict("index"),
+    "test_response": test_numbers.round(4).to_dict("index"),
     "elasticity": reports.round(4).to_dict("index"),
-    "share_right_sign": {"05": right_sign_share(summary_a), "05b": right_sign_share(summary_b)},
+    "probes": {"05": summary_a.round(4).to_dict("records"),
+               "05b": summary_b.round(4).to_dict("records")},
+    "calendar": {"05": calendar_a.round(4).to_dict("records"),
+                 "05b": calendar_b.round(4).to_dict("records")},
+    "probe_runs": {"05": "05b_reference_05" + PROBE_RUNS, "05b": run_name},
     "echo": echo.round(4).reset_index().to_dict("records"),
     "median_rmsse": {"05": accuracy["05 median RMSSE"], "05b": accuracy["05b median RMSSE"]},
     "saved_model": "05b_synthetic",
@@ -536,6 +605,8 @@ gd.save_config("05b_synthetic", {
 # * Synthetic cuts sit in copies only. Did they change forecasts for real series in weeks with
 #   no price change?
 # * The rule needed all three checks. Which was hardest to pass, and why?
+# * The first version of this rule moved `price_index` alone, so a cut arrived with no discount
+#   depth. Which probe would you trust to plan a promotion, and why?
 #
 # **Try it:** set `cuts_per_copy` to 4, or scale `gp.SYNTHETIC_LIFT` down by half, and rerun the
 # echo check. Does the measured lift follow the planted one?

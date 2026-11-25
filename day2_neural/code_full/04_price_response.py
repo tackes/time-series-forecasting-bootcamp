@@ -605,12 +605,65 @@ gplt.plot_elasticity_by_class(strength, info, empirical=empirical)
 #
 # The research's pass bar was a median elasticity of −0.3 or stronger, with the right sign. On
 # this data, with an empirical value of ≈ −3.6, that bar is easy to clear.
+#
+# These arm probes move `price_index` alone, as the sweep does: a cut arrives with no discount
+# depth. They were computed while each arm's model was in memory, and the arms were not saved,
+# so they stay as they are. From 05b on, the probes rebuild every price input (next section).
 
 # %%
 probe_c = pd.concat([run["probe"] for run in arms["C_cpi_over"]], ignore_index=True)
 probe_table = gp.probe_summary(probe_c)
-gplt.plot_probe(probe_table, title="Arm C_cpi_over: probe responses")
+gplt.plot_probe(probe_table, title="Arm C_cpi_over: probe responses (price_index alone)")
 probe_table.round(3)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### LightGBM under the phase 7b probes
+#
+# LightGBM is refitted in a few minutes, so we can probe it the way 05b, 07 and 10 probe every
+# model: the price moves and every input built from it is rebuilt (`discount_depth` and
+# `price_ratio_to_rolling_mean`, from the 4-week rolling mean), in fixed probes and in random
+# promotion calendars (three one-week cuts per series, 10–30% deep, in ordinary weeks). The
+# results go to 10's final price-response table.
+
+# %%
+lgbm_hist = gd.only(bc.to_nixtla(train_a, LGBM_EXOG), report_ids)
+lgbm_futr = gd.only(bc.to_nixtla(test_a, LGBM_EXOG).drop(columns="y"), report_ids)
+lgbm_calendars = gp.promo_calendars(lgbm_futr, report_ids)
+print("price inputs rebuilt, largest gap from the data:",
+      gp.rebuild_check(lgbm_hist, lgbm_futr))
+
+
+def lgbm_predict(futr: pd.DataFrame) -> pd.DataFrame:
+    """``predict(futr)`` for the LightGBM above, for ``gp.price_probes``."""
+    ids = sorted(futr["unique_id"].unique())
+    fcst = fit_lgbm().predict(h=bc.H, X_df=futr[["unique_id", "ds"] + LGBM_EXOG], ids=ids)
+    return fcst[["unique_id", "ds", "LightGBM"]].rename(columns={"LightGBM": "yhat"})
+
+
+def lgbm_probes() -> pd.DataFrame:
+    return gp.price_probes(lgbm_predict, lgbm_hist, lgbm_futr, report_ids)
+
+
+def lgbm_calendar() -> pd.DataFrame:
+    return gp.calendar_probe(lgbm_predict, lgbm_hist, lgbm_futr, lgbm_calendars)
+
+
+lgbm_probe_table = gp.probe_report(gd.cached("04_lgbm_probe", lgbm_probes))
+lgbm_calendar_table = gp.calendar_report(gd.cached("04_lgbm_calendar", lgbm_calendar))
+gplt.plot_probe(lgbm_probe_table, title="LightGBM: probe responses, every price input rebuilt")
+lgbm_calendar_table.round(3)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * A tree reads `discount_depth` and the rolling ratio through its splits, so rebuilding them
+#   can move LightGBM more than moving `price_index` alone did.
+# * In the calendar table, look for lift growing with depth. A tree can give the same lift for
+#   15% and 25% if both land in one leaf.
+#
+# *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -658,6 +711,8 @@ gd.save_config("04_price", {
              for arm, c in arm_cfgs.items()},
     "elasticity": reports,
     "elasticity_valid": valid_reports,
+    "lgbm_probes": lgbm_probe_table.round(4).to_dict("records"),
+    "lgbm_calendar": lgbm_calendar_table.round(4).to_dict("records"),
     "empirical": empirical.to_dict("records"),
     "empirical_all": empirical_all,
     "empirical_band": list(band),

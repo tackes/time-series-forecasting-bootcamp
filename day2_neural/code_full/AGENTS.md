@@ -32,6 +32,16 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   - Call `gplt.use_style()` once, and use the `gd_plots` functions (F1–F12; see its docstring).
   - Each `.ipynb` stays under ~3 MB.
 - **3 seeds minimum** for any quoted number (`gd.SEEDS`).
+- **Measuring price response.** Two methods, both in `gd_price`:
+  - the sweep (`price_sweep`, `e20`): moves `price_index` alone over all 14 weeks. 04 and 05
+    chose with it, so it stays in their configs.
+  - the phase 7b probes (`price_probes`, `promo_calendars`, `calendar_probe`): move the price
+    and rebuild every input derived from it (`discount_depth`, `price_ratio_to_rolling_mean`)
+    over history and horizon, as a real discount week has them. Use these for anything new.
+    The headline is a one-week 20% cut (`pulse_all`, test week 5, after the event weeks). Any
+    model works through a `predict(futr)` function (`gp.gfm_predict` for a GFM). Check
+    `gp.rebuild_check` is ≈ 0 before trusting a probe on new data.
+  - Probes need the model in memory: compute them as `fit_seed` extras, or from a saved model.
 - **Public repo.** No client names, internal system names, people's names or client-identifying figures.
 
 ## Style
@@ -65,7 +75,7 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `03_features` | 03 | `params`, ★`features` (`deflate`, `events`, `fourier_k`, `hierarchy_level`), ★`futr_exog`, ★`y_shift`, `max_steps`, `seeds`, `median_rmsse` |
 | `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
 | `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `role` (chosen on validation), `selection_rule`, `confirm`, `saved_model`, `forecasts`, `forecast_column` |
-| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation), `checks`, `checks_test`, `forecasts`, `forecast_column` |
+| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
 | `06_clusters`, `07_foundation`, `08_reconcile`, `09_intervals`, `10_final` | 06–10 | free-form, documented in the notebook |
 
 Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.

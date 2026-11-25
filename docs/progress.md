@@ -5,7 +5,7 @@
 |---|---|---|
 | 0 | Pinned env (`day2_neural/code_full/requirements.txt`), `AGENTS.md`, README | done (laptop); GPU box to check |
 | 1 | `docs/gfm_learnings.md` | approved (23 Nov) |
-| 2 | `gd_helpers.py`, `gd_price.py`, `gd_plots.py` + `tests/` (25 passing) | done |
+| 2 | `gd_helpers.py`, `gd_price.py`, `gd_plots.py` + `tests/` (34 passing) | done |
 | 3+ | notebooks 00 → 10 (+05b) | built, prose drafted, style-reviewed; full GPU run done (23–24 Nov), outputs committed |
 
 ## Findings from the build so far
@@ -140,15 +140,13 @@ Median RMSSE on the 2,000-series eval sample, test window, 3-seed means unless n
   stack, dropout 0.10): validation 0.583, test 0.546, e20 −1.28 on test, negative in every seed.
   The knee settings missed the accuracy limit on validation by ≈ 0.003. Elasticity barely moves
   across the Pareto front (−1.3 to −1.4): tuning moved accuracy, not the price response.
-- **05b synthetic discounts:** 05b lost on validation by one series' worth on "more right-signed
-  series" (98.0% against 98.1%) and passed the other two checks; on test it would have won all
-  three (0.543, e20 −1.43, 97.6% right-signed). 05 goes forward. The echo test shows every model
-  recovers only a third to a half of a planted price response.
+- **05b synthetic discounts:** re-decided on 25 Nov with the phase 7b probes (see below). 05 goes
+  forward.
 - **06 clusters:** pooled wins (0.546) over the cluster static (0.551) and one model per cluster
   (0.570). Per-cluster models lose most in the small clusters.
 - **07 foundation model:** **Chronos-2 zero-shot with the promo and price covariates is the best
   model on the board** (validation 0.575, test 0.512), 0.034 ahead of the selected GFM with no
-  training. Without covariates it scores 0.645. Its price response is not measured in 07.
+  training. Without covariates it scores 0.645. Its price response is probed in 07 §8 (below).
 - **08 hierarchy:** a few item forecasts from the saved model exploded (one item that averages 128
   units a week was forecast at ≈ 2,900× its test sales), none of them in the eval sample. On its
   own that put the bottom-up store total 47% too high. 08 now caps each item at 3× its largest
@@ -163,5 +161,41 @@ Median RMSSE on the 2,000-series eval sample, test window, 3-seed means unless n
   than the noise floor. On the held-out half, the mean of the top three (Chronos-2, GFM_synthetic,
   NHITS) scores 0.507, the best of all.
 - **Notebook blanks filled (24 Nov):** every `≈ __` / `TODO: fill after GPU run` placeholder now
-  holds the number from the executed notebook. 10's summary quotes the selected GFM's elasticity,
-  because the final model (Chronos-2) has no price sweep. The DRAFT tags stay for the prose edit.
+  holds the number from the executed notebook. The DRAFT tags stay for the prose edit.
+
+## Price response measured with the phase 7b probes (25 Nov)
+The old measure (`e20`, the sweep) moved `price_index` alone over all 14 weeks, so a cut arrived
+with no discount depth. The new probes in `gd_price` follow the research's phase 7b: shock the
+price and **rebuild every input derived from it** (`discount_depth`,
+`price_ratio_to_rolling_mean`), sustained or in one week (test week 5, after the event weeks),
+with and without the promotion flag. They add **random promotion calendars**: per series, five
+draws of three one-week cuts at 10–30%, in weeks with no event and no planned promotion. The
+headline is a one-week 20% cut, every input rebuilt (`pulse_all`). The sweep stays in 04/05
+(they chose with it). Reruns: 04, 05b (12 refits, 75 min), 07, 10.
+
+| One-week 20% cut (test) | Median RMSSE | Elasticity | Lift | + promo flag | Calendar cuts right-signed | Lift at 10 / 20 / 30% |
+|---|---|---|---|---|---|---|
+| Chronos2_zs_cov | 0.512 | −1.43 | +37% | +43% | 89.6% | +18 / +45 / +75% |
+| GFM_selected (05) | 0.546 | −1.79 | +49% | +59% | 99.4% | +26 / +57 / +89% |
+| GFM_synthetic (05b) | 0.546 | −1.73 | +47% | +59% | 99.3% | +26 / +55 / +90% |
+| LightGBM | 0.568 | −1.10 | +28% | +43% | 97.6% | +10 / +27 / +44% |
+| implied by the data (e ≈ −3.6) | | −3.46 | +125% | | | +47 / +125 / +266% |
+| planted in 05b's copies | | −2.08 | +60% | | | +35 / +60 / +150% |
+
+- **Every model is right-signed and too weak:** the best gives back about 40% of the lift the
+  data implies. Moving the price alone understates the response: LightGBM's one-week cut gives
+  +5% with price alone, +28% with the rebuilt depth.
+- **05b re-decided on validation:** the one-week cut is a tie (−1.7697 for both, equal to five
+  decimals), 05b has slightly more right-signed calendar cuts (99.6% against 99.4%), but its
+  validation RMSSE is 0.593 against 0.583 (gap 0.011, noise floor 0.005). It fails two checks;
+  `use` stays "05", so 06–09 did not need rerunning. On test, 05b ties on accuracy and is
+  slightly weaker. The 05 reference refit reproduced 05's stored forecasts exactly (gap 0.0).
+- **Echo check:** 05 already gives back about the planted lift up to a 20% cut; at 25–30% both
+  models fall well short of it (+90% against +150% at 30%). The copies taught 05b nothing new.
+- **Chronos-2** reads the price in context: a lift that grows with depth and no spill into other
+  weeks, but it is the least consistent (≈ 10% of calendar cuts do not lift its forecast).
+- **RMSSE in 10's table** is on the 1,996 series every model covers, so GFM_synthetic shows 0.543
+  there (0.546 on all 1,999): the four series dropped sit near its median.
+- **Stale cache folders:** `runs/05b_valid_05`, `runs/05b_valid_05b`, `runs/05b_synthetic` and
+  `tables/05b_reference_sweep`, `tables/05b_reference_probe` hold the old-method fits. Nothing
+  reads them now (the new runs carry the `_p7b` suffix); delete them to save space.

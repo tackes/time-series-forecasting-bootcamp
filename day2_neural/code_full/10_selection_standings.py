@@ -324,7 +324,8 @@ def sweep_sources() -> dict:
             if row.get("role") == cfg05.get("role"):
                 sources[column_05] = ("run", f"05_confirm_{row['key']}")
     if (gd.CONFIG_DIR / "05b_synthetic.json").exists():
-        sources[column_05b] = ("run", "05b_synthetic")
+        probe_runs = gd.load_config("05b_synthetic").get("probe_runs", {})
+        sources[column_05b] = ("run", probe_runs.get("05b", "05b_synthetic"))
     return sources
 
 
@@ -376,6 +377,101 @@ else:
 #   outside the prices it has seen: an artefact of tree splits, not of demand (§5).
 # * Remember the research's sharpest negative result: elasticity tuned on one window did not
 #   carry to the next (it shrank 7–18×, §6). Treat any one-window response as provisional.
+#
+# *Exact numbers vary with seed and hardware.*
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### The final price-response table
+#
+# The sweep above moves `price_index` alone, over all 14 weeks. A planner asks a different
+# question: *what happens in a week we run a 20% discount?* So every model that can be asked is
+# probed the same way (phase 7b, `gp.price_probes` and `gp.promo_calendars`): the price falls
+# and every input built from it is rebuilt, as in a real discount week.
+#
+# | Column | What it measures |
+# |---|---|
+# | `e20 (sweep)` | sweep's median arc elasticity at ±20%, `price_index` alone (04–05) |
+# | `cut20 e`, `cut20 lift` | one-week 20% cut, test week 5, inputs rebuilt (the headline) |
+# | `cut20+promo lift` | the same cut with the promotion flag on as well |
+# | `right sign` | share of cuts that lift sales, random promotion calendars |
+# | `lift 10/20/30%` | median lift in the cut week, random calendars, by cut depth |
+#
+# The GFM rows are 3-seed means (refitted in 05b); Chronos-2 comes from 07, LightGBM from 04.
+# The last rows are references: the lift the data's own elasticity implies, and the lift 05b
+# planted in its training copies.
+
+# %%
+def probe_sources() -> dict:
+    """Model -> (fixed probe rows, calendar rows) for every model probed upstream."""
+    def table(name):
+        path = gd.TABLE_DIR / f"{name}.parquet"
+        return pd.read_parquet(path) if path.exists() else None
+
+    sources = {"Chronos2_zs_cov": (table("07_chronos_probe"), table("07_chronos_calendar")),
+               "LightGBM": (table("04_lgbm_probe"), table("04_lgbm_calendar"))}
+    if (gd.CONFIG_DIR / "05b_synthetic.json").exists():
+        runs_by = gd.load_config("05b_synthetic").get("probe_runs", {})
+        names = {"05": "GFM_05" if synthetic_won else "GFM_selected",
+                 "05b": "GFM_selected" if synthetic_won else "GFM_synthetic"}
+        for key, run_name in runs_by.items():
+            runs = gd.load_runs(run_name)
+            sources[names[key]] = (gp.seed_mean_q([r["probe7b"] for r in runs], gp.PROBE_KEYS),
+                                   gp.seed_mean_q([r["calendar"] for r in runs], gp.CAL_KEYS))
+    return {m: v for m, v in sources.items() if v[0] is not None and v[1] is not None}
+
+
+rows = {}
+lift_curves = {}
+for model, (probe_rows, calendar_rows) in probe_sources().items():
+    probes = gp.probe_report(probe_rows)
+    calendar = gp.calendar_report(calendar_rows).set_index("depth")
+    cut20 = gp.headline(probes)
+    promo = gp.headline(probes, mode="pulse_all_promo")
+    calendar_resp = gp.probe_response(calendar_rows)
+    rows[model] = {"median RMSSE": ratings["median_rmsse"].get(model, np.nan),
+                   "e20 (sweep)": response["median_e20"].get(model, np.nan)
+                   if "median_e20" in response else np.nan,
+                   "cut20 e": cut20["median_elasticity"], "cut20 lift": cut20["median_lift"],
+                   "cut20+promo lift": promo["median_lift"],
+                   "right sign": float(calendar_resp["right_sign"].mean()),
+                   **{f"lift {d:.0%}": calendar["median_lift"].get(d, np.nan)
+                      for d in (0.10, 0.20, 0.30)}}
+    lift_curves[model] = calendar["median_lift"]
+
+empirical_all = gd.load_config("04_price")["empirical_all"]
+depths = list(gp.CAL_DEPTHS)
+implied = pd.Series(gp.implied_lift(empirical_all, depths), index=depths)
+planted = pd.Series(gp.SYNTHETIC_LIFT)
+references = {f"implied by the data (e ≈ {empirical_all:.1f})": implied,
+              "planted in 05b's copies": planted}
+for name, lift in references.items():
+    rows[name] = {"cut20 e": gp.arc_one_side(1.0, 1 + lift[0.20], -0.20),
+                  "cut20 lift": lift[0.20],
+                  **{f"lift {d:.0%}": lift[d] for d in (0.10, 0.20, 0.30)}}
+price_table = pd.DataFrame(rows).T
+price_table.round(3)
+
+# %%
+gplt.plot_lift_by_depth(lift_curves, references=references,
+                        title="Lift by cut depth: every probed model, random promotion calendars")
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Read `cut20 lift` against the reference rows. How much of the lift the data implies does
+#   each model forecast for a one-week 20% discount?
+# * `right sign` near 1 means nearly every cut lifts the forecast. A model can be right-signed
+#   everywhere and still far too weak: the depth chart shows by how much.
+# * The most accurate model need not have the most believable response. A model used to plan
+#   promotions should be good on both.
+# * On this run, every model is right-signed and every model is too weak. For a one-week 20%
+#   cut the data implies a lift of ≈ +125%. The GFMs forecast ≈ +48%, Chronos-2 ≈ +37% and
+#   LightGBM ≈ +28%. 05b's planted lift (+60%) sits between the models and the data.
+# * The GFMs are the most consistent (≈ 99% of calendar cuts right-signed), then LightGBM
+#   (≈ 98%), then Chronos-2 (≈ 90%). The most accurate model, Chronos-2, has the weakest and
+#   least consistent response of the neural models.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -506,6 +602,7 @@ gd.save_config("10_final", {
                   "selection_half_seed": bc.RANDOM_SEED, "held_out": held_out_table},
     "elasticity_reported": reported.round(4).to_dict("records"),
     "elasticity_from_sweeps": list(strength),
+    "price_response": price_table.round(4).reset_index(names="model").to_dict("records"),
 })
 
 # %% [markdown]
@@ -530,8 +627,10 @@ gd.save_config("10_final", {
 # * **Price response is a separate test.** An accurate model can ignore price or respond the
 #   wrong way. In the research the most accurate trials had the weakest elasticity (§6), and
 #   LightGBM, the most accurate model, had an artefactual response (§5) [100k set]. Here the
-#   selected GFM's median elasticity is ≈ −1.28 against an empirical ≈ −3.6, with ≈ 0.7%
-#   perverse. The final model, Chronos-2, has no price sweep yet, so its response is untested.
+#   phase 7b probes (a one-week 20% cut with every price input rebuilt) give the selected GFM
+#   a median elasticity of ≈ −1.79 (lift ≈ +49%) and the final model, Chronos-2, ≈ −1.43
+#   (≈ +37%), against ≈ −3.5 (≈ +125%) implied by the data. Chronos-2 lifts ≈ 90% of random
+#   promotion cuts, the GFM ≈ 99%. Every model is right-signed and too weak.
 # * **Tune on validation, test once.** The research's early tuning was scored on its test
 #   window (§1). Once it tuned properly, accuracy carried to a new window but elasticity did
 #   not (§6). So trust accuracy gains across windows more than elasticity gains.

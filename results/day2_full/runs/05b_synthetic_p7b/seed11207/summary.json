@@ -1,0 +1,14 @@
+{
+  "name": "05b_synthetic_p7b",
+  "seed": 11207,
+  "alias": "GFM_synthetic",
+  "fit_seconds": 359.6,
+  "max_steps": 11718,
+  "n_train_series": 40079,
+  "neg_share": 0.026071428571428572,
+  "oscillation": 0.010336652058538811,
+  "best_step": 10220,
+  "best_frac": 0.8721624850657109,
+  "best_valid": 3095.19091796875,
+  "final_over_best": 1.0106909644829247
+}

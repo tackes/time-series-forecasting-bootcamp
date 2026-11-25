@@ -29,3 +29,11 @@ notebook,pass,minutes,finished
 10_selection_standings,load,0,2026-11-24T17:42:28+00:00
 10_selection_standings,train,0,2026-11-24T17:55:29+00:00
 10_selection_standings,load,0,2026-11-24T17:55:49+00:00
+04_price_response,train,0,2026-11-25T09:42:29+00:00
+04_price_response,load,0,2026-11-25T09:42:56+00:00
+05b_synthetic_discounts,train,74,2026-11-25T10:57:51+00:00
+05b_synthetic_discounts,load,0,2026-11-25T10:58:19+00:00
+07_foundation,train,0,2026-11-25T10:59:45+00:00
+07_foundation,load,0,2026-11-25T11:00:08+00:00
+10_selection_standings,train,0,2026-11-25T11:00:29+00:00
+10_selection_standings,load,0,2026-11-25T11:00:50+00:00

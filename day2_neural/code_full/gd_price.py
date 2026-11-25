@@ -11,13 +11,19 @@ What is here, and the research finding behind it (``docs/gfm_learnings.md``):
   ±5/10/20%, keep everything else as observed, and report midpoint elasticities (§5).
 - ``elasticity_report``, ``e20``, ``seed_mean_sweep``, ``categorise`` and
   ``empirical_elasticity``: how we read a sweep.
-- ``probe``: sustained and one-week (pulse) price shocks (§5, phase 7).
+- ``probe``: sustained and one-week (pulse) price shocks on ``price_index`` alone (§5, phase 7).
+  Kept for 04's arm runs, which were cached with it.
+- ``price_probes``, ``promo_calendars``, ``calendar_probe``: the phase 7b method, used from 05b
+  on. The price moves and every input derived from it is rebuilt; fixed probes (sustained,
+  pulse, pulse with the promotion flag) and random promotion calendars. Any model: pass a
+  ``predict(futr)`` function (``gfm_predict`` for a GFM).
 - ``scenario_forecasts``: forecasts at base price and with every price 20% lower and higher.
 - ``add_synthetic_cuts``: one-week cuts with a planted lift, added to the copies only (05b).
 """
 
 from __future__ import annotations
 
+import zlib
 from datetime import date, timedelta
 
 import numpy as np
@@ -467,7 +473,8 @@ def empirical_band(emp: pd.DataFrame) -> tuple[float, float]:
 # ============================================================================
 
 PROBE_SHOCKS = (-0.10, -0.20, -0.30, 0.20)
-PULSE_WEEK = 4
+PULSE_WEEK = 4                      # 0-based: test week 5, the first after Good Friday,
+                                    # Anzac Day (weeks 1-2) and Mother's Day (week 4)
 
 
 def probe(nf, data, ids: list[str], shocks=PROBE_SHOCKS, channel: str = "price_index",
@@ -527,3 +534,283 @@ def probe_summary(resp: pd.DataFrame) -> pd.DataFrame:
                  share_right_sign=("right_sign", "mean"), median_spill=("spill", "median"),
                  n=("lift", "count"))
             .reset_index())
+
+
+# ============================================================================
+# PRICE PROBES, PHASE 7B METHOD (every price input rebuilt from the changed price)
+# ============================================================================
+# The sweep and ``probe`` above move ``price_index`` alone, so a cut arrives with no discount
+# depth: inputs no real week ever had. These probes move the price and then rebuild every input
+# derived from it (``discount_depth`` and ``price_ratio_to_rolling_mean``: 4-week rolling mean,
+# as ``bootcamp`` builds them), over history and horizon together. They work for any model:
+# pass ``predict(futr) -> frame with unique_id, ds, yhat``.
+#
+# Two kinds:
+# - fixed probes: one shock in every forecast week (sustained) or one week (pulse), five modes;
+#   the headline is a one-week 20% cut with every price input rebuilt (``pulse_all``, -20%);
+# - random promotion calendars: per series, a few one-week cuts at random depths in ordinary
+#   forecast weeks (no event, no planned promotion), the measuring twin of 05b's planted cuts.
+
+PROBE_MODES = {            # mode -> (weeks shocked, rebuild price inputs, promo flag on)
+    "sustained_price": ("all", False, False),
+    "sustained_all": ("all", True, False),
+    "pulse_price": ("pulse", False, False),
+    "pulse_all": ("pulse", True, False),
+    "pulse_all_promo": ("pulse", True, True),
+}
+HEADLINE_PROBE = ("pulse_all", -0.20)
+REBUILT_INPUTS = ("discount_depth", "price_ratio_to_rolling_mean")
+EL_BAR = -0.3                           # the research's "decent response" bar (median e)
+CAL_DEPTHS = (0.10, 0.15, 0.20, 0.25, 0.30)
+CAL_CUTS = 3                            # cuts per series per calendar
+CAL_GAP = 3                             # minimum weeks between two cuts
+CAL_DRAWS = 5                           # random calendars per series
+CAL_SEED = bc.RANDOM_SEED
+PROBE_KEYS = ["unique_id", "mode", "shock"]
+CAL_KEYS = ["draw", "unique_id", "step", "shock"]
+
+
+def price_timeline(hist: pd.DataFrame, futr: pd.DataFrame) -> pd.DataFrame:
+    """History and forecast rows of each series in one frame, sorted, with ``horizon`` (True in
+    the forecast weeks) and ``step`` (0-based forecast week, -1 in the history)."""
+    cols = [c for c in futr.columns if c != "y"]
+    past = hist[[c for c in cols if c in hist.columns]].assign(horizon=False)
+    out = pd.concat([past, futr[cols].assign(horizon=True)], ignore_index=True)
+    out = out.sort_values(["unique_id", "ds"]).reset_index(drop=True)
+    out["step"] = -1
+    out.loc[out["horizon"], "step"] = out[out["horizon"]].groupby("unique_id").cumcount()
+    return out
+
+
+def rebuild_price_inputs(tl: pd.DataFrame) -> pd.DataFrame:
+    """Recompute the inputs derived from price (``REBUILT_INPUTS`` present in ``tl``) from
+    ``price_index``, with the 4-week rolling mean per series. ``tl`` from ``price_timeline``."""
+    out = tl.copy()
+    roll = (out.groupby("unique_id")["price_index"].rolling(4, min_periods=1).mean()
+            .reset_index(level=0, drop=True).sort_index())
+    ratio = out["price_index"] / roll
+    if "price_ratio_to_rolling_mean" in out:
+        out["price_ratio_to_rolling_mean"] = ratio
+    if "discount_depth" in out:
+        out["discount_depth"] = np.maximum(0.0, 1.0 - ratio)
+    return out
+
+
+def rebuild_check(hist: pd.DataFrame, futr: pd.DataFrame) -> float:
+    """Largest gap, over the forecast weeks, between the observed price inputs and the ones
+    ``rebuild_price_inputs`` makes from ``price_index``. About 0 means the probes move the
+    inputs exactly as the data built them."""
+    tl = price_timeline(hist, futr)
+    rebuilt = rebuild_price_inputs(tl)
+    cols = [c for c in REBUILT_INPUTS if c in tl]
+    gap = (rebuilt.loc[tl["horizon"], cols] - tl.loc[tl["horizon"], cols]).abs()
+    return float(gap.to_numpy().max()) if cols else 0.0
+
+
+def shocked_futr(tl: pd.DataFrame, shocks: pd.DataFrame, rebuild: bool = True,
+                 promo: bool = False) -> pd.DataFrame:
+    """Forecast-week rows after moving ``price_index`` by ``shocks`` (``unique_id``, ``step``,
+    ``shock``; -0.2 is a 20% cut). ``rebuild`` recomputes the derived price inputs over history
+    and horizon; ``promo`` also sets the promotion flag in the cut weeks."""
+    out = tl.merge(shocks[["unique_id", "step", "shock"]], on=["unique_id", "step"], how="left")
+    hit = out["shock"].notna().to_numpy()
+    out.loc[hit, "price_index"] = out.loc[hit, "price_index"] * (1 + out.loc[hit, "shock"])
+    if rebuild:
+        out = rebuild_price_inputs(out)
+    if promo and "promo" in out:
+        out.loc[hit & (out["shock"] < 0).to_numpy(), "promo"] = 1.0
+    return out[out["horizon"]].reset_index(drop=True)
+
+
+def _model_futr(frame: pd.DataFrame) -> pd.DataFrame:
+    """A shocked frame without the helper columns, ready for a ``predict`` function."""
+    return frame.drop(columns=["horizon", "step", "shock"], errors="ignore")
+
+
+def _with_steps(fcst: pd.DataFrame, tl: pd.DataFrame) -> pd.DataFrame:
+    steps = tl.loc[tl["horizon"], ["unique_id", "ds", "step"]]
+    return fcst[["unique_id", "ds", "yhat"]].merge(steps, on=["unique_id", "ds"])
+
+
+def price_probes(predict, hist: pd.DataFrame, futr: pd.DataFrame, ids: list[str],
+                 shocks=PROBE_SHOCKS, pulse_week: int = PULSE_WEEK) -> pd.DataFrame:
+    """The fixed probes (``PROBE_MODES`` × ``shocks``) for ``ids``. One row per series, mode
+    and shock: mean forecast in the shocked weeks at the planned (``q0``) and shocked (``q1``)
+    price, and in the other weeks (``r0``, ``r1``; pulse only). ``pulse_week`` is 0-based.
+    Turn the rows into responses with ``probe_response``."""
+    hist, futr = gd.only(hist, ids), gd.only(futr, ids)
+    tl = price_timeline(hist, futr)
+    base = _with_steps(predict(futr), tl)
+    rows = []
+    for mode, (weeks, rebuild, promo) in PROBE_MODES.items():
+        steps = sorted(base["step"].unique()) if weeks == "all" else [pulse_week]
+        for shock in shocks:
+            if promo and shock > 0:                   # a price rise is not a promotion
+                continue
+            grid = pd.MultiIndex.from_product([ids, steps], names=["unique_id", "step"])
+            plan = grid.to_frame(index=False).assign(shock=shock)
+            fcst = _with_steps(predict(_model_futr(shocked_futr(tl, plan, rebuild, promo))), tl)
+            both = base.merge(fcst, on=["unique_id", "ds", "step"], suffixes=("0", "1"))
+            on = both["step"].isin(steps)
+            q = both[on].groupby("unique_id")[["yhat0", "yhat1"]].mean()
+            r = both[~on].groupby("unique_id")[["yhat0", "yhat1"]].mean()
+            out = pd.DataFrame({"q0": q["yhat0"], "q1": q["yhat1"],
+                                "r0": r["yhat0"], "r1": r["yhat1"]})
+            rows.append(out.reset_index().assign(mode=mode, shock=shock))
+    return pd.concat(rows, ignore_index=True)
+
+
+def arc_one_side(q0, q1, shock):
+    """One-sided midpoint (arc) elasticity of a move from price 1 to ``1 + shock``."""
+    dp = shock / (1 + shock / 2)
+    return (q1 - q0) / ((q1 + q0) / 2) / dp
+
+
+def probe_response(raw: pd.DataFrame) -> pd.DataFrame:
+    """Per-row response from ``q0``/``q1`` (probe or calendar rows): ``lift`` (q1/q0 - 1),
+    ``el`` (one-sided arc elasticity), ``right_sign`` (a cut lifts, a rise lowers) and, where
+    ``r0``/``r1`` are present, ``spill`` (change in the weeks not shocked)."""
+    out = raw.copy()
+    out["lift"] = out["q1"] / out["q0"].where(out["q0"] > 0) - 1
+    out["el"] = arc_one_side(out["q0"], out["q1"], out["shock"])
+    out["right_sign"] = np.where(out["shock"] < 0, out["q1"] > out["q0"], out["q1"] < out["q0"])
+    if {"r0", "r1"} <= set(out.columns):
+        out["spill"] = (out["r1"] - out["r0"]) / out["r0"].where(out["r0"] > 0)
+    return out
+
+
+def seed_mean_q(frames: list[pd.DataFrame], keys: list[str]) -> pd.DataFrame:
+    """Average the forecasts (``q0``, ``q1`` and any ``r0``, ``r1``, ``seen_depth``) of
+    per-seed probe or calendar rows: the seed-mean model's response."""
+    both = pd.concat(frames, ignore_index=True)
+    cols = [c for c in ("q0", "q1", "r0", "r1", "seen_depth") if c in both.columns]
+    return both.groupby(keys, as_index=False)[cols].mean()
+
+
+def probe_report(raw: pd.DataFrame) -> pd.DataFrame:
+    """Median elasticity and lift, right-sign share, share at or below ``EL_BAR`` and median
+    spill, by mode and shock. Column names match ``plot_probe`` (F11)."""
+    resp = probe_response(raw)
+    return (resp.assign(at_bar=resp["el"] <= EL_BAR)
+            .groupby(["mode", "shock"])
+            .agg(n=("el", "count"), median_elasticity=("el", "median"),
+                 median_lift=("lift", "median"), share_right_sign=("right_sign", "mean"),
+                 share_at_bar=("at_bar", "mean"), median_spill=("spill", "median"))
+            .reset_index())
+
+
+def headline(report: pd.DataFrame, mode: str = HEADLINE_PROBE[0],
+             shock: float = HEADLINE_PROBE[1]) -> dict:
+    """One row of a ``probe_report`` (default: the one-week 20% cut, every input rebuilt)."""
+    hit = report[(report["mode"] == mode) & np.isclose(report["shock"], shock)]
+    return {k: float(v) for k, v in hit.iloc[0].drop(["mode", "shock"]).items()}
+
+
+def event_weeks(dates) -> set:
+    """The weeks (``W-WED`` starts) that hold an event from ``event_dates``."""
+    dates = pd.to_datetime(pd.Series(list(dates)))
+    years = range(dates.min().year, dates.max().year + 1)
+    return {pd.Timestamp(week_start(d)) for y in years for d in event_dates(y).values()}
+
+
+def _rng(seed: int, *keys) -> np.random.Generator:
+    """A generator fixed by ``seed`` and ``keys``: the same series and draw always get the
+    same calendar, whatever else is in the batch."""
+    return np.random.default_rng([seed, zlib.crc32("|".join(map(str, keys)).encode())])
+
+
+def promo_calendars(futr: pd.DataFrame, ids: list[str], draws: int = CAL_DRAWS,
+                    n_cuts: int = CAL_CUTS, depths=CAL_DEPTHS, gap: int = CAL_GAP,
+                    seed: int = CAL_SEED) -> pd.DataFrame:
+    """Random one-week cuts in the forecast window: per series and draw, up to ``n_cuts``
+    weeks at least ``gap`` apart, each at a random depth from ``depths``. Weeks with an event,
+    a planned promotion or a planned discount of 10% or more are left alone.
+
+    Returns ``draw``, ``unique_id``, ``step`` (0-based), ``shock`` (minus the depth).
+    """
+    f = gd.only(futr, ids).sort_values(["unique_id", "ds"]).copy()
+    f["step"] = f.groupby("unique_id").cumcount()
+    ordinary = ~pd.to_datetime(f["ds"]).isin(event_weeks(f["ds"]))
+    if "promo" in f:
+        ordinary &= f["promo"].to_numpy() < 0.5
+    if "discount_depth" in f:
+        ordinary &= f["discount_depth"].to_numpy() < 0.10
+    candidates = f[ordinary].groupby("unique_id")["step"].apply(list).to_dict()
+    rows = []
+    for draw in range(draws):
+        for uid in ids:
+            rng = _rng(seed, uid, draw)
+            taken = []
+            for step in rng.permutation(candidates.get(uid, [])):
+                if all(abs(int(step) - t) >= gap for t in taken):
+                    taken.append(int(step))
+                if len(taken) == n_cuts:
+                    break
+            for step in sorted(taken):
+                rows.append({"draw": draw, "unique_id": uid, "step": step,
+                             "shock": -float(rng.choice(depths))})
+    return pd.DataFrame(rows, columns=["draw", "unique_id", "step", "shock"])
+
+
+def calendar_probe(predict, hist: pd.DataFrame, futr: pd.DataFrame,
+                   calendars: pd.DataFrame) -> pd.DataFrame:
+    """Forecasts under each random promotion calendar (every price input rebuilt, promotion
+    flag as planned). One row per cut: ``q0``/``q1`` in that week and ``seen_depth``, the
+    discount depth the model was given there (smaller than the cut when an earlier cut is
+    still in the 4-week rolling mean)."""
+    ids = sorted(calendars["unique_id"].unique())
+    hist, futr = gd.only(hist, ids), gd.only(futr, ids)
+    tl = price_timeline(hist, futr)
+    base = _with_steps(predict(futr), tl)
+    rows = []
+    for draw, plan in calendars.groupby("draw"):
+        shocked = shocked_futr(tl, plan, rebuild=True)
+        fcst = _with_steps(predict(_model_futr(shocked)), tl)
+        both = base.merge(fcst, on=["unique_id", "ds", "step"], suffixes=("0", "1"))
+        cuts = plan.merge(both, on=["unique_id", "step"])
+        if "discount_depth" in shocked:
+            seen = shocked[["unique_id", "step", "discount_depth"]]
+            cuts = cuts.merge(seen.rename(columns={"discount_depth": "seen_depth"}),
+                              on=["unique_id", "step"])
+        rows.append(cuts.rename(columns={"yhat0": "q0", "yhat1": "q1"}).assign(draw=draw))
+    return pd.concat(rows, ignore_index=True)
+
+
+def calendar_report(raw: pd.DataFrame) -> pd.DataFrame:
+    """Median lift and elasticity, right-sign share and median depth the model saw, by cut
+    depth (one row per depth in ``CAL_DEPTHS``)."""
+    resp = probe_response(raw).assign(depth=lambda d: (-d["shock"]).round(2))
+    agg = {"n": ("el", "count"), "median_lift": ("lift", "median"),
+           "median_elasticity": ("el", "median"), "share_right_sign": ("right_sign", "mean")}
+    if "seen_depth" in resp:
+        agg["median_seen_depth"] = ("seen_depth", "median")
+    return resp.groupby("depth").agg(**agg).reset_index()
+
+
+def implied_lift(elasticity: float, depth) -> np.ndarray:
+    """Lift a constant (log-log) elasticity implies for a cut of ``depth``: (1 - d)^e - 1."""
+    return (1 - np.asarray(depth, dtype=float)) ** elasticity - 1
+
+
+def gfm_predict(nf, data):
+    """``predict(futr)`` for a fitted neuralforecast model on ``data``'s series (target shift
+    removed), for ``price_probes`` and ``calendar_probe``."""
+    def predict(futr: pd.DataFrame) -> pd.DataFrame:
+        ids = sorted(futr["unique_id"].unique())
+        sub = gd.subset_data(data, ids)
+        cols = ["unique_id", "ds"] + list(data.futr_exog)
+        fcst = gd.predict(nf, sub, futr_df=futr[cols])
+        col = bc.model_columns(fcst)[0]
+        return fcst[["unique_id", "ds", col]].rename(columns={col: "yhat"})
+    return predict
+
+
+def gfm_probes(nf, data, ids: list[str], calendars: pd.DataFrame | None = None) -> dict:
+    """Fixed probes and, if given, calendar probes for a fitted GFM: the ``extras`` frames a
+    fit keeps (``probe7b``, ``calendar``)."""
+    predict = gfm_predict(nf, data)
+    hist, futr = gd.only(data.predict_df, ids), gd.only(data.futr_df, ids)
+    out = {"probe7b": price_probes(predict, hist, futr, ids)}
+    if calendars is not None:
+        out["calendar"] = calendar_probe(predict, hist, futr, gd.only(calendars, ids))
+    return out

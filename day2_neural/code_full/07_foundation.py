@@ -33,9 +33,10 @@
 # 1. Run the Chronos-2 variants on the validation and test windows.
 # 2. Choose a variant on **validation**, then score the test window once.
 # 3. See where Chronos-2 beats the GFM, and where it does not.
+# 4. Probe Chronos-2's price response the way 05b probes the GFM.
 #
-# **In the chain:** reads the selected config (`gd.selected_config()`) and `00_baselines`,
-# writes `07_foundation`.
+# **In the chain:** reads the selected config (`gd.selected_config()`), `05b_synthetic` (the
+# GFM's probe results) and `00_baselines`, writes `07_foundation`.
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -336,6 +337,110 @@ shown = [best_variant, "GFM_selected"]
 bands = {best_variant: (f"{best_variant}-lo-80", f"{best_variant}-hi-80")}
 gplt.plot_series_price(panel, examples, both, models=shown, bands=bands)
 
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## 8. Price response: does Chronos-2 read the planned price?
+#
+# Chronos-2 reads the covariates in context: it sees how each series' sales moved with its
+# own past prices and promotions, and carries that into the forecast. It has no price weights
+# of its own to inspect, so we ask it "what if?", as 05b asked the GFM. Same report series,
+# same probes, same random promotion calendars (`gp.price_probes`, `gp.promo_calendars`):
+#
+# * **fixed probes:** −10%, −20%, −30% and +20% in every test week (sustained) or in week 5
+#   only (pulse), moving the price alone (`_price`) or rebuilding every input built from it
+#   (`_all`, the headline: a one-week 20% cut), and once with the promotion flag on;
+# * **random promotion calendars:** three one-week cuts per series at random depths of 10–30%,
+#   in weeks with no event and no planned promotion, five draws.
+#
+# Each probe is one more forecast of the report series: seconds on a GPU.
+
+# %%
+PROBED = "Chronos2_zs_cov"           # the variant that sees the price
+probe_ids = gp.report_ids(train, [u for u in fm_ids if u in set(gd.eval_ids())])
+probe_hist = gd.only(bc.to_nixtla(train, covariates), probe_ids)
+probe_futr = gd.only(bc.to_nixtla(test, covariates).drop(columns="y"), probe_ids)
+probe_calendars = gp.promo_calendars(probe_futr, probe_ids)
+print(f"{len(probe_ids):,} report series | {len(probe_calendars):,} calendar cuts | price "
+      f"inputs rebuilt, largest gap from the data: {gp.rebuild_check(probe_hist, probe_futr)}")
+
+
+def chronos_predict(pipe):
+    """``predict(futr)`` for Chronos-2 with the covariates, on the report series."""
+    def predict(futr: pd.DataFrame) -> pd.DataFrame:
+        ids = sorted(futr["unique_id"].unique())
+        df = gd.only(probe_hist, ids).sort_values(["unique_id", "ds"])
+        future_df = futr[["unique_id", "ds"] + covariates].sort_values(["unique_id", "ds"])
+        out = pipe.predict_df(df, future_df=future_df, id_column="unique_id",
+                              timestamp_column="ds", target="y", prediction_length=bc.H,
+                              quantile_levels=list(QUANTILES), batch_size=BATCH, freq=bc.FREQ)
+        return out[["unique_id", "ds", "predictions"]].rename(columns={"predictions": "yhat"})
+    return predict
+
+
+@functools.cache
+def run_chronos_probes() -> dict:
+    """Fixed probes and calendar probes for zero-shot Chronos-2 with covariates."""
+    predict = chronos_predict(Chronos2Pipeline.from_pretrained(CHRONOS_REPO, device_map=DEVICE))
+    with bc.Timer() as t:
+        out = {"probe7b": gp.price_probes(predict, probe_hist, probe_futr, probe_ids),
+               "calendar": gp.calendar_probe(predict, probe_hist, probe_futr, probe_calendars)}
+    print(f"Chronos-2 probes: {t.seconds:.0f}s")
+    return out
+
+
+chronos_probe = gd.cached("07_chronos_probe", lambda: run_chronos_probes()["probe7b"])
+chronos_calendar = gd.cached("07_chronos_calendar", lambda: run_chronos_probes()["calendar"])
+probe_table = gp.probe_report(chronos_probe)
+calendar_table = gp.calendar_report(chronos_calendar)
+probe_table.round(3)
+
+# %%
+gplt.plot_probe(probe_table, title="Chronos-2 with covariates: probe responses")
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# Now the lift by cut depth under the random calendars (F13), against the GFM in use (its
+# 3-seed probes from 05b) and the lift the data's own elasticity implies.
+
+# %%
+synthetic_cfg = gd.load_config("05b_synthetic")
+gfm_key = synthetic_cfg.get("use", "05")
+gfm_calendar = pd.DataFrame(synthetic_cfg["calendar"][gfm_key]).set_index("depth")
+gfm_probes = pd.DataFrame(synthetic_cfg["probes"][gfm_key])
+empirical_all = gp.empirical_elasticity(train, probe_ids).iloc[0]["elasticity"]
+depths = list(gp.CAL_DEPTHS)
+lift_by_depth = pd.DataFrame({
+    PROBED: calendar_table.set_index("depth")["median_lift"],
+    "GFM_selected": gfm_calendar["median_lift"],
+    "implied by the data": pd.Series(gp.implied_lift(empirical_all, depths), index=depths)})
+lift_by_depth.index.name = "depth"
+gplt.plot_lift_by_depth({PROBED: lift_by_depth[PROBED],
+                         "GFM_selected": lift_by_depth["GFM_selected"]},
+                        references={f"implied by the data (e ≈ {empirical_all:.1f})":
+                                    lift_by_depth["implied by the data"]})
+headlines = pd.DataFrame({PROBED: gp.headline(probe_table),
+                          "GFM_selected": gp.headline(gfm_probes)}).T
+headlines.round(3)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * Headline first: the median elasticity and lift for a one-week 20% cut, for Chronos-2 and
+#   the GFM. Right sign means a cut lifts sales; the research's bar was −0.3 or stronger.
+# * Then the depth chart: does lift grow with the depth of the cut, as it should? A flat line
+#   means the model reads that there is a promotion, not how deep it is.
+# * Chronos-2 learns each series' response from that series alone. Series with few past price
+#   moves give it little to go on; the GFM pools all 17,000.
+# * Here Chronos-2 does read the price. A one-week 20% cut gives a median elasticity of
+#   ≈ −1.43 (lift ≈ +37%, ≈ +43% with the promotion flag on), against the GFM's ≈ −1.79
+#   (≈ +49%). Lift grows with depth: ≈ +18% at 10%, ≈ +45% at 20%, ≈ +75% at 30%.
+# * It is less consistent than the GFM: ≈ 90% of calendar cuts lift its forecast, against
+#   ≈ 99% for the GFM, and ≈ 81% of series reach the −0.3 bar. Both stay well below the lift
+#   the data implies (≈ +125% at 20%). Spill is about zero: the cut stays in its own week.
+#
+# *Exact numbers vary with seed and hardware.*
+
 # %%
 test_median = test_summary.set_index("model")["median_rmsse"]
 gd.save_config("07_foundation", {
@@ -351,6 +456,10 @@ gd.save_config("07_foundation", {
     "median_rmsse_test": test_median.round(4).to_dict(),
     "seconds": step_seconds.round(1).to_dict(),
     "gpu": GPU,
+    "probed_variant": PROBED,
+    "probes": probe_table.round(4).to_dict("records"),
+    "calendar": calendar_table.round(4).to_dict("records"),
+    "headline": gp.headline(probe_table),
 })
 
 # %% [markdown]
@@ -361,8 +470,8 @@ gd.save_config("07_foundation", {
 #   model trained on 17,000 of this shop's series does not?
 # * In the wins by class, is Chronos-2 strongest where history is sparse, and weakest where
 #   promotions drive the spikes? What would that tell you about using both?
-# * This notebook does not sweep Chronos-2's price response. Its forecasts could be swept like
-#   the GFM's (`gp.shift_prices` on the future covariates). Would you trust the answer?
+# * Chronos-2's price response comes from each series' own history, read in context. Would you
+#   trust it for an item that has never been discounted?
 #
 # **Try it:** set `cross_learning=True` in `chronos_forecast` so Chronos-2 shares information
 # across the series in a batch, and compare the validation table.
