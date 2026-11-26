@@ -401,7 +401,7 @@ Fine-tuning Chronos-2 is built into 07 but switched off (GD_FM_FINETUNE); t0-gam
 > **Takeaway:** Zero-shot foundation models with the price plan forecast best; ask the trained GFM what a new price would do.
 
 <!--
-Cost on one GPU: 1.4 s (Chronos-2), 3 s (t0-gamma) and 6.4 s (Timestral) per 1,000 series with covariates. Event dummies and tree-style inputs change little (≤ 0.025). Averaging pairs of foundation models helps (t0-gamma + Chronos-2 0.491), but their errors correlate at 0.99.
+Cost on one GPU: 1.4 s (Chronos-2), 3 s (t0-gamma) and 6.4 s (Timestral) per 1,000 series with covariates. Event dummies and tree-style inputs change little (≤ 0.025). Averaging pairs of foundation models helps (t0-gamma + Chronos-2 0.491), but their errors correlate at 0.99. If asked whether the realized price leaks sales: a week with no sales is recorded at exactly the regular price, and notebook 12 measures it. Removing that fingerprint costs every model 0.005–0.008 (about one noise floor, no ranking changes); knowing the price at all is worth 0.11–0.15, and without future prices every model is level with Day 1's best LightGBM (≈ 0.66).
 -->
 
 ---

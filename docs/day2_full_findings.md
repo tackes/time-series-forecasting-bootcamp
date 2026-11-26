@@ -87,6 +87,29 @@ training week, as in 08. Before 05c the selected GFM scored 0.540 / WAPE 0.258 h
   its largest week it adds millions of units to a sample that sells far less than all series.
   Uncapped, the GFM's all-series WAPE is 1.46. See *Things that went wrong*.
 
+## Against Day 1, and the price "leak" (12)
+The Day 1 benchmarks use the same 2,000 series and test window and score identically through our
+code (Naive 0.771, SeasonalNaive 0.929 both ways). Day 1's best model that uses no future
+information (`lgbm_l1_cat_price_response`) scores 0.664; ours, given the future price plan,
+0.50–0.57. The Day 1 framework treats realized future prices as leaky: a week with no sales is
+recorded at exactly the regular price (85% of zero-sale test weeks). 12 measures it with the
+same trained models and three test-window price plans:
+
+| Model | realized | without the zero-sales fingerprint | no future prices |
+|---|---|---|---|
+| t0-gamma | 0.502 | 0.507 | 0.650 |
+| Chronos-2 | 0.512 | 0.518 | 0.670 |
+| Timestral | 0.521 | 0.527 | 0.666 |
+| GFM (saved seed) | 0.526 | 0.532 | 0.670 |
+| LightGBM | 0.572 | 0.580 | 0.688 |
+
+- **The fingerprint is worth about one noise floor** (0.005–0.008) and changes no ranking.
+- **Knowing the price is worth 0.11–0.15**: that is what a production price plan supplies, and
+  it is most of the covariates' value. Without any future price, every model is level with Day
+  1's best (0.65–0.69 against 0.664).
+- In production the planned price is close to the realized one, so `no_fingerprint` is the
+  honest Day 2 number: ≈ 0.005–0.008 above the board.
+
 ## What each notebook found
 - **00 Baselines.** LightGBM 0.572 is the bar to beat (0.569 on raw prices); SeasonalNaive
   0.929.
@@ -132,6 +155,8 @@ training week, as in 08. Before 05c the selected GFM scored 0.540 / WAPE 0.258 h
   GFM over-covers less than before (0.850, against 0.864 for 05's) and has the best interval
   score. At 95%, conformal's interval score is several times worse: a few
   large misses dominate.
+- **12 Price plan.** The realized price's zero-sales fingerprint is worth 0.005–0.008 of median
+  RMSSE; knowing the price at all is worth 0.11–0.15. See above.
 - **10 Selection.** The rule fixed in advance (keep the GFM unless a model beats it by more
   than the noise floor) picks t0-gamma (0.501 against 0.520). Per-class selection does not
   carry over to the held-out half; averaging does.

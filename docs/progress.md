@@ -354,3 +354,17 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Remaining weak spot:** seed 46335 (also the saved model) blows up `6653_S1`; capped, it
   still makes the sample WAPE 0.399 and 08's GFM bottom-up total ≈ 4% too high.
 - **Cost:** ≈ 2.5 h on one GPU (06 ≈ 1 h, 09 25 min, 08 21 min, 11 16 min, 07b 11 min).
+
+## Day 1 comparison and the price-plan leak test, 12 (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Nothing new from Day 1 on GitHub:** `day1-framework`'s tip (19 Nov) is already in our
+  branch; `main`'s only new change is the v1 Day 2 update (it moves `bootcamp.py` to
+  `day2_neural/v1/code/`, same scoring; merging needs `gd_helpers.py` repointed).
+- **Same scoring as Day 1:** Naive 0.771 and SeasonalNaive 0.929 on the 2,000 series both ways.
+  Day 1's best no-future-information LightGBM: 0.664 / WAPE 0.344.
+- **The fingerprint:** 85% of zero-sale test weeks are priced exactly at the regular price;
+  weeks at regular have no sales 66% of the time, others 1.7%.
+- **12's result:** removing it (zero-sale weeks at regular take last week's price; 4.5% of test
+  weeks) costs 0.005–0.008 of median RMSSE for every model; no future prices at all costs
+  0.11–0.15 more (0.65–0.69, level with Day 1). Rankings unchanged.
+- **Cost:** ≈ 5 minutes on one GPU (inference only, LightGBM refit on CPU).
