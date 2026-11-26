@@ -4,7 +4,9 @@
 *Written 25 Nov 2026, after the GPU runs of 23–25 Nov; updated 26 Nov after 05c and the
 rerun of 00 and 06–11 on cleaned prices (`docs/stability_choices.md`). The numbers come from
 `results/day2_full/configs/` and the executed notebooks in `day2_neural/code_full/`. The
-running log, with timings and decisions, is `docs/progress.md`.*
+running log, with timings and decisions, is `docs/progress.md`. What 05c changed in the data
+and the model, and why, is explained for a general data-science reader in
+`docs/stability_choices.md`.*
 
 ## In one paragraph
 We rebuilt the Day 2 labs to train on every eligible series (17,241) instead of a sample, and

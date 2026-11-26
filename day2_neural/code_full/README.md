@@ -25,6 +25,8 @@ Each notebook builds on the one before: it reads the previous notebook's config 
 - `gd_plots.py`: figures F1–F12.
 
 **Research notes:** `../../docs/gfm_learnings.md`. **Contributor notes:** `AGENTS.md`.
+**Results so far:** `../../docs/day2_full_findings.md`. **Why prices are cleaned and the GFM's
+inputs floored and clipped** (a plain-language explainer): `../../docs/stability_choices.md`.
 
 **Set-up**
 ```bash
