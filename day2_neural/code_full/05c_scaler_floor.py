@@ -200,7 +200,8 @@ valid_numbers.round(4)
 # ## 4. The test window: every series, 3 seeds
 #
 # The floored model on all training weeks, forecasting every series, with the test-window
-# probes. 05's numbers come from 11 (forecasts) and 05b (probes), with the same seeds.
+# probes. 05's numbers come from 11's first run (forecasts, kept in
+# `05c_reference_05_all_series`) and 05b (probes), with the same seeds.
 
 # %%
 calendars = gp.promo_calendars(data.futr_df, report_ids)
@@ -219,8 +220,12 @@ if gd.TRAIN:
 gd.summaries(test_floor)[["seed", "fit_seconds", "best_frac", "final_over_best"]].round(3)
 
 # %%
-all_05 = pd.read_parquet(gd.OUT_DIR / "all_series" / "11_all_series.parquet",
-                         columns=["unique_id", "ds", "GFM_selected"])
+# 05's 3-seed all-series forecasts, as 11 made them before 05c was carried forward. Kept as a
+# fixed table: 11 now forecasts with 05c's model, so its current file is no longer 05.
+REFERENCE_05 = gd.TABLE_DIR / "05c_reference_05_all_series.parquet"
+if not REFERENCE_05.exists():           # smoke runs: 11's file still holds 05's forecasts
+    REFERENCE_05 = gd.OUT_DIR / "all_series" / "11_all_series.parquet"
+all_05 = pd.read_parquet(REFERENCE_05, columns=["unique_id", "ds", "GFM_selected"])
 all_05["ds"] = pd.to_datetime(all_05["ds"])
 all_floor = seed_mean(test_floor, all_ids)
 both = all_05.merge(all_floor, on=["unique_id", "ds"])

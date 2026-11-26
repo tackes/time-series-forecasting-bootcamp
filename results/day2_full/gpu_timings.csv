@@ -120,3 +120,5 @@ notebook,pass,minutes,finished
 10_selection_standings,load,0,2026-11-26T16:55:09+00:00
 11_all_series,train,0,2026-11-26T16:55:37+00:00
 11_all_series,load,0,2026-11-26T16:56:05+00:00
+05c_scaler_floor,train,0,2026-11-26T17:31:57+00:00
+05c_scaler_floor,load,0,2026-11-26T17:32:46+00:00
