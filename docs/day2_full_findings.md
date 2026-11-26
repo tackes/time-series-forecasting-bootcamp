@@ -95,7 +95,9 @@ All forecasts capped at 3× the item's largest training week, as in 08.
   not the price response, which barely changes across the Pareto front.
 - **05c Scaler floor.** Flooring the robust scaler's spread at 0.01 halves the exploding
   forecasts and improves accuracy (validation 0.574 against 0.583), but the rule written in
-  advance needed a tenfold cut, so the cap stays. Not yet carried forward.
+  advance needed a tenfold cut, so the cap stays. Cleaning placeholder and out-of-range
+  prices as well gives the best validation score (0.562); recommended with the cap, not yet
+  carried forward.
 - **05b Synthetic discounts.** Training copies with planted discounts did not help: tied on
   the one-week cut, worse on validation (0.593 against 0.583). 05 goes forward.
 - **06 Clusters.** One pooled model beats per-cluster models (0.546 against 0.570); they lose
@@ -150,7 +152,11 @@ All forecasts capped at 3× the item's largest training week, as in 08.
   makes the GFM better (capped median RMSSE on all series 0.511 against 0.540; one-week cut
   elasticity −1.95 against −1.77), but it is not a cure. The worst remaining case is a data
   error (`1120_S1` has `price_index` up to 29,000; 29 series have one above 3), and one seed
-  still blows up a normal-priced item. So the cap stays; floor *and* cap is an untested arm.
+  still blows up a normal-priced item. Part 2 cleaned the prices (placeholders and weeks
+  beyond 6× of the usual price, replaced from their neighbours). Clean prices plus the floor
+  is the best GFM on validation (0.562 against 0.583) and ties the floor on test (capped
+  0.514), but still needs the cap: a large real price move is still passed linearly to the
+  forecast. Clipping the scaled inputs is untested.
 - **A silent library bug in sparse MinT.** `hierarchicalforecast`'s `MinTraceSparse` solves its
   system iteratively and ignores whether it converged. With this panel's spread of error
   variances, `wls_var` returned forecasts in the millions and took 37 min per reconcile.

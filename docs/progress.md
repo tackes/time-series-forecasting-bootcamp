@@ -303,3 +303,20 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Open:** the floor plus the cap beats 05 (capped all-series median 0.511 against 0.540) but
   was not in the rule; cleaning out-of-range prices would help every price-aware model.
 - **Cost:** 37 min on one GPU (6 fits of ≈ 6 min).
+
+## 05c part 2: cleaning the prices (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **`price_index`** = the week's price ÷ the series' median price before the cutoff (1 =
+  usual, 0.8 = 20% off). Bad prices: £0.01–0.05 placeholders (229 weeks, 79 series; they
+  look like 99% discounts) and prices beyond 6× or 1/6 of the usual price (196 series in
+  all). `gp.clean_prices` (config key `price_clean`) replaces them with the median of good
+  prices in the 9 weeks around; 828 weeks in 196 series, 40 weeks in the sample.
+- **Not missing** (N-BEATSx can't take missing future inputs) and **no +1 shift** (no price
+  is ≤ 0; a shift would shrink cheap items' discounts more than dear ones').
+- **Clean alone:** validation 0.599 against 05's 0.583 (fails), and *more* exploding items
+  (156 against 101): fewer fake discounts leave more near-flat windows.
+- **Clean + floor (recommended):** validation 0.562, elasticity −2.03 against −1.77; test,
+  capped, all series 0.514 / WAPE 0.256 (05: 0.540 / 0.258). Uncapped it still explodes
+  (WAPE 221, one item: `1120_S1`, real prices 2–5× its input window). The floor bounds small
+  moves, not large ones; clipping the scaled inputs would be the next arm. **Cap stays.**
+- **Cost:** 74 min on one GPU (12 fits of ≈ 6 min).
