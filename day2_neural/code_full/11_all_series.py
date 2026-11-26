@@ -72,13 +72,15 @@ gplt.use_style()
 # |---|---|---|
 # | Naive, SeasonalNaive, AutoETS, LightGBM | refitted as in 00 (CPU) | – |
 # | Chronos2_zs, Chronos2_zs_cov, Timestral_zs_cov, T0gamma_zs_cov | zero-shot (07, 07b) | – |
-# | GFM_selected | the saved model (seed 1) and two refits (seeds 2 and 3) | 3 |
-# | NHITS_recipe | three refits with 01's recipe | 3 |
+# | GFM_selected | 05c's chosen model: its three all-series test fits | 3 |
+# | NHITS_recipe | three refits with 01's recipe, on cleaned prices | 3 |
 # | NBEATSx_recipe, GFM_quantile | the saved model | 1 |
 # | ENS_mean_top3 | the mean of 10's top three | – |
 #
 # `GFM_synthetic` is left out: its saved model predates 05b's final refit, so it is not the
-# model on the board. Each refit is checked against the run it repeats, on the 2,000 series.
+# model on the board. Every model reads cleaned prices (`gp.PRICE_CLEAN`,
+# `docs/stability_choices.md`); the saved 01 model was fitted on raw ones and is given cleaned
+# inputs to forecast with.
 
 # %%
 OUT = gd.OUT_DIR / "all_series"
@@ -90,6 +92,7 @@ cfg01 = gd.load_config("01_recipe")
 cfg10 = gd.load_config("10_final")
 CAP = gd.load_config("08_reconcile")["item_cap"]["multiple_of_train_max"]    # 3, as in 08
 raw = gd.train_panel()
+clean_raw = gp.clean_prices(raw, **gp.PRICE_CLEAN)      # for the models built on the raw panel
 panel, train, test, data = gp.prepare(cfg, panel=raw, synthetic_seed=cfg.get("synthetic_seed"))
 info = gplt.series_table(panel)
 all_ids = sorted(panel["unique_id"].unique().to_list())
@@ -124,7 +127,7 @@ def clipped(fcst: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
 # %%
 def baselines_everywhere() -> pd.DataFrame:
     """00's four reference models, forecasting every series."""
-    base_train, base_test = bc.split(raw, cutoff=bc.TEST_START)
+    base_train, base_test = bc.split(clean_raw, cutoff=bc.TEST_START)   # LightGBM: cleaned
     local = StatsForecast(models=[Naive(), SeasonalNaive(season_length=bc.SEASON),
                                   AutoETS(season_length=1)], freq=bc.FREQ, n_jobs=gd.N_JOBS)
     stats = local.forecast(df=bc.to_nixtla(base_train), h=bc.H).reset_index()
@@ -189,9 +192,10 @@ print({fc.columns[-1]: f"{fc['unique_id'].nunique():,} series" for fc in foundat
 # <!-- DRAFT: Graeme to edit -->
 # ## 4. GFMs: the saved models and the refits
 #
-# A saved model forecasts every series directly. `GFM_selected` keeps one saved seed, so its
-# other two seeds are refitted here with 05's exact settings; `NHITS_recipe` kept none, so all
-# three are refitted with 01's. Each refit forecasts every series as it trains, and is cached.
+# `GFM_selected` is 05c's chosen model (cleaned prices, scaler floor, input clip): its three
+# test-window fits in 05c already forecast every series, so they are used as they are.
+# `NHITS_recipe` kept no model, so all three seeds are refitted with 01's settings, on the
+# cleaned prices like every model here. The saved models forecast every series directly.
 
 # %%
 def saved_model(name: str, d: gd.NixtlaData, column: str, alias: str):
@@ -202,13 +206,10 @@ def saved_model(name: str, d: gd.NixtlaData, column: str, alias: str):
     return compute
 
 
-recipe_panel_train, recipe_panel_test = bc.split(raw, cutoff=bc.TEST_START)
+recipe_panel_train, recipe_panel_test = bc.split(clean_raw, cutoff=bc.TEST_START)
 recipe_data = gd.nixtla_data(recipe_panel_train, recipe_panel_test, futr_exog=bc.FUTR_EXOG_COLS,
                              predict_ids=all_ids)
 saved = {
-    "GFM_selected_s1": gd.cached("11_saved_05_selected",
-                                 saved_model("05_selected", data, "GFM_selected",
-                                             "GFM_selected_s1")),
     "NBEATSx_recipe": gd.cached("11_saved_01_recipe",
                                 saved_model("01_nbeatsx_recipe", recipe_data, "NBEATSx_recipe",
                                             "NBEATSx_recipe")),
@@ -218,11 +219,9 @@ saved = {
 }
 
 # %%
-selected_runs_name = f"05_confirm_{next(c['key'] for c in cfg['confirm'] if c['selected'])}"
-
-
-def selected_model(seed):
-    return gd.build_nbeatsx(cfg["params"], data, cfg["max_steps"], seed, "GFM_selected")
+assert cfg["selected_from"] == "05c", "11 reads 05c's all-series fits of the selected model"
+selected_runs = gd.load_runs(cfg["selected_runs"])
+selected_alias = cfg["forecast_column"]
 
 
 def nhits_recipe(seed):
@@ -233,19 +232,17 @@ def nhits_recipe(seed):
                  random_seed=seed, alias="NHITS_recipe", **gd.recipe_kwargs(cfg01["max_steps"]))
 
 
-selected_refits = gd.fit_seeds(selected_model, everywhere(data), "11_gfm_selected_all",
-                               seeds=gd.SEEDS[1:])
-nhits_refits = gd.fit_seeds(nhits_recipe, recipe_data, "11_nhits_recipe_all")
-print(pd.DataFrame([r["summary"] for r in selected_refits + nhits_refits])
+nhits_refits = gd.fit_seeds(nhits_recipe, recipe_data, "11_nhits_recipe_clean")
+print(pd.DataFrame([r["summary"] for r in selected_runs + nhits_refits])
       [["name", "seed", "fit_seconds", "best_frac"]])
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# ### Do the refits repeat the runs they copy?
+# ### NHITS on cleaned prices against 01's run
 #
-# Each refit's forecasts on the 2,000 sample series, against the cached run with the same
-# seed: the median RMSSE of each, and the largest gap in forecasts. A GPU fit is not exactly
-# repeatable, so expect gaps of the order of the seed noise (≈ 0.005), not zero.
+# Each NHITS refit's forecasts on the 2,000 sample series, against 01's run with the same
+# seed: the median RMSSE of each. A GPU fit is not exactly repeatable, so even with the same
+# data expect gaps of the order of the seed noise (≈ 0.005).
 
 # %%
 def repeat_check(refits: list[dict], original: str, alias: str) -> pd.DataFrame:
@@ -266,21 +263,13 @@ def repeat_check(refits: list[dict], original: str, alias: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-saved_check = gd.only(saved["GFM_selected_s1"], eval_ids).merge(
-    gd.load_runs(selected_runs_name, seeds=[gd.SEEDS[0]])[0]["forecast"],
-    on=["unique_id", "ds"])
-saved_gap = float((saved_check["GFM_selected_s1"]
-                   - saved_check["GFM_selected"].clip(lower=0)).abs().max())
-print(f"saved 05_selected against its run (seed {gd.SEEDS[0]}): largest forecast gap "
-      f"{saved_gap:.4f} units")
-repeats = pd.concat([repeat_check(selected_refits, selected_runs_name, "GFM_selected"),
-                     repeat_check(nhits_refits, "01_nhits_recipe", "NHITS_recipe")])
+repeats = repeat_check(nhits_refits, "01_nhits_recipe", "NHITS_recipe")
 repeats.round(4)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# Every refit repeats its original's median RMSSE on the sample to four decimals, and the saved
-# model matches its run to within 0.01 units: the refitted seeds are the same models.
+# 01's NHITS was fitted on the raw prices, these refits on the cleaned ones, so the gap is
+# the effect of cleaning the prices on the sample, not training noise alone.
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -299,9 +288,8 @@ def seed_mean(frames: list[pd.DataFrame], alias: str) -> pd.DataFrame:
     return out.assign(**{alias: out[cols].mean(axis=1)})[["unique_id", "ds", alias]]
 
 
-gfm_selected = seed_mean([saved["GFM_selected_s1"].rename(columns={"GFM_selected_s1":
-                                                                   "GFM_selected"})]
-                         + [r["forecast"] for r in selected_refits], "GFM_selected")
+gfm_selected = seed_mean([r["forecast"].rename(columns={selected_alias: "GFM_selected"})
+                          for r in selected_runs], "GFM_selected")
 nhits = seed_mean([r["forecast"] for r in nhits_refits], "NHITS_recipe")
 
 everything = baselines
@@ -322,17 +310,15 @@ everything.to_parquet(OUT / "11_all_series.parquet", index=False)
 # <!-- DRAFT: Graeme to edit -->
 # ## 6. The cap, as in 08
 #
-# On every series a few of the N-BEATSx forecasts explode: up to ≈ 8,000 times the item's
-# largest training week. They sit mostly outside the 2,000-series sample, so 00–10 barely saw
-# them; 08, which sums every item, did, and caps each item's forecast at `CAP` (3) times its
-# largest training week. We apply the same cap here, to **every** model, and show the scores
-# with and without it. Real sales went above that ceiling in ≈ 0.5% of test weeks.
-#
-# The likely cause is the robust window scaler, which also scales the price and promotion
-# inputs: an input that never moved in the 14 input weeks has no spread, so when it moves in
-# the forecast weeks its scaled value is enormous, and N-BEATSx's exogenous stack passes it
-# straight to the forecast. The standard scaler, which would avoid it, made the model clearly
-# worse in the research (§3 of `docs/gfm_learnings.md`), so the cap is the better fix.
+# On the first all-series run a few hundred N-BEATSx forecasts exploded, up to ≈ 8,000 times
+# the item's largest training week, mostly outside the 2,000-series sample. 05c found the
+# causes: placeholder and out-of-range prices, and the robust scaler blowing up small moves in
+# near-flat price inputs. The selected GFM now has cleaned prices, a floor on the scaler's
+# spread and a clip on the scaled inputs (`docs/stability_choices.md`). One rare blow-up
+# inside the network is left (one seed, one best seller), so we still cap each item's
+# forecast at `CAP` (3) times its largest training week, as 08 does, for **every** model, and
+# show the scores with and without it. Real sales went above that ceiling in ≈ 0.5% of test
+# weeks.
 
 # %%
 train_max = gd.only(bc.to_nixtla(train), all_ids).groupby("unique_id")["y"].max()
@@ -396,17 +382,19 @@ gaps.round(3)
 #
 # * **The sample was a good stand-in.** With the cap, every model's median RMSSE on all series
 #   is within 0.03 of its sample value (mostly within 0.01), and the order of the models is the
-#   same except for one swap (`GFM_quantile` and `NBEATSx_recipe`, 0.001 apart on the sample).
-#   t0-gamma is still the best single model (0.496 on all series), and the top-3 average
-#   better still (0.488).
-# * **WAPE moves more**, by up to ≈ 5 points (Naive), because it follows the best sellers.
-# * **Without the cap, the N-BEATSx models break down on all series.** `GFM_selected`'s WAPE
-#   goes from 0.258 to 0.404 and its mean RMSSE from 1.29 to 2.75; `GFM_quantile`'s WAPE from
-#   0.293 to 0.582. Their medians do not move: a few hundred items carry it all. In the sample
-#   the cap changes nothing visible, which is why 00–10 did not need it.
-# * **The cap touches the other models too, but lightly.** It trims a few hundred item-weeks of
-#   Chronos-2, Timestral and AutoETS (WAPE down by ≤ 0.008) and nothing of LightGBM and the
-#   naive models.
+#   same except that `GFM_selected` and Timestral swap (0.513 and 0.516 on all series, 0.520
+#   and 0.521 on the sample). t0-gamma is still the best single model (0.496 on all series),
+#   and the top-3 average better still (0.488).
+# * **The stability fixes moved the GFM up.** `GFM_selected` (05c's model) scores 0.513 and
+#   WAPE 0.248 on all series, against 0.540 and 0.258 for 05's model in the first run.
+# * **WAPE moves more**, by up to ≈ 5 points (Naive), because it follows the best sellers. The
+#   GFM's sample WAPE (0.399) is far above its all-series one (0.248): its one remaining
+#   blow-up is a best seller in the sample (`6653_S1`), and even capped at 3× its largest week
+#   it adds millions of units to a sample that sells far fewer than all series.
+# * **Without the cap**, that one blow-up takes the GFM's all-series WAPE to 1.46. The cap
+#   trims 241 of its item-weeks in 52 items, and a few hundred of Chronos-2, Timestral,
+#   AutoETS and the quantile GFM (WAPE down by ≤ 0.008 for the others), and nothing of
+#   LightGBM and the naive models.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -442,13 +430,16 @@ versus.round(3)
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * **The two sets of labs measure the same thing.** Without the cap, LightGBM, AutoETS, Naive,
+# * **The two sets of labs measure the same thing.** Without the cap, AutoETS, Naive,
 #   SeasonalNaive and Chronos-2 without covariates match the v1 labs to three decimals, and
-#   Chronos-2 with covariates to 0.001. So any gap elsewhere is the models, not the scoring.
+#   Chronos-2 with covariates and LightGBM (both on our cleaned prices) to 0.001. So any gap
+#   elsewhere is the models, not the scoring.
 # * **Training explains the rest.** `NHITS_recipe` and `NHITSx` are both NHITS with the price
 #   inputs. Ours trains for ≈ 10,000 steps with the research recipe (Huber loss, warm-up,
 #   clipping, best weights) over 3 seeds, the v1 lab's for 500 steps with library defaults, to
-#   suit a laptop. Ours is 3 WAPE points better (0.244 against 0.275), 0.04 in median RMSSE.
+#   suit a laptop. Ours is 3 WAPE points better (0.246 against 0.275), 0.04 in median RMSSE.
+#   Refitted on cleaned prices it is within the noise floor of 01's raw-price runs (gaps of
+#   −0.008 to +0.004 on the sample).
 # * `ENS_mean_top3` is a different ensemble on each side: ours averages three foundation models
 #   (0.203), the v1 labs' two Chronos-2 variants and NHITSx (0.219).
 #
@@ -463,7 +454,8 @@ gd.save_config("11_all_series", {
     "left_out": {"GFM_synthetic": "saved model predates 05b's final refit"},
     "seeds": {"GFM_selected": gd.SEEDS, "NHITS_recipe": gd.SEEDS,
               "NBEATSx_recipe": gd.SEEDS[:1], "GFM_quantile": gd.SEEDS[:1]},
-    "saved_gap_05_selected": saved_gap,
+    "price_clean": gp.PRICE_CLEAN,
+    "selected_runs": cfg["selected_runs"],
     "cap": {"multiple_of_train_max": CAP, "applied_to": "every model", "touched": touched},
     "repeat_check": repeats.round(4).to_dict("records"),
     "scores_all": summary_all.round(4).to_dict("index"),

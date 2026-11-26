@@ -42,7 +42,11 @@
       46335
     ]
   },
-  "saved_gap_05_selected": 0.0078125,
+  "price_clean": {
+    "k": 6.0,
+    "floor": 0.05
+  },
+  "selected_runs": "05c_clean_floor_clip",
   "cap": {
     "multiple_of_train_max": 3,
     "applied_to": "every model",
@@ -73,13 +77,13 @@
         "of them in the sample": 7
       },
       "Chronos2_zs_cov": {
-        "item-weeks capped": 253,
-        "items capped": 46,
-        "of them in the sample": 7
+        "item-weeks capped": 250,
+        "items capped": 44,
+        "of them in the sample": 6
       },
       "Timestral_zs_cov": {
-        "item-weeks capped": 342,
-        "items capped": 67,
+        "item-weeks capped": 339,
+        "items capped": 66,
         "of them in the sample": 7
       },
       "T0gamma_zs_cov": {
@@ -88,14 +92,14 @@
         "of them in the sample": 1
       },
       "GFM_selected": {
-        "item-weeks capped": 466,
-        "items capped": 101,
-        "of them in the sample": 10
+        "item-weeks capped": 241,
+        "items capped": 52,
+        "of them in the sample": 5
       },
       "NHITS_recipe": {
-        "item-weeks capped": 72,
-        "items capped": 16,
-        "of them in the sample": 4
+        "item-weeks capped": 109,
+        "items capped": 24,
+        "of them in the sample": 3
       },
       "NBEATSx_recipe": {
         "item-weeks capped": 23,
@@ -103,9 +107,9 @@
         "of them in the sample": 1
       },
       "GFM_quantile": {
-        "item-weeks capped": 948,
-        "items capped": 232,
-        "of them in the sample": 30
+        "item-weeks capped": 371,
+        "items capped": 133,
+        "of them in the sample": 15
       },
       "ENS_mean_top3": {
         "item-weeks capped": 158,
@@ -116,94 +120,80 @@
   },
   "repeat_check": [
     {
-      "model": "GFM_selected",
-      "seed": 11207,
-      "original": 0.5602,
-      "refit": 0.5602,
-      "gap": 0.0
-    },
-    {
-      "model": "GFM_selected",
-      "seed": 90218,
-      "original": 0.554,
-      "refit": 0.554,
-      "gap": 0.0
-    },
-    {
       "model": "NHITS_recipe",
       "seed": 46335,
       "original": 0.5503,
-      "refit": 0.5503,
-      "gap": 0.0
+      "refit": 0.5419,
+      "gap": -0.0084
     },
     {
       "model": "NHITS_recipe",
       "seed": 11207,
       "original": 0.5542,
-      "refit": 0.5542,
-      "gap": 0.0
+      "refit": 0.5579,
+      "gap": 0.0038
     },
     {
       "model": "NHITS_recipe",
       "seed": 90218,
       "original": 0.5448,
-      "refit": 0.5448,
-      "gap": 0.0
+      "refit": 0.5487,
+      "gap": 0.0039
     }
   ],
   "scores_all": {
     "ENS_mean_top3": {
-      "median_rmsse": 0.4878,
-      "mean_rmsse": 1.2203,
+      "median_rmsse": 0.4877,
+      "mean_rmsse": 1.2201,
       "wape": 0.2027,
       "n_series": 17238
     },
     "Timestral_zs_cov": {
-      "median_rmsse": 0.5157,
-      "mean_rmsse": 1.2411,
-      "wape": 0.217,
+      "median_rmsse": 0.5156,
+      "mean_rmsse": 1.2409,
+      "wape": 0.2169,
       "n_series": 17238
     },
     "T0gamma_zs_cov": {
-      "median_rmsse": 0.4963,
-      "mean_rmsse": 1.2514,
+      "median_rmsse": 0.4962,
+      "mean_rmsse": 1.2513,
       "wape": 0.2077,
       "n_series": 17238
     },
     "Chronos2_zs_cov": {
-      "median_rmsse": 0.5103,
-      "mean_rmsse": 1.2682,
+      "median_rmsse": 0.5102,
+      "mean_rmsse": 1.2677,
       "wape": 0.221,
       "n_series": 17238
     },
-    "NHITS_recipe": {
-      "median_rmsse": 0.5337,
-      "mean_rmsse": 1.281,
-      "wape": 0.244,
+    "GFM_selected": {
+      "median_rmsse": 0.5131,
+      "mean_rmsse": 1.2696,
+      "wape": 0.2476,
       "n_series": 17238
     },
-    "GFM_selected": {
-      "median_rmsse": 0.5404,
-      "mean_rmsse": 1.2919,
-      "wape": 0.2579,
+    "NHITS_recipe": {
+      "median_rmsse": 0.5315,
+      "mean_rmsse": 1.2833,
+      "wape": 0.2457,
+      "n_series": 17238
+    },
+    "GFM_quantile": {
+      "median_rmsse": 0.5563,
+      "mean_rmsse": 1.303,
+      "wape": 0.2616,
       "n_series": 17238
     },
     "NBEATSx_recipe": {
-      "median_rmsse": 0.5874,
+      "median_rmsse": 0.5875,
       "mean_rmsse": 1.346,
       "wape": 0.2915,
       "n_series": 17238
     },
     "LightGBM": {
-      "median_rmsse": 0.5689,
-      "mean_rmsse": 1.3536,
-      "wape": 0.2911,
-      "n_series": 17238
-    },
-    "GFM_quantile": {
-      "median_rmsse": 0.5818,
-      "mean_rmsse": 1.3567,
-      "wape": 0.2933,
+      "median_rmsse": 0.5701,
+      "mean_rmsse": 1.353,
+      "wape": 0.2924,
       "n_series": 17238
     },
     "Chronos2_zs": {
@@ -233,57 +223,57 @@
   },
   "scores_sample": {
     "ENS_mean_top3": {
-      "median_rmsse": 0.4857,
-      "mean_rmsse": 1.0194,
+      "median_rmsse": 0.4851,
+      "mean_rmsse": 1.0173,
       "wape": 0.2034,
       "n_series": 1999
     },
     "Timestral_zs_cov": {
-      "median_rmsse": 0.5225,
-      "mean_rmsse": 1.0383,
-      "wape": 0.2268,
+      "median_rmsse": 0.5211,
+      "mean_rmsse": 1.0362,
+      "wape": 0.2267,
       "n_series": 1999
     },
     "T0gamma_zs_cov": {
-      "median_rmsse": 0.5023,
-      "mean_rmsse": 1.06,
+      "median_rmsse": 0.5018,
+      "mean_rmsse": 1.0597,
       "wape": 0.2053,
       "n_series": 1999
     },
     "NHITS_recipe": {
-      "median_rmsse": 0.5385,
-      "mean_rmsse": 1.0639,
-      "wape": 0.2508,
-      "n_series": 1999
-    },
-    "GFM_selected": {
-      "median_rmsse": 0.5464,
-      "mean_rmsse": 1.0681,
-      "wape": 0.2567,
+      "median_rmsse": 0.5337,
+      "mean_rmsse": 1.0707,
+      "wape": 0.249,
       "n_series": 1999
     },
     "Chronos2_zs_cov": {
       "median_rmsse": 0.5122,
-      "mean_rmsse": 1.0755,
+      "mean_rmsse": 1.0715,
       "wape": 0.2164,
       "n_series": 1999
     },
+    "GFM_selected": {
+      "median_rmsse": 0.52,
+      "mean_rmsse": 1.0784,
+      "wape": 0.3991,
+      "n_series": 1999
+    },
     "GFM_quantile": {
-      "median_rmsse": 0.5927,
-      "mean_rmsse": 1.1461,
-      "wape": 0.2909,
+      "median_rmsse": 0.5508,
+      "mean_rmsse": 1.0927,
+      "wape": 0.2749,
       "n_series": 1999
     },
     "NBEATSx_recipe": {
-      "median_rmsse": 0.5921,
+      "median_rmsse": 0.5896,
       "mean_rmsse": 1.1506,
       "wape": 0.3095,
       "n_series": 1999
     },
     "LightGBM": {
-      "median_rmsse": 0.5693,
-      "mean_rmsse": 1.1608,
-      "wape": 0.2947,
+      "median_rmsse": 0.572,
+      "mean_rmsse": 1.1613,
+      "wape": 0.2974,
       "n_series": 1999
     },
     "Chronos2_zs": {
@@ -313,45 +303,57 @@
   },
   "scores_all_no_cap": {
     "ENS_mean_top3": {
-      "median_rmsse": 0.4878,
-      "mean_rmsse": 1.2263,
+      "median_rmsse": 0.4877,
+      "mean_rmsse": 1.2261,
       "wape": 0.2062,
       "n_series": 17238
     },
     "Timestral_zs_cov": {
-      "median_rmsse": 0.5157,
-      "mean_rmsse": 1.2482,
+      "median_rmsse": 0.5156,
+      "mean_rmsse": 1.2481,
       "wape": 0.2205,
       "n_series": 17238
     },
     "T0gamma_zs_cov": {
-      "median_rmsse": 0.4963,
-      "mean_rmsse": 1.2551,
+      "median_rmsse": 0.4962,
+      "mean_rmsse": 1.255,
       "wape": 0.208,
       "n_series": 17238
     },
     "Chronos2_zs_cov": {
-      "median_rmsse": 0.5103,
-      "mean_rmsse": 1.2856,
+      "median_rmsse": 0.5102,
+      "mean_rmsse": 1.285,
       "wape": 0.2279,
       "n_series": 17238
     },
     "NHITS_recipe": {
-      "median_rmsse": 0.5337,
-      "mean_rmsse": 1.2947,
-      "wape": 0.2444,
+      "median_rmsse": 0.5315,
+      "mean_rmsse": 1.2974,
+      "wape": 0.2494,
+      "n_series": 17238
+    },
+    "GFM_quantile": {
+      "median_rmsse": 0.5563,
+      "mean_rmsse": 1.3336,
+      "wape": 0.266,
       "n_series": 17238
     },
     "NBEATSx_recipe": {
-      "median_rmsse": 0.5874,
+      "median_rmsse": 0.5875,
       "mean_rmsse": 1.3465,
       "wape": 0.2915,
       "n_series": 17238
     },
     "LightGBM": {
-      "median_rmsse": 0.5689,
-      "mean_rmsse": 1.3536,
-      "wape": 0.2911,
+      "median_rmsse": 0.5701,
+      "mean_rmsse": 1.353,
+      "wape": 0.2924,
+      "n_series": 17238
+    },
+    "GFM_selected": {
+      "median_rmsse": 0.5131,
+      "mean_rmsse": 1.3736,
+      "wape": 1.4618,
       "n_series": 17238
     },
     "Chronos2_zs": {
@@ -377,25 +379,13 @@
       "mean_rmsse": 1.7093,
       "wape": 0.4456,
       "n_series": 17238
-    },
-    "GFM_quantile": {
-      "median_rmsse": 0.5818,
-      "mean_rmsse": 2.4996,
-      "wape": 0.5821,
-      "n_series": 17238
-    },
-    "GFM_selected": {
-      "median_rmsse": 0.5404,
-      "mean_rmsse": 2.7529,
-      "wape": 0.4036,
-      "n_series": 17238
     }
   },
   "versus_v1": [
     {
       "model": "ENS_mean_top3",
-      "median_rmsse": 0.4878,
-      "mean_rmsse": 1.2203,
+      "median_rmsse": 0.4877,
+      "mean_rmsse": 1.2201,
       "wape": 0.2027,
       "wape (no cap)": 0.2062,
       "v1 model": "ENS_mean_top3",
@@ -406,8 +396,8 @@
     },
     {
       "model": "Chronos2_zs_cov",
-      "median_rmsse": 0.5103,
-      "mean_rmsse": 1.2682,
+      "median_rmsse": 0.5102,
+      "mean_rmsse": 1.2677,
       "wape": 0.221,
       "wape (no cap)": 0.2279,
       "v1 model": "Chronos2_zs_cov",
@@ -418,15 +408,15 @@
     },
     {
       "model": "LightGBM",
-      "median_rmsse": 0.5689,
-      "mean_rmsse": 1.3536,
-      "wape": 0.2911,
-      "wape (no cap)": 0.2911,
+      "median_rmsse": 0.5701,
+      "mean_rmsse": 1.353,
+      "wape": 0.2924,
+      "wape (no cap)": 0.2924,
       "v1 model": "LightGBM",
       "v1 mean_rmsse": 1.354,
       "v1 median_rmsse": 0.569,
       "v1 wape": 0.291,
-      "WAPE gap (ours \u2212 v1)": 0.0001
+      "WAPE gap (ours \u2212 v1)": 0.0014
     },
     {
       "model": "Chronos2_zs",
@@ -478,15 +468,15 @@
     },
     {
       "model": "NHITS_recipe",
-      "median_rmsse": 0.5337,
-      "mean_rmsse": 1.281,
-      "wape": 0.244,
-      "wape (no cap)": 0.2444,
+      "median_rmsse": 0.5315,
+      "mean_rmsse": 1.2833,
+      "wape": 0.2457,
+      "wape (no cap)": 0.2494,
       "v1 model": "NHITSx",
       "v1 mean_rmsse": 1.303,
       "v1 median_rmsse": 0.572,
       "v1 wape": 0.275,
-      "WAPE gap (ours \u2212 v1)": -0.031
+      "WAPE gap (ours \u2212 v1)": -0.0293
     }
   ],
   "board": "results/day2_full/leaderboard_all_series.csv"

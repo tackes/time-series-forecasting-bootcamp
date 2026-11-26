@@ -35,8 +35,8 @@
 # 3. See where Chronos-2 beats the GFM, and where it does not.
 # 4. Probe Chronos-2's price response the way 05b probes the GFM.
 #
-# **In the chain:** reads the selected config (`gd.selected_config()`), `05b_synthetic` (the
-# GFM's probe results) and `00_baselines`, writes `07_foundation`.
+# **In the chain:** reads the selected config (`gd.selected_config()`), the selected GFM's
+# probe results (`gp.selected_gfm_probes`) and `00_baselines`, writes `07_foundation`.
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
@@ -287,7 +287,10 @@ test_summary[["model", "median_rmsse", "mean_rmsse", "wape", "n_series"]].round(
 # ### Reading the result
 #
 # * Median RMSSE first: where does the chosen variant sit against `GFM_selected` (≈ 0.512
-#   against ≈ 0.546)? The mean sits alongside.
+#   against ≈ 0.520)? The mean sits alongside. The GFM is 05c's model (cleaned prices, scaler
+#   floor, input clip, capped); 05's was 0.546. Its WAPE (≈ 0.40) is high because one best
+#   seller (`6653_S1`) blows up in one seed, and the cap at 3× its largest week still leaves
+#   millions of units: the median and mean are not affected.
 # * The research found LightGBM the most accurate model but untrustworthy on price (§5,
 #   [100k set]). If Chronos-2 is close on accuracy, the same question applies to it.
 #
@@ -393,13 +396,11 @@ gplt.plot_probe(probe_table, title="Chronos-2 with covariates: probe responses")
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
 # Now the lift by cut depth under the random calendars (F13), against the GFM in use (its
-# 3-seed probes from 05b) and the lift the data's own elasticity implies.
+# 3-seed probes, from 05c's test fits) and the lift the data's own elasticity implies.
 
 # %%
-synthetic_cfg = gd.load_config("05b_synthetic")
-gfm_key = synthetic_cfg.get("use", "05")
-gfm_calendar = pd.DataFrame(synthetic_cfg["calendar"][gfm_key]).set_index("depth")
-gfm_probes = pd.DataFrame(synthetic_cfg["probes"][gfm_key])
+gfm_probes, gfm_calendar = gp.selected_gfm_probes(cfg)
+gfm_calendar = gfm_calendar.set_index("depth")
 empirical_all = gp.empirical_elasticity(train, probe_ids).iloc[0]["elasticity"]
 depths = list(gp.CAL_DEPTHS)
 lift_by_depth = pd.DataFrame({
@@ -426,11 +427,12 @@ headlines.round(3)
 # * Chronos-2 learns each series' response from that series alone. Series with few past price
 #   moves give it little to go on; the GFM pools all 17,000.
 # * Here Chronos-2 does read the price. A one-week 20% cut gives a median elasticity of
-#   ≈ −1.43 (lift ≈ +37%, ≈ +43% with the promotion flag on), against the GFM's ≈ −1.79
-#   (≈ +49%). Lift grows with depth: ≈ +18% at 10%, ≈ +45% at 20%, ≈ +75% at 30%.
+#   ≈ −1.43 (lift ≈ +37%, ≈ +43% with the promotion flag on), against the GFM's ≈ −1.82
+#   (≈ +50%). Lift grows with depth: ≈ +18% at 10%, ≈ +45% at 20%, ≈ +75% at 30%.
 # * It is less consistent than the GFM: ≈ 90% of calendar cuts lift its forecast, against
-#   ≈ 99% for the GFM, and ≈ 81% of series reach the −0.3 bar. Both stay well below the lift
-#   the data implies (≈ +125% at 20%). Spill is about zero: the cut stays in its own week.
+#   ≈ 99% for the GFM, and ≈ 81% of series reach the −0.3 bar (the GFM: ≈ 98%). Both stay
+#   well below the lift the data implies (≈ +125% at 20%). Spill is about zero: the cut stays
+#   in its own week.
 #
 # *Exact numbers vary with seed and hardware.*
 

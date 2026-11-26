@@ -2,13 +2,13 @@
   "name": "06_per_cluster_c0",
   "seed": 11207,
   "alias": "GFM_per_cluster",
-  "fit_seconds": 92.0,
+  "fit_seconds": 99.2,
   "max_steps": 3126,
   "n_train_series": 4600,
-  "neg_share": 0.023724489795918367,
-  "oscillation": 0.015087375725424228,
-  "best_step": 1092,
-  "best_frac": 0.3493282149712092,
-  "best_valid": 2007.2806396484375,
-  "final_over_best": 1.08870947879372
+  "neg_share": 0.015561224489795918,
+  "oscillation": 0.03890865828739889,
+  "best_step": 1014,
+  "best_frac": 0.32437619961612285,
+  "best_valid": 1848.9801025390625,
+  "final_over_best": 1.009870966528013
 }

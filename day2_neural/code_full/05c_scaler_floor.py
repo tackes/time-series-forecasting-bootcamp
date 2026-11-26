@@ -45,8 +45,8 @@
 #
 # **In the chain:** reads `05_selected`, `02_shortlist` and `08_reconcile`, 05b's cached
 # validation and probe runs of 05, and 11's all-series forecasts. Writes `05c_scaler_floor`,
-# `05c_price_clean` and `05c_input_clip`. Later notebooks read none of them yet: carrying an
-# arm forward means cleaned prices for every price-aware model and a rerun of 05 → 11.
+# `05c_price_clean` and `05c_input_clip`. `05c_input_clip`'s `use` key makes
+# `gd.selected_config()` return the chosen arm, so 06–11 build on it.
 
 # %%
 from dataclasses import replace
@@ -603,9 +603,47 @@ pd.DataFrame(checks3)
 # *Exact numbers vary with seed and hardware.*
 
 # %%
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### The choice: clean + floor + clip
+#
+# The rule's tie-break picks clean + floor, by 0.005 of validation median RMSSE, inside the
+# noise floor: on accuracy the two are the same model. We carry **clean + floor + clip**
+# forward instead, and say so here. The reason is not a score: it is that the calculations
+# training relies on should be stable. With the clip, no input can be scaled beyond ±50, so
+# no window can push the exogenous stack, its gradients or its forecast to extremes (the worst
+# forecast is 300× the item's largest week, against 2 × 10⁸). Its training was also the
+# steadiest of the cleaned arms. The cost is a slightly weaker price response (−1.85 against
+# −2.03, still stronger than 05's −1.77). `docs/stability_choices.md` sets out each choice.
+#
+# The cap is part of the carried-forward model: its saved forecasts, which 06–10 read, and
+# its board row are capped at 3× the item's largest training week, as 08 and 11 cap every
+# item. The other 05c arms are diagnostics and stay uncapped on the board.
+#
+# The first seed is refitted once more and saved as `05c_selected`, for 08, 09 and 11, which
+# need the model itself. The saved model notes its floor and clip, and `gd.load_model`
+# reapplies them.
+
+# %%
+CHOSEN = "clean_floor_clip"
+saved = gd.fit_seed(floored_model(data_clean, alias_clip, FLOOR, CLIP), gd.SEEDS[0],
+                    everywhere(data_clean, test), "05c_selected", save_as="05c_selected")
+check = gd.only(saved["forecast"], eval_ids).merge(
+    gd.only(clip_test[0]["forecast"], eval_ids), on=["unique_id", "ds"], suffixes=("", "_run"))
+print("saved model against the seed-1 run, median RMSSE on the sample:",
+      gd.per_series(gd.score(check[["unique_id", "ds", alias_clip, alias_clip + "_run"]], test,
+                             train)).median().round(4).to_dict())
+
+# %%
+# The carried-forward model includes the cap (section 11): its saved forecasts, which 06-10
+# read, and its board row are capped at CAP x the item's largest training week. The other
+# 05c arms are diagnostics and stay uncapped.
 sample_clip = seed_mean(clip_test, eval_ids)
+sample_clip[alias_clip] = sample_clip[alias_clip].clip(
+    upper=sample_clip["unique_id"].map(top) * CAP)
 gd.save_forecasts(sample_clip, "05c_clean_floor_clip")
-gd.record(sample_clip, test, train, lab=f"05c clean + floor + clip ({len(gd.SEEDS)}-seed mean)",
+gd.record(sample_clip, test, train,
+          lab=f"05c clean + floor + clip, capped ({len(gd.SEEDS)}-seed mean)",
           fit_seconds=gd.summaries(clip_test)["fit_seconds"].mean(),
           notes="fit_seconds is per seed")
 gd.save_config("05c_input_clip", {
@@ -614,6 +652,11 @@ gd.save_config("05c_input_clip", {
     "input_clip": CLIP,
     "seeds": gd.SEEDS,
     "recommended": recommended3,
+    "use": CHOSEN,
+    "chosen_by": "the user, over the rule's tie-break (0.005 apart, inside the noise floor)",
+    "choice_reason": "stable training calculations: no scaled input beyond ±50, worst "
+                     "forecast 300x not 2e8x; see docs/stability_choices.md",
+    "saved_model": "05c_selected",
     "cap_kept": True,
     "rule": list(next(iter(checks3.values()))),
     "checks": {arm: {k: bool(v) for k, v in c.items()} for arm, c in checks3.items()},
@@ -647,6 +690,9 @@ gd.median_board("05c")
 # inside the network in one seed, with ordinary inputs. That is why the cap stays: it is the
 # guard for a failure no input treatment can prevent.
 #
-# **The recommendation, by the rule: clean prices + floor, with the cap.** Clean + floor +
-# clip ties it on validation and has far smaller worst cases. Carrying either forward means
-# cleaned prices for every price-aware model and a rerun of 05 → 11.
+# **The rule's pick is clean prices + floor; clean + floor + clip ties it, and is the one we
+# carry forward**, with the cap, for stable training calculations (section 11). From here on
+# `gd.selected_config()` returns it, and every model in the final comparison uses the cleaned
+# prices (`gp.PRICE_CLEAN`): LightGBM (00, 04), the GFMs (06, 08, 09, 11) and the foundation
+# models (07, 07b, 11). The GFM development notebooks 01–05 keep the raw prices they were
+# run with.

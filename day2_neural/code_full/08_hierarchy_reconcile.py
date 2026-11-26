@@ -145,12 +145,15 @@ print({arm: f"{fc['unique_id'].nunique():,} items" for arm, fc in bottom.items()
 # <!-- DRAFT: Graeme to edit -->
 # ### A guard: cap each item at a multiple of its largest training week
 #
-# The eval sample hides a problem that sums over every item expose. On the full run a handful
-# of the 17,000 GFM item forecasts exploded (one item that sells ≈130 units a week was forecast
-# at millions), and on its own that put the bottom-up store total ≈ 47% too high. We cap each
-# item's forecast at `CAP` times its largest training week, for both models. Real sales above
-# 3× that happened in ≈ 0.5% of test weeks, so the cap seldom cuts a real spike. The table
-# shows how many it touches.
+# The eval sample hides a problem that sums over every item expose. On the first full run a
+# handful of the 17,000 GFM item forecasts exploded (one item that sells ≈130 units a week was
+# forecast at millions), and on its own that put the bottom-up store total ≈ 47% too high.
+# 05c traced most of it to bad prices and the robust scaler, and the selected model now has
+# cleaned prices, a scaler floor and an input clip (`docs/stability_choices.md`). One rare
+# blow-up inside the network is left: in this saved seed, a best seller (`6653_S1`). So we
+# still cap each item's forecast at `CAP` times its largest training week, for both models.
+# Real sales above 3× that happened in ≈ 0.5% of test weeks, so the cap seldom cuts a real
+# spike. The table shows how many it touches.
 
 # %%
 CAP = 3                     # item forecast ceiling, as a multiple of its largest training week
@@ -358,8 +361,8 @@ upper_valid_ratio.round(3)
 #   Anzac Day and Mother's Day.
 # * **ETS is chosen, by a narrow and particular margin.** Chronos-2 with the nodes' price and
 #   promotion inputs beats ETS by ≈ 25–30% at department, class and subclass (0.72 against
-#   1.00), but is 4% worse at the total (0.598 against 0.574). The rule judges each model by its
-#   worst level, so that 4% decides it.
+#   1.00), but is 5% worse at the total (0.601 against 0.574). The rule judges each model by its
+#   worst level, so that 5% decides it.
 # * **ARIMAX fails at the total** (1.38, more than twice ETS's error) while beating ETS below
 #   it. One series with a short history and seven regressors is easy to overfit.
 # * The upper model matters only to the methods that use the upper forecasts. BottomUp, which
@@ -704,11 +707,16 @@ plt.show()
 # * Check the bias table too: a method can win on RMSSE and still under-forecast a level.
 # * **BottomUp is best or close to it at every level, for both item models.** With Chronos-2
 #   items it is the best at every level (0.676 at item, 0.767 at the total). With GFM items it
-#   is the best at the item level (0.725), and within 0.001 of the best at department.
+#   is the best at the item level (0.683), and within 0.012 of the best at department.
 # * **The weighted MinT methods win the upper levels with GFM items.** `MinT-shrink-sub` is by
-#   far the best at the total (0.660, against 0.843 for BottomUp), and `MinT-wls_var` is the
-#   best at class and subclass (0.811, 0.751). Both lose a little at the item level (0.3% and
-#   0.9%), and that is their worst level.
+#   far the best at the total (0.680, against 0.853 for BottomUp) and best at department and
+#   class (0.795, 0.756); `MinT-wls_var` is best at subclass (0.736). Both lose a little at
+#   the item level (1.6% and 0.1%), and that is their worst level.
+# * **The GFM's saved seed is its weak spot.** One best seller (`6653_S1`) blows up in this
+#   seed; capped at 3× its largest week it still over-forecasts by millions of units, so the
+#   GFM bottom-up total is ≈ 4% too high (Chronos-2: ≈ 2%) and its item WAPE is poor, though
+#   the median item is fine. The 3-seed mean on the board includes this seed, so it shares
+#   the weak spot, capped in the same way.
 # * **The `wls_var` fix.** The library's sparse solver for MinT stops early without saying so
 #   when the error variances span many orders of magnitude, as they do here (from ≈ 0.02
 #   for the slowest items upwards). Its `wls_var` forecasts reached the millions, and each
@@ -765,7 +773,7 @@ worst.round(3)
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
 # Both item models choose **BottomUp**. With GFM items, `MinT-wls_var`'s worst level is only
-# 0.3% behind (inside the 1% tie band), and the preference order then picks BottomUp over it.
+# 0.2% behind (inside the 1% tie band), and the preference order then picks BottomUp over it.
 # A planner who cares most about the department and class totals would pick `MinT-wls_var`
 # or `MinT-shrink-sub`; the rule, which cares about every level, does not.
 

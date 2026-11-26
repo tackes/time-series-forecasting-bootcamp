@@ -46,6 +46,7 @@ from statsforecast.models import AutoETS, Naive, SeasonalNaive
 
 import gd_helpers as gd
 import gd_plots as gplt
+import gd_price as gp
 
 bc = gd.bc
 gd.status()
@@ -73,6 +74,10 @@ gplt.use_style()
 # %%
 panel = gd.train_panel()
 train, test = bc.split(panel, cutoff=bc.TEST_START)
+# LightGBM reads prices: it gets them cleaned (placeholders and out-of-range weeks replaced,
+# gp.PRICE_CLEAN), as every model in the final comparison does (docs/stability_choices.md)
+clean_train, clean_test = bc.split(gp.clean_prices(panel, **gp.PRICE_CLEAN),
+                                   cutoff=bc.TEST_START)
 eval_ids = gd.eval_ids()
 info = gplt.series_table(panel)
 
@@ -130,7 +135,9 @@ gplt.plot_series_panels(panel, examples["high"][0])
 # ## 3. Day 1 reference models on the full panel
 #
 # Local models (Naive, SeasonalNaive, AutoETS) fit each series on its own, so we fit them on
-# the scored series only. LightGBM is global, so it trains on all series.
+# the scored series only. LightGBM is global, so it trains on all series, with the prices
+# cleaned: £0.01 placeholders and prices beyond 6× the usual one are replaced from nearby
+# weeks (`gp.clean_prices`; why in `docs/stability_choices.md`).
 #
 # `AutoETS(season_length=1)` has no yearly season: ETS cannot carry a 52-week season. That is
 # what SeasonalNaive is for.
@@ -153,8 +160,8 @@ def baseline_forecasts() -> pd.DataFrame:
         date_features=["month", "week"], target_transforms=[LocalStandardScaler()],
     )
     with bc.Timer() as t_lgb:
-        mlf.fit(bc.to_nixtla(train, exog), static_features=[])
-    future = gd.only(bc.to_nixtla(test, exog).drop(columns="y"), eval_ids)
+        mlf.fit(bc.to_nixtla(clean_train, exog), static_features=[])
+    future = gd.only(bc.to_nixtla(clean_test, exog).drop(columns="y"), eval_ids)
     lgbm = mlf.predict(h=bc.H, X_df=future, ids=eval_ids)
     out = stats.reset_index().merge(lgbm, on=["unique_id", "ds"])
     return out
@@ -172,8 +179,9 @@ gd.median_board("00")
 # * The board is sorted by **median** RMSSE. A minority of intermittent, mostly-zero series pulls
 #   the mean up, so the median describes the typical item.
 # * LightGBM now learns from ≈17,000 series instead of 2,000. Compare its row with the original
-#   lab 00 to see what more data buys a global model: median ≈ 0.569 (mean ≈ 1.161), against
-#   ≈ 0.601 (mean ≈ 1.169) in the original lab.
+#   lab 00 to see what more data buys a global model: median ≈ 0.572 (mean ≈ 1.161), against
+#   ≈ 0.601 (mean ≈ 1.169) in the original lab. Cleaning the prices moved it by 0.003 (0.569
+#   with the raw prices): the trees barely used the bad weeks.
 # * SeasonalNaive is the yardstick. A model that cannot beat it on the median is not yet useful.
 #
 # *Reference run: full panel, GPU box. Exact numbers vary with seed and hardware; the reading

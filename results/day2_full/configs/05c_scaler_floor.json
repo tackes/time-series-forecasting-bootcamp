@@ -155,9 +155,9 @@
   },
   "explosions": {
     "05": {
-      "item-weeks": 466.0,
-      "items": 101.0,
-      "largest multiple": 8074.653301886792
+      "item-weeks": 241.0,
+      "items": 52.0,
+      "largest multiple": 300.18185299804185
     },
     "floor": {
       "item-weeks": 236.0,
@@ -167,39 +167,39 @@
   },
   "test_scores": {
     "all, no cap | median_rmsse": {
-      "GFM_selected": 0.5404,
+      "GFM_selected": 0.5131,
       "GFM_floor": 0.511
     },
     "all, no cap | mean_rmsse": {
-      "GFM_selected": 2.7529,
+      "GFM_selected": 1.3736,
       "GFM_floor": 1384.3649
     },
     "all, no cap | wape": {
-      "GFM_selected": 0.4036,
+      "GFM_selected": 1.4618,
       "GFM_floor": 12.6165
     },
     "all, capped | median_rmsse": {
-      "GFM_selected": 0.5404,
+      "GFM_selected": 0.5131,
       "GFM_floor": 0.511
     },
     "all, capped | mean_rmsse": {
-      "GFM_selected": 1.2919,
+      "GFM_selected": 1.2696,
       "GFM_floor": 1.2708
     },
     "all, capped | wape": {
-      "GFM_selected": 0.2579,
+      "GFM_selected": 0.2476,
       "GFM_floor": 0.2515
     },
     "sample, no cap | median_rmsse": {
-      "GFM_selected": 0.5464,
+      "GFM_selected": 0.52,
       "GFM_floor": 0.5226
     },
     "sample, no cap | mean_rmsse": {
-      "GFM_selected": 1.0666,
+      "GFM_selected": 1.7219,
       "GFM_floor": 1.4885
     },
     "sample, no cap | wape": {
-      "GFM_selected": 0.2569,
+      "GFM_selected": 10.6749,
       "GFM_floor": 6.9848
     }
   },

@@ -77,6 +77,10 @@ def price_index(df: pl.DataFrame, cutoff=bc.TEST_START) -> pl.DataFrame:
 
 
 PRICE_CLEAN_WINDOW = 9        # weeks, centred: the neighbourhood a bad price is replaced from
+# 05c's cleaning rule, fixed before any fit: placeholders at or below £0.05, and prices more
+# than 6x above or below the usual price. Every model in the final comparison uses it
+# (docs/stability_choices.md); the GFM development notebooks 01-05 used raw prices.
+PRICE_CLEAN = {"k": 6.0, "floor": 0.05}
 
 
 def _bad_price(col: str, cutoff, k: float, floor: float) -> tuple[pl.Expr, pl.Expr]:
@@ -909,3 +913,19 @@ def aggregate_covariates(items: pl.DataFrame, levels: list[list[str]], cutoff=bc
     if events:
         out = add_events(out)
     return out.to_pandas()
+
+
+def selected_gfm_probes(cfg: dict | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(probe report, calendar report) of the selected GFM's 3-seed probes, test window.
+
+    05c's chosen arm is probed in its own test fits (``selected_runs``); 05 and 05b were
+    probed in 05b, which stores the reports in its config.
+    """
+    cfg = cfg or gd.selected_config()
+    if cfg.get("selected_from") == "05c":
+        runs = gd.load_runs(cfg["selected_runs"])
+        return (probe_report(seed_mean_q([r["probe7b"] for r in runs], PROBE_KEYS)),
+                calendar_report(seed_mean_q([r["calendar"] for r in runs], CAL_KEYS)))
+    synthetic = gd.load_config("05b_synthetic")
+    key = synthetic.get("use", "05")
+    return pd.DataFrame(synthetic["probes"][key]), pd.DataFrame(synthetic["calendar"][key])

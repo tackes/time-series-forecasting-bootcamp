@@ -60,7 +60,8 @@ gplt.use_style()
 #
 # Models that forecast only a subset of the series (e.g. a foundation model run on a CPU) are
 # left out: a fair standing needs every model on the same series. As in 06–09, the selected
-# model is the column `GFM_selected`. If 05b won, 05's own model stays in as `GFM_05`. The
+# model is the column `GFM_selected`. If 05b or 05c replaced 05, 05's own model stays in as
+# `GFM_05`; 05c's other arms (`GFM_floor`, `GFM_clean`, `GFM_clean_floor`) are left out. The
 # table lists each model's median RMSSE.
 
 # %%
@@ -71,12 +72,15 @@ eval_ids = gd.eval_ids()
 
 selected_cfg = gd.selected_config()
 selected_col = "GFM_selected"
-synthetic_won = selected_cfg.get("use") == "05b"
+selected_from = selected_cfg["selected_from"]          # "05", "05b" or "05c"
+replaced_05 = selected_from != "05"
+synthetic_won = selected_from == "05b"
+NOT_CARRIED = ["GFM_floor", "GFM_clean", "GFM_clean_floor"]      # 05c arms not chosen
 
 fc = gd.only(bc.load_forecasts(), eval_ids)
 earlier_run = [c for c in fc.columns if c.startswith(("ENS_", "SEL_"))]
-fc = fc.drop(columns=earlier_run)
-if synthetic_won:            # 05b's column becomes GFM_selected; 05's is kept as GFM_05
+fc = fc.drop(columns=earlier_run + [c for c in NOT_CARRIED if c in fc.columns])
+if replaced_05:              # 05b's or 05c's column becomes GFM_selected; 05's is GFM_05
     fc = fc.drop(columns=selected_cfg["forecast_column"])
     fc = fc.rename(columns={"GFM_selected": "GFM_05"})
     fc = fc.merge(gd.selected_forecasts(selected_cfg), on=["unique_id", "ds"], how="left")
@@ -180,7 +184,9 @@ ratings.round(3)
 # * The mean is pulled by the hardest (mostly intermittent) series; the median and the ratings
 #   count every series once. A model that ranks well on the median but poorly on the mean is
 #   strong on ordinary series and fragile on a few.
-# * Look at where `GFM_selected` sits: Bradley–Terry rating ≈ 1071 against LightGBM's ≈ 1043.
+# * Look at where `GFM_selected` sits: Bradley–Terry rating ≈ 1071 against LightGBM's ≈ 1013,
+#   third behind t0-gamma (≈ 1095) and Chronos-2 (≈ 1075). It is 05c's model: cleaned prices,
+#   scaler floor, input clip and the cap (0.520, against 0.546 for 05's, now `GFM_05`).
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -317,7 +323,7 @@ def sweep_sources() -> dict:
         for arm in gd.load_config("04_price").get("arms", {}):
             sources[f"NBEATSx_{arm}_mean"] = ("run", f"04_{arm}")
         sources["LightGBM"] = ("table", "04_lgbm_sweep")
-    column_05 = "GFM_05" if synthetic_won else "GFM_selected"
+    column_05 = "GFM_05" if replaced_05 else "GFM_selected"
     column_05b = "GFM_selected" if synthetic_won else "GFM_synthetic"
     if (gd.CONFIG_DIR / "05_selected.json").exists():
         cfg05 = gd.load_config("05_selected")
@@ -327,6 +333,8 @@ def sweep_sources() -> dict:
     if (gd.CONFIG_DIR / "05b_synthetic.json").exists():
         probe_runs = gd.load_config("05b_synthetic").get("probe_runs", {})
         sources[column_05b] = ("run", probe_runs.get("05b", "05b_synthetic"))
+    if selected_from == "05c":
+        sources["GFM_selected"] = ("run", selected_cfg["selected_runs"])
     return sources
 
 
@@ -371,7 +379,8 @@ else:
 # <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Compare the GFM's median elasticity (≈ −1.28) with the empirical ≈ −3.6 on this data.
+# * Compare the GFM's median elasticity (≈ −1.36; 05's ≈ −1.28) with the empirical ≈ −3.6
+#   on this data.
 #   The research's −0.4 to −0.7 came from a different panel
 #   [100k set] and is not the target here.
 # * If LightGBM appears, expect a response that shrinks as the shock grows and goes flat
@@ -398,7 +407,8 @@ else:
 # | `right sign` | share of cuts that lift sales, random promotion calendars |
 # | `lift 10/20/30%` | median lift in the cut week, random calendars, by cut depth |
 #
-# The GFM rows are 3-seed means (refitted in 05b); Chronos-2 comes from 07, Timestral and
+# The GFM rows are 3-seed means (05 and 05b refitted in 05b; the selected GFM from 05c's
+# test fits); Chronos-2 comes from 07, Timestral and
 # t0-gamma from 07b, LightGBM from 04. A model whose probe tables are missing is left out.
 # The last rows are references: the lift the data's own elasticity implies, and the lift 05b
 # planted in its training copies.
@@ -417,11 +427,15 @@ def probe_sources() -> dict:
                "LightGBM": (table("04_lgbm_probe"), table("04_lgbm_calendar"))}
     if (gd.CONFIG_DIR / "05b_synthetic.json").exists():
         runs_by = gd.load_config("05b_synthetic").get("probe_runs", {})
-        names = {"05": "GFM_05" if synthetic_won else "GFM_selected",
+        names = {"05": "GFM_05" if replaced_05 else "GFM_selected",
                  "05b": "GFM_selected" if synthetic_won else "GFM_synthetic"}
         for key, run_name in runs_by.items():
             runs = gd.load_runs(run_name)
             sources[names[key]] = (gp.seed_mean_q([r["probe7b"] for r in runs], gp.PROBE_KEYS),
+                                   gp.seed_mean_q([r["calendar"] for r in runs], gp.CAL_KEYS))
+    if selected_from == "05c":                  # 05c's chosen arm, probed in its test fits
+        runs = gd.load_runs(selected_cfg["selected_runs"])
+        sources["GFM_selected"] = (gp.seed_mean_q([r["probe7b"] for r in runs], gp.PROBE_KEYS),
                                    gp.seed_mean_q([r["calendar"] for r in runs], gp.CAL_KEYS))
     return {m: v for m, v in sources.items() if v[0] is not None and v[1] is not None}
 
@@ -472,9 +486,9 @@ gplt.plot_lift_by_depth(lift_curves, references=references,
 # * The most accurate model need not have the most believable response. A model used to plan
 #   promotions should be good on both.
 # * On this run, every model is right-signed and every model is too weak. For a one-week 20%
-#   cut the data implies a lift of ≈ +125%. Timestral forecasts ≈ +50%, the GFMs ≈ +48%,
-#   Chronos-2 ≈ +37%, t0-gamma ≈ +30% and LightGBM ≈ +28%. 05b's planted lift (+60%) sits
-#   between the models and the data.
+#   cut the data implies a lift of ≈ +125%. The selected GFM and Timestral forecast ≈ +50%,
+#   05's GFM ≈ +49%, Chronos-2 ≈ +37%, t0-gamma ≈ +30% and LightGBM ≈ +28%. 05b's planted
+#   lift (+60%) sits between the models and the data.
 # * The GFMs are the most consistent (≈ 99% of calendar cuts right-signed), then LightGBM
 #   (≈ 98%), then the three foundation models (≈ 89–90%). The most accurate model, t0-gamma,
 #   has the weakest response of the neural models.
@@ -628,14 +642,18 @@ gd.save_config("10_final", {
 #   the recipe here. Seed noise then sets the bar: a gap below the 02 noise floor is a tie, not
 #   a finding [method].
 # * **Accuracy.** The final model, t0-gamma zero-shot with the price and promotion covariates
-#   (07b), reaches a median RMSSE of ≈ 0.502 (mean ≈ 1.03), against ≈ 0.512 for Chronos-2,
-#   ≈ 0.929 for SeasonalNaive and ≈ 0.568 for LightGBM on the same evaluation series. The best
-#   trained GFM is ≈ 0.537.
+#   (07b), reaches a median RMSSE of ≈ 0.501 (mean ≈ 1.03), against ≈ 0.512 for Chronos-2,
+#   ≈ 0.929 for SeasonalNaive and ≈ 0.572 for LightGBM on the same evaluation series. The best
+#   trained GFM is the selected one, ≈ 0.520, tied with Timestral.
+# * **Stable calculations pay.** Cleaning the prices, flooring the scaler's spread and
+#   clipping the scaled inputs (05c, `docs/stability_choices.md`) took the GFM from 0.546 to
+#   0.520, with a stronger price response. One rare blow-up inside the network is left (one
+#   seed, one best seller), so every forecast is still capped.
 # * **Price response is a separate test.** An accurate model can ignore price or respond the
 #   wrong way. In the research the most accurate trials had the weakest elasticity (§6), and
 #   LightGBM, the most accurate model, had an artefactual response (§5) [100k set]. Here the
 #   phase 7b probes (a one-week 20% cut with every price input rebuilt) give the selected GFM
-#   a median elasticity of ≈ −1.79 (lift ≈ +49%) and the final model, t0-gamma, ≈ −1.19
+#   a median elasticity of ≈ −1.82 (lift ≈ +50%) and the final model, t0-gamma, ≈ −1.19
 #   (≈ +30%), against ≈ −3.5 (≈ +125%) implied by the data. t0-gamma lifts ≈ 89% of random
 #   promotion cuts, the GFM ≈ 99%. Every model is right-signed and too weak, and the most
 #   accurate one responds least: forecast with t0-gamma, but ask the GFM what a new price

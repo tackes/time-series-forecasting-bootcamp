@@ -32,7 +32,7 @@
 # 4. Probe each model's price response with the phase 7b probes.
 #
 # **In the chain:** reads the selected config (`gd.selected_config()`), `07_foundation` and
-# `05b_synthetic` (the GFM's probes), writes `07b_new_foundation`.
+# the selected GFM's probes (`gp.selected_gfm_probes`), writes `07b_new_foundation`.
 
 # %%
 import functools
@@ -126,7 +126,6 @@ def forecast(name: str, hist: pd.DataFrame, future: pd.DataFrame | None, covaria
 # %%
 cfg = gd.selected_config()
 fm07_cfg = gd.load_config("07_foundation")
-synthetic_cfg = gd.load_config("05b_synthetic")
 baselines_cfg = gd.load_config("00_baselines")
 noise_floor = gd.load_config("02_shortlist")["noise_floor"]
 raw = gp.add_fourier(gp.add_events(gd.train_panel()), 2)
@@ -262,13 +261,14 @@ gd.median_board("07b")
 # ### Reading the result
 #
 # * **t0-gamma is the most accurate model on the board**: median RMSSE 0.502 on test, against
-#   0.512 for Chronos-2 and 0.523 for Timestral. It also led on validation (0.536, 0.575,
-#   0.557), so the order did not change between windows.
+#   0.512 for Chronos-2 and 0.521 for Timestral. It also led on validation (0.536, 0.574,
+#   0.557), so the order did not change between windows. Every model reads cleaned prices
+#   (`gp.PRICE_CLEAN`); against the raw prices the scores moved by 0.002 at most.
 # * **The price inputs do the work.** Without them every model scores ≈ 0.70 on validation and
 #   ≈ 0.64 on test; with them, ≈ 0.54–0.58 and ≈ 0.50–0.52.
 # * **The extra inputs matter little.** Event dummies and the tree-style columns move each
 #   model by 0.025 or less, in no consistent direction: they help Timestral a little on both
-#   windows (0.523 → 0.513 on test) and hurt Chronos-2 on test (0.512 → 0.537). Public tests
+#   windows (0.521 → 0.513 on test) and hurt Chronos-2 on test (0.512 → 0.535). Public tests
 #   found tree-style features hurt these models; here they are close to neutral.
 #
 # *Exact numbers vary with hardware.*
@@ -309,9 +309,11 @@ wilcoxon.round(4)
 #
 # * **t0-gamma against Chronos-2 is a real difference**: 0.010 lower, twice the noise floor,
 #   p ≈ 0, and better on 54% of series.
-# * **Timestral against Chronos-2 is not.** Its median is 0.010 higher, but p = 0.88: on a
+# * **Timestral against Chronos-2 is not.** Its median is 0.009 higher, but p = 0.84: on a
 #   per-series basis there is no consistent winner.
-# * Both new models beat the selected GFM (by 0.024 and 0.044), and t0-gamma beats Timestral.
+# * **t0-gamma beats the selected GFM** (0.018 lower, p ≈ 0); **Timestral ties it** (0.001,
+#   p = 0.09). The GFM is now 05c's model: cleaned prices, scaler floor, input clip, capped.
+#   t0-gamma also beats Timestral.
 #
 # *Exact numbers vary with hardware.*
 
@@ -378,8 +380,9 @@ hard[hard_models].sub(hard[BOARD_NAMES["Chronos2"]], axis=0).drop(
 # * **Class J dominates the averages.** It holds two thirds of the weeks, and its scaled
 #   errors are large because its usual error is small. That is why the "all weeks" row ranks
 #   the models differently from the median RMSSE.
-# * The GFM is close to Timestral on every hard group, and the best of all on event weeks
-#   (1.45) and above the history (51).
+# * The GFM (05c's, capped) has the lowest error over all weeks (2.66) and on event weeks
+#   (1.47, level with Timestral), is second on promo weeks (3.64) and above the history (56),
+#   but trails the foundation models on classes A–I (0.71).
 #
 # *Exact numbers vary with hardware.*
 
@@ -472,9 +475,7 @@ for name in NEW:
 chronos_probe = gp.probe_report(pd.read_parquet(gd.TABLE_DIR / "07_chronos_probe.parquet"))
 chronos_calendar = gp.calendar_report(pd.read_parquet(gd.TABLE_DIR
                                                       / "07_chronos_calendar.parquet"))
-gfm_key = synthetic_cfg.get("use", "05")
-gfm_probe = pd.DataFrame(synthetic_cfg["probes"][gfm_key])
-gfm_calendar = pd.DataFrame(synthetic_cfg["calendar"][gfm_key])
+gfm_probe, gfm_calendar = gp.selected_gfm_probes(cfg)
 
 headline = pd.DataFrame({
     **{BOARD_NAMES[n]: gp.headline(probe_tables[n]) for n in NEW},
@@ -499,7 +500,7 @@ gplt.plot_lift_by_depth(curves, references={f"implied by the data (e ≈ {empiri
 # * **All three respond in the right direction for about 90% of series**, against 99.7% for
 #   the GFM. Each foundation model learns a series' response from that series alone.
 # * **t0-gamma responds least.** A one-week 20% cut lifts its forecast by 30% (elasticity
-#   −1.19), against 37% for Chronos-2, 50% for Timestral and 49% for the GFM. The data imply
+#   −1.19), against 37% for Chronos-2, 50% for Timestral and 50% for the GFM. The data imply
 #   about 125%: every model under-responds.
 # * **Lift grows with depth for all of them.** On the random calendars, Timestral's lift goes
 #   from 19% at a 10% cut to 102% at 30%; t0-gamma's from 15% to 64%.
@@ -529,10 +530,10 @@ pairs.round(3)
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
-# Every pair beats its better member: t0-gamma with Chronos-2 reaches 0.492, and t0-gamma with
-# Timestral 0.493, against 0.502 alone. The per-series errors are highly correlated (0.99),
-# so the gain comes from averaging out week-to-week noise, not from models failing on
-# different series.
+# Every pair beats its better member: t0-gamma with Chronos-2 reaches 0.491, and t0-gamma with
+# Timestral 0.492, against 0.502 alone; Chronos-2 with the GFM 0.494. The per-series errors
+# are highly correlated (0.99), so the gain comes from averaging out week-to-week noise, not
+# from models failing on different series.
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->

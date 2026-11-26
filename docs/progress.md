@@ -333,3 +333,24 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
   seller) at ≈ 900× with every scaled input within ±5. No input fix can reach it, so the cap
   stays as the guard.
 - **Cost:** 36 min on one GPU (6 fits).
+
+## Carrying clean + floor + clip forward; 00 and 06–11 on cleaned prices (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Choice:** clean + floor + clip, with the cap, over the rule's tie-break (clean + floor,
+  0.005 better on validation, inside the noise floor), for stable training calculations.
+  Recorded in `05c_input_clip` (`use`, `chosen_by`, `choice_reason`); reasons and the effect
+  of clipping on the loss surface in `docs/stability_choices.md`.
+- **Plumbing:** `gd.selected_config()` returns 05c's arm (floor and clip in `params`, applied
+  by `gd.build_nbeatsx`); saved models carry `stability.json`, reapplied by `gd.load_model`;
+  `gp.PRICE_CLEAN` for LightGBM (00, 04, 11) and NHITS (11); `gp.selected_gfm_probes` for
+  07/07b; 11 uses 05c's all-series fits instead of refits. The selected model's saved
+  forecasts and board row are capped (`05c_selected` saved for 08, 09, 11).
+- **Old caches:** the raw-price tables/runs of 00, 04's LightGBM and 06–11 moved to
+  `results/day2_full_archive_raw_prices/` (gitignored; in git at `b76e787`).
+- **Results (test, sample):** t0-gamma 0.501 (final, unchanged), Chronos-2 0.512, **GFM
+  selected 0.520** (05: 0.546), Timestral 0.521, LightGBM 0.572 (0.569 raw). Top-3 average
+  0.495 held out. All series, capped: GFM 0.513 / WAPE 0.248 (was 0.540 / 0.258). GFM price
+  lift +50% (−1.82), 99.4% right-signed. Foundation models unchanged by cleaning (≤ 0.002).
+- **Remaining weak spot:** seed 46335 (also the saved model) blows up `6653_S1`; capped, it
+  still makes the sample WAPE 0.399 and 08's GFM bottom-up total ≈ 4% too high.
+- **Cost:** ≈ 2.5 h on one GPU (06 ≈ 1 h, 09 25 min, 08 21 min, 11 16 min, 07b 11 min).

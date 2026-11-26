@@ -26,12 +26,12 @@
     "Naive": 0.7708,
     "SeasonalNaive": 0.9289,
     "AutoETS": 0.7081,
-    "LightGBM": 0.5693
+    "LightGBM": 0.572
   },
   "mean_rmsse": {
     "Naive": 1.3321,
     "SeasonalNaive": 1.5248,
     "AutoETS": 1.2851,
-    "LightGBM": 1.1608
+    "LightGBM": 1.1613
   }
 }

@@ -338,8 +338,12 @@ gd.median_board("06")
 # ### Reading the result
 #
 # * Median RMSSE first. Is either gain over pooled bigger than the noise floor (≈ 0.005)?
-#   If not, it is a tie. Here neither arm gains: cluster static ≈ 0.551 and per cluster
-#   ≈ 0.570, against pooled ≈ 0.546.
+#   If not, it is a tie. Here neither arm gains: cluster static ≈ 0.526 and per cluster
+#   ≈ 0.542, against pooled ≈ 0.520 (05c's cleaned-price model with the scaler floor and
+#   input clip).
+# * The pooled mean (≈ 1.72) is higher than the arms' (≈ 1.09–1.10) because of one seed's
+#   blow-up on a best seller (`6653_S1`, 05c). The board here is not capped; 08 and 11 cap
+#   every item at 3× its largest training week.
 # * Compare each arm's seed spread with the gain. A gain smaller than the spread could vanish
 #   with a new seed.
 #
