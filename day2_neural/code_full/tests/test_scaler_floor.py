@@ -46,3 +46,16 @@ def test_floor_survives_a_deepcopy_and_needs_a_robust_scaler():
     torch.testing.assert_close(copy.deepcopy(norm).transform(x, mask), norm.transform(x, mask))
     with pytest.raises(ValueError):
         gd.floor_robust_scaler(TemporalNorm(scaler_type="standard", dim=1), floor=0.01)
+
+
+def test_clip_bounds_covariates_but_not_the_target():
+    x, mask = _windows()
+    x = x.clone()
+    x[0, -1, 0] = 1000.0                                # a huge future week of units
+    norm = gd.floor_robust_scaler(TemporalNorm(scaler_type="robust", dim=1), floor=0.0001,
+                                  clip=5.0)
+    z = norm.transform(x, mask)
+    assert z[0, -1, 1] == pytest.approx(-5.0)           # the price cut, clipped
+    assert z[0, -1, 0] > 100                            # the target is never clipped
+    back = norm.inverse_transform(z[..., :1], norm.x_shift[..., :1], norm.x_scale[..., :1])
+    torch.testing.assert_close(back, x[..., :1])

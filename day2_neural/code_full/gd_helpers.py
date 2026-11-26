@@ -549,8 +549,18 @@ def _floored_robust_statistics(x, mask, dim=-1, eps=1e-6, floor: float = 0.0):
     return median, spread.clamp(min=floor)
 
 
-def floor_robust_scaler(model, floor: float):
+def _clipped_robust_scaler(x, x_median, x_mad, clip: float = float("inf")):
+    """The library's robust scaling, with every channel but the first (the target) clipped
+    to ``[-clip, clip]``. Windows are ``[batch, time, channel]``, the target first."""
+    z = (x - x_median) / x_mad
+    return torch.cat([z[:, :, :1], z[:, :, 1:].clamp(-clip, clip)], dim=2)
+
+
+def floor_robust_scaler(model, floor: float, clip: float | None = None):
     """Floor the robust window scaler's spread at ``floor`` in ``model``, in place.
+
+    ``clip`` also bounds the scaled covariates (not the target) at ``±clip``, so a large real
+    price move cannot reach the exogenous stack at any size.
 
     The library scales each input over the input weeks by its median and MAD. A covariate
     that barely moved there (a price drifting by 0.001 with CPI) gets a tiny spread, so a
@@ -566,6 +576,8 @@ def floor_robust_scaler(model, floor: float):
         raise ValueError("floor_robust_scaler: the model has no robust scaler")
     for norm in norms:
         norm.compute_statistics = partial(_floored_robust_statistics, floor=floor)
+        if clip is not None:
+            norm.scaler = partial(_clipped_robust_scaler, clip=clip)
     return model
 
 

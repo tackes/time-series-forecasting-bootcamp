@@ -156,7 +156,9 @@ All forecasts capped at 3× the item's largest training week, as in 08.
   beyond 6× of the usual price, replaced from their neighbours). Clean prices plus the floor
   is the best GFM on validation (0.562 against 0.583) and ties the floor on test (capped
   0.514), but still needs the cap: a large real price move is still passed linearly to the
-  forecast. Clipping the scaled inputs is untested.
+  forecast. Part 3 clips the scaled price inputs at ±50: the worst case falls to 300×, and
+  what is left is a rare blow-up inside the network (one seed, ordinary inputs), which only
+  the cap guards against.
 - **A silent library bug in sparse MinT.** `hierarchicalforecast`'s `MinTraceSparse` solves its
   system iteratively and ignores whether it converged. With this panel's spread of error
   variances, `wls_var` returned forecasts in the millions and took 37 min per reconcile.

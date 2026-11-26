@@ -1,0 +1,310 @@
+{
+  "params": {
+    "input_size": 14,
+    "stack_types": [
+      "identity",
+      "trend",
+      "seasonality",
+      "exogenous"
+    ],
+    "n_blocks": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "mlp_size": 512,
+    "mlp_depth": 2,
+    "n_harmonics": 3,
+    "n_polynomials": 3,
+    "dropout_prob_theta": 0.1033986146851228,
+    "learning_rate": 0.0005510405699786443,
+    "batch_size": 256,
+    "scaler_type": "robust"
+  },
+  "features": {
+    "deflate": true,
+    "events": false,
+    "fourier_k": 0,
+    "hierarchy_level": null
+  },
+  "futr_exog": [
+    "promo",
+    "discount_depth",
+    "price_index"
+  ],
+  "oversample": {
+    "rule": "rolling",
+    "cap": 15,
+    "multiplier": 5
+  },
+  "y_shift": 1.0,
+  "max_steps": 11718,
+  "seeds": [
+    46335,
+    11207,
+    90218
+  ],
+  "trial": 16,
+  "role": "accuracy_optimal",
+  "selection_rule": "on the validation window: knee (gain first, then distance) if e20 < 0 in >= 2/3 of seeds and median RMSSE <= accuracy-optimal + 02 noise floor; else accuracy-optimal",
+  "acc_limit": 0.652182068285338,
+  "plausible_bound": 7.2814141757892905,
+  "n_trials": 30,
+  "confirm": [
+    {
+      "role": "accuracy_optimal",
+      "key": "511c34ee72",
+      "valid_rmsse": 0.5825070306924387,
+      "test_rmsse": 0.5462545556645744,
+      "valid_e20": -1.369274616241455,
+      "test_e20": -1.275033712387085,
+      "valid_share_seeds_negative": 1.0,
+      "test_share_seeds_negative": 1.0,
+      "test_seed_e20": [
+        -1.3439244031906128,
+        -1.2691164016723633,
+        -1.121607780456543
+      ],
+      "selected": true
+    },
+    {
+      "role": "knee_gain",
+      "key": "f95de01330",
+      "valid_rmsse": 0.5920996329052771,
+      "test_rmsse": 0.5452328751809711,
+      "valid_e20": -1.4438362121582031,
+      "test_e20": -1.2972779273986816,
+      "valid_share_seeds_negative": 1.0,
+      "test_share_seeds_negative": 1.0,
+      "test_seed_e20": [
+        -1.2413415908813477,
+        -1.1713680028915405,
+        -1.3395599126815796
+      ],
+      "selected": false
+    },
+    {
+      "role": "knee_distance",
+      "key": "34ebf4c7c6",
+      "valid_rmsse": 0.5899943623232577,
+      "test_rmsse": 0.5494568968313627,
+      "valid_e20": -1.3871119022369385,
+      "test_e20": -1.4118835926055908,
+      "valid_share_seeds_negative": 1.0,
+      "test_share_seeds_negative": 1.0,
+      "test_seed_e20": [
+        -1.3707897663116455,
+        -1.3831530809402466,
+        -1.4680255651474
+      ],
+      "selected": false
+    },
+    {
+      "role": "incumbent",
+      "key": "3120e70539",
+      "valid_rmsse": 0.5928927893503072,
+      "test_rmsse": 0.5533247690475739,
+      "valid_e20": -1.332137107849121,
+      "test_e20": -1.2533841133117676,
+      "valid_share_seeds_negative": 1.0,
+      "test_share_seeds_negative": 1.0,
+      "test_seed_e20": [
+        -1.2276298999786377,
+        -1.3277350664138794,
+        -1.1210682392120361
+      ],
+      "selected": false
+    }
+  ],
+  "median_rmsse": 0.5462545556645744,
+  "median_e20": -1.275033712387085,
+  "median_rmsse_valid": 0.5825070306924387,
+  "median_e20_valid": -1.369274616241455,
+  "empirical_all_valid": -3.6407070878946453,
+  "saved_model": "05_selected",
+  "forecasts": "05c_clean_floor_clip",
+  "forecast_column": "GFM_clean_floor_clip",
+  "price_clean": {
+    "k": 6.0,
+    "floor": 0.05
+  },
+  "scale_floor": 0.01,
+  "input_clip": 50.0,
+  "recommended": "clean_floor",
+  "cap_kept": true,
+  "rule": [
+    "accuracy within the noise floor (validation)",
+    "price response no weaker (validation)"
+  ],
+  "checks": {
+    "clean_floor": {
+      "accuracy within the noise floor (validation)": true,
+      "price response no weaker (validation)": true
+    },
+    "clean_floor_clip": {
+      "accuracy within the noise floor (validation)": true,
+      "price response no weaker (validation)": true
+    }
+  },
+  "valid": {
+    "05": {
+      "cut20_elasticity": -1.7697,
+      "cut20_lift": 0.4895,
+      "calendar_right_sign": 0.9942,
+      "median_rmsse": 0.5825,
+      "mean_rmsse": 1.0771
+    },
+    "floor": {
+      "cut20_elasticity": -1.9516,
+      "cut20_lift": 0.5481,
+      "calendar_right_sign": 0.9974,
+      "median_rmsse": 0.574,
+      "mean_rmsse": 1.1343
+    },
+    "clean": {
+      "cut20_elasticity": -1.7478,
+      "cut20_lift": 0.4776,
+      "calendar_right_sign": 0.9935,
+      "median_rmsse": 0.5986,
+      "mean_rmsse": 1.1661
+    },
+    "clean_floor": {
+      "cut20_elasticity": -2.026,
+      "cut20_lift": 0.5796,
+      "calendar_right_sign": 0.9922,
+      "median_rmsse": 0.5624,
+      "mean_rmsse": 1.1357
+    },
+    "clean_floor_clip": {
+      "cut20_elasticity": -1.8488,
+      "cut20_lift": 0.5144,
+      "calendar_right_sign": 0.9938,
+      "median_rmsse": 0.567,
+      "mean_rmsse": 1.1449
+    }
+  },
+  "explosions": {
+    "05": {
+      "item-weeks": 466.0,
+      "items": 101.0,
+      "largest multiple": 8074.653301886792
+    },
+    "floor": {
+      "item-weeks": 236.0,
+      "items": 56.0,
+      "largest multiple": 11140290.41509434
+    },
+    "clean": {
+      "item-weeks": 647.0,
+      "items": 156.0,
+      "largest multiple": 15161.75825471698
+    },
+    "clean_floor": {
+      "item-weeks": 350.0,
+      "items": 56.0,
+      "largest multiple": 209410685.58490565
+    },
+    "clean_floor_clip": {
+      "item-weeks": 241.0,
+      "items": 52.0,
+      "largest multiple": 300.18185299804185
+    }
+  },
+  "test_scores": {
+    "all, no cap | median_rmsse": {
+      "GFM_clean_floor_clip": 0.5131,
+      "GFM_selected": 0.5404,
+      "GFM_clean": 0.5425,
+      "GFM_floor": 0.511,
+      "GFM_clean_floor": 0.5142
+    },
+    "all, no cap | mean_rmsse": {
+      "GFM_clean_floor_clip": 1.3736,
+      "GFM_selected": 2.7529,
+      "GFM_clean": 4.0141,
+      "GFM_floor": 1384.3649,
+      "GFM_clean_floor": 25995.5601
+    },
+    "all, no cap | wape": {
+      "GFM_clean_floor_clip": 1.4618,
+      "GFM_selected": 0.4036,
+      "GFM_clean": 3.2388,
+      "GFM_floor": 12.6165,
+      "GFM_clean_floor": 220.7716
+    },
+    "all, capped | median_rmsse": {
+      "GFM_clean_floor_clip": 0.5131,
+      "GFM_selected": 0.5404,
+      "GFM_clean": 0.5425,
+      "GFM_floor": 0.511,
+      "GFM_clean_floor": 0.5142
+    },
+    "all, capped | mean_rmsse": {
+      "GFM_clean_floor_clip": 1.2696,
+      "GFM_selected": 1.2919,
+      "GFM_clean": 1.3012,
+      "GFM_floor": 1.2708,
+      "GFM_clean_floor": 1.2724
+    },
+    "all, capped | wape": {
+      "GFM_clean_floor_clip": 0.2476,
+      "GFM_selected": 0.2579,
+      "GFM_clean": 0.261,
+      "GFM_floor": 0.2515,
+      "GFM_clean_floor": 0.2559
+    },
+    "sample, no cap | median_rmsse": {
+      "GFM_clean_floor_clip": 0.52,
+      "GFM_selected": 0.5464,
+      "GFM_clean": 0.5508,
+      "GFM_floor": 0.5226,
+      "GFM_clean_floor": 0.5193
+    },
+    "sample, no cap | mean_rmsse": {
+      "GFM_clean_floor_clip": 1.7219,
+      "GFM_selected": 1.0666,
+      "GFM_clean": 2.7782,
+      "GFM_floor": 1.4885,
+      "GFM_clean_floor": 2.4308
+    },
+    "sample, no cap | wape": {
+      "GFM_clean_floor_clip": 10.6749,
+      "GFM_selected": 0.2569,
+      "GFM_clean": 0.2657,
+      "GFM_floor": 6.9848,
+      "GFM_clean_floor": 21.8711
+    }
+  },
+  "test_response": {
+    "05": {
+      "cut20_elasticity": -1.7922,
+      "cut20_lift": 0.4909,
+      "calendar_right_sign": 0.9942
+    },
+    "floor": {
+      "cut20_elasticity": -1.9959,
+      "cut20_lift": 0.5634,
+      "calendar_right_sign": 0.9971
+    },
+    "clean": {
+      "cut20_elasticity": -1.7252,
+      "cut20_lift": 0.4688,
+      "calendar_right_sign": 0.9935
+    },
+    "clean_floor": {
+      "cut20_elasticity": -1.9147,
+      "cut20_lift": 0.5371,
+      "calendar_right_sign": 0.995
+    },
+    "clean_floor_clip": {
+      "cut20_elasticity": -1.8232,
+      "cut20_lift": 0.5026,
+      "calendar_right_sign": 0.9936
+    }
+  },
+  "runs": {
+    "valid": "05c_valid_clean_floor_clip",
+    "test": "05c_clean_floor_clip"
+  }
+}

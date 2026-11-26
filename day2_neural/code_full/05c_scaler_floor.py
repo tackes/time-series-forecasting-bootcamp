@@ -39,12 +39,14 @@
 #
 # **Part 2 (sections 6–9)** cleans the prices first, then tests two more arms: cleaned
 # prices alone, and cleaned prices with the floor. That part was added after part 1's result
-# showed a data error behind the worst explosions; part 1 is unchanged.
+# showed a data error behind the worst explosions; part 1 is unchanged. **Part 3 (sections
+# 10–11)** adds a clip on the scaled price inputs, after part 2 showed large real price moves
+# still exploding.
 #
 # **In the chain:** reads `05_selected`, `02_shortlist` and `08_reconcile`, 05b's cached
-# validation and probe runs of 05, and 11's all-series forecasts. Writes `05c_scaler_floor`
-# and `05c_price_clean`. Later notebooks read neither yet: carrying an arm forward means
-# cleaned prices for every price-aware model and a rerun of 05 → 11.
+# validation and probe runs of 05, and 11's all-series forecasts. Writes `05c_scaler_floor`,
+# `05c_price_clean` and `05c_input_clip`. Later notebooks read none of them yet: carrying an
+# arm forward means cleaned prices for every price-aware model and a rerun of 05 → 11.
 
 # %%
 from dataclasses import replace
@@ -84,10 +86,11 @@ def everywhere(d: gd.NixtlaData, window) -> gd.NixtlaData:
                    futr_df=bc.to_nixtla(window, d.futr_exog).drop(columns="y"))
 
 
-def floored_model(d: gd.NixtlaData, alias: str = "GFM_floor", floor: float | None = FLOOR):
+def floored_model(d: gd.NixtlaData, alias: str = "GFM_floor", floor: float | None = FLOOR,
+                  clip: float | None = None):
     def build(seed):
         model = gd.build_nbeatsx(params, d, max_steps, seed, alias)
-        return model if floor is None else gd.floor_robust_scaler(model, floor)
+        return model if floor is None else gd.floor_robust_scaler(model, floor, clip=clip)
     return build
 
 
@@ -502,6 +505,130 @@ gd.save_config("05c_price_clean", {
 
 # %% [markdown]
 # <!-- DRAFT: Graeme to edit -->
+# ## 10. Part 3: clipping the scaled price inputs
+#
+# The floor bounds the *spread*, so a small move in a near-flat input stays small. It does not
+# bound a large move: `1120_S1`'s price at 5× its input-window level is still ≈ 400 scaled
+# units. Clipping bounds the scaled inputs themselves. The target is never clipped.
+#
+# **How far to clip** was chosen from the inputs alone, before any fit. With the floor, a
+# normal 20% cut is already ≈ 20 units. On the cleaned test-window inputs, the scaled
+# `price_index` has a 99th percentile of ≈ 43 and a 99.9th of ≈ 75 (`discount_depth` ≈ 23 and
+# ≈ 43; `promo` never above 6). A clip of ±10 would flatten 40% of series' real price
+# signal. **±50** touches ≈ 0.5% of item-weeks and cuts the worst (≈ 440) about ninefold.
+#
+# **The rule**, as section 7's: within the noise floor of 05 on validation, and a price
+# response no weaker. Of every arm that passes (clean + floor from part 2, or clean + floor +
+# clip), the lower validation median RMSSE is recommended. The cap stays either way.
+
+# %%
+CLIP = 50.0
+alias_clip = "GFM_clean_floor_clip"
+with bc.Timer() as t:
+    clip_valid = gd.fit_seeds(floored_model(valid_clean, alias_clip, FLOOR, CLIP),
+                              everywhere(valid_clean, valid), "05c_valid_clean_floor_clip",
+                              extras=valid_extras)
+    clip_test = gd.fit_seeds(floored_model(data_clean, alias_clip, FLOOR, CLIP),
+                             everywhere(data_clean, test), "05c_clean_floor_clip",
+                             extras=test_extras)
+if gd.TRAIN:
+    print(f"part 3 fits: {t.seconds / 60:.1f} min")
+gd.summaries(clip_valid + clip_test)[["name", "seed", "fit_seconds", "best_frac",
+                                       "final_over_best"]].round(3)
+
+# %%
+fc = seed_mean(clip_valid, eval_ids)
+rmsse = gd.per_series(gd.score(fc, valid, inner_train))
+valid3 = pd.concat([valid2, pd.DataFrame({"clean_floor_clip": {
+    **response_numbers(clip_valid), "median_rmsse": float(rmsse[alias_clip].median()),
+    "mean_rmsse": float(rmsse[alias_clip].mean())}}).T])
+all3 = all_arms.merge(seed_mean(clip_test, all_ids), on=["unique_id", "ds"])
+arm_cols3 = {**arm_cols, "clean_floor_clip": alias_clip}
+explosions3 = pd.DataFrame({arm: exploding(all3, col, train)
+                            for arm, col in arm_cols3.items()}).T
+capped3 = all3.copy()
+for col in arm_cols3.values():
+    capped3[col] = capped3[col].clip(upper=capped3["unique_id"].map(top) * CAP)
+test_scores3 = pd.concat({"all, no cap": summary(all3, all_ids),
+                          "all, capped": summary(capped3, all_ids),
+                          "sample, no cap": summary(all3, eval_ids)}, axis=1)
+test_response3 = pd.concat([test_response2, pd.DataFrame(
+    {"clean_floor_clip": response_numbers(clip_test)}).T])
+valid3.round(4)
+
+# %%
+explosions3
+
+# %%
+test_scores3.round(3)
+
+# %%
+test_response3.round(4)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ## 11. The decision for part 3
+
+# %%
+checks3 = {}
+for arm in ["clean_floor", "clean_floor_clip"]:
+    checks3[arm] = {
+        "accuracy within the noise floor (validation)":
+            valid3.loc[arm, "median_rmsse"] - valid3.loc["05", "median_rmsse"] <= noise_floor,
+        "price response no weaker (validation)":
+            (valid3.loc[arm, "cut20_elasticity"] <= valid3.loc["05", "cut20_elasticity"] + 0.1)
+            and (valid3.loc[arm, "calendar_right_sign"]
+                 >= valid3.loc["05", "calendar_right_sign"] - 0.01)}
+passing3 = [arm for arm in checks3 if all(checks3[arm].values())]
+recommended3 = min(passing3, key=lambda a: valid3.loc[a, "median_rmsse"]) if passing3 else "05"
+print(f"recommended: {recommended3} (the cap stays in every case)")
+pd.DataFrame(checks3)
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
+# ### Reading the result
+#
+# * **The rule recommends clean + floor**, but it is a tie: validation 0.562 against 0.567 for
+#   clean + floor + clip, 0.005 apart, inside the noise floor. Both beat 05 (0.583).
+# * **The clip does what it was for.** The largest forecast falls from 2 × 10⁸ times the
+#   item's largest week to 300×; `1120_S1` no longer explodes. Capped, the clipped arm has
+#   the best all-series WAPE (0.248) and ties on median RMSSE (0.513).
+# * **One explosion is left, and it is not the inputs.** In seed 46335, `6653_S1`, a best
+#   seller, is forecast at ≈ 900× its largest week, with every scaled input inside ±5 and
+#   ordinary promotions. That is a rare blow-up inside the network, which no input fix can
+#   reach; the other two seeds are clean (uncapped all-series WAPE 0.235 and 0.268).
+# * **The price response is a little weaker with the clip** (−1.85 against −2.03), still
+#   stronger than 05's −1.77.
+#
+# *Exact numbers vary with seed and hardware.*
+
+# %%
+sample_clip = seed_mean(clip_test, eval_ids)
+gd.save_forecasts(sample_clip, "05c_clean_floor_clip")
+gd.record(sample_clip, test, train, lab=f"05c clean + floor + clip ({len(gd.SEEDS)}-seed mean)",
+          fit_seconds=gd.summaries(clip_test)["fit_seconds"].mean(),
+          notes="fit_seconds is per seed")
+gd.save_config("05c_input_clip", {
+    **cfg_clean,
+    "scale_floor": FLOOR,
+    "input_clip": CLIP,
+    "seeds": gd.SEEDS,
+    "recommended": recommended3,
+    "cap_kept": True,
+    "rule": list(next(iter(checks3.values()))),
+    "checks": {arm: {k: bool(v) for k, v in c.items()} for arm, c in checks3.items()},
+    "valid": valid3.round(4).to_dict("index"),
+    "explosions": explosions3.to_dict("index"),
+    "test_scores": {f"{a} | {b}": v for (a, b), v in test_scores3.round(4).to_dict().items()},
+    "test_response": test_response3.round(4).to_dict("index"),
+    "runs": {"valid": "05c_valid_clean_floor_clip", "test": "05c_clean_floor_clip"},
+    "forecasts": "05c_clean_floor_clip",
+    "forecast_column": alias_clip,
+})
+gd.median_board("05c")
+
+# %% [markdown]
+# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # The robust scaler's tiny spreads were one cause of the explosions, and the floor removes it:
@@ -515,9 +642,11 @@ gd.save_config("05c_price_clean", {
 # explosions. With the floor it is the best GFM so far on validation (0.562), with the
 # strongest price response (−2.03), and it ties the floor alone on the test window.
 #
-# Neither fix removes the explosions. The remaining ones are large real moves in a price
-# input relative to its input window, passed linearly to the forecast. A fix at that level
-# would bound the scaled inputs themselves (clip them at, say, ±10), not their spread. That
-# is untested. Until then: **clean + floor, with the cap**, is the recommended GFM, and
-# carrying it forward means cleaned prices for every price-aware model and a rerun of
-# 05 → 11.
+# Part 3 clipped the scaled price inputs at ±50, which bounds the large real price moves the
+# floor leaves alone. It removes the input-driven explosions; what is left is a rare blow-up
+# inside the network in one seed, with ordinary inputs. That is why the cap stays: it is the
+# guard for a failure no input treatment can prevent.
+#
+# **The recommendation, by the rule: clean prices + floor, with the cap.** Clean + floor +
+# clip ties it on validation and has far smaller worst cases. Carrying either forward means
+# cleaned prices for every price-aware model and a rerun of 05 → 11.

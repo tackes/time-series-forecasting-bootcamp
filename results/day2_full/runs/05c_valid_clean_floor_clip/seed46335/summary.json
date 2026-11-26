@@ -1,0 +1,14 @@
+{
+  "name": "05c_valid_clean_floor_clip",
+  "seed": 46335,
+  "alias": "GFM_clean_floor_clip",
+  "fit_seconds": 358.2,
+  "max_steps": 11718,
+  "n_train_series": 38236,
+  "neg_share": 0.04316537820974919,
+  "oscillation": 0.0075600591188995855,
+  "best_step": 9928,
+  "best_frac": 0.8472435569209763,
+  "best_valid": 3540.800048828125,
+  "final_over_best": 1.0046272811561818
+}

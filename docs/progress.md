@@ -320,3 +320,16 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
   (WAPE 221, one item: `1120_S1`, real prices 2–5× its input window). The floor bounds small
   moves, not large ones; clipping the scaled inputs would be the next arm. **Cap stays.**
 - **Cost:** 74 min on one GPU (12 fits of ≈ 6 min).
+
+## 05c part 3: clipping the scaled price inputs at ±50 (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Clip level from the inputs alone:** with the floor, the scaled `price_index` has a 99th
+  percentile of ≈ 43; ±10 would flatten 40% of series' real price signal, ±50 touches ≈ 0.5%
+  of item-weeks.
+- **Result:** validation 0.567 against clean + floor's 0.562 (a tie; the rule picks clean +
+  floor). Worst forecast 300× the item's largest week (clean + floor: 2 × 10⁸). Capped,
+  all-series WAPE 0.248, the best GFM.
+- **The last explosion is inside the network:** seed 46335 forecasts `6653_S1` (a best
+  seller) at ≈ 900× with every scaled input within ±5. No input fix can reach it, so the cap
+  stays as the guard.
+- **Cost:** 36 min on one GPU (6 fits).
