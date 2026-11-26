@@ -285,3 +285,21 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
   minutes). Scores in `results/day2_full/leaderboard_all_series.csv`, forecasts in
   `results/day2_full/all_series/`.
 
+
+## 05c: flooring the robust scaler's spread (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Diagnosis first (read-only script):** in exploding items, `promo` is often exactly flat
+  then moves, but the scaler's fallback keeps it near 1. `discount_depth` and `price_index`
+  are near-flat (spread ≈ 0.0004 and 0.001, from CPI drift), so a discount scales to hundreds
+  of units. Both move together on every discount, so dropping one would not help.
+- **Arm:** 05's settings with the robust scaler's spread floored at 0.01
+  (`gd.floor_robust_scaler`), 3 seeds on validation and 3 on the test window, all series.
+- **Result:** accuracy and price response pass (validation 0.574 against 0.583; one-week cut
+  elasticity −1.95 against −1.77); explosions only halve (466 → 236 item-weeks, 101 → 56
+  items), short of the rule's tenfold. **The cap stays.**
+- **Found on the way:** `1120_S1` has `price_index` values up to 29,000 (a price in the wrong
+  units); 29 series exceed 3 somewhere in training. With the floor it carries almost all of
+  the uncapped WAPE. One seed (90218) also blows up a normal-priced item (`6653_S1`, ≈ 550×).
+- **Open:** the floor plus the cap beats 05 (capped all-series median 0.511 against 0.540) but
+  was not in the rule; cleaning out-of-range prices would help every price-aware model.
+- **Cost:** 37 min on one GPU (6 fits of ≈ 6 min).

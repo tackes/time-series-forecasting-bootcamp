@@ -541,6 +541,34 @@ NBEATSX_DEFAULTS = {
 }
 
 
+def _floored_robust_statistics(x, mask, dim=-1, eps=1e-6, floor: float = 0.0):
+    """The library's robust statistics, with the spread never below ``floor``."""
+    from neuralforecast.common._scalers import robust_statistics
+
+    median, spread = robust_statistics(x, mask, dim=dim, eps=eps)
+    return median, spread.clamp(min=floor)
+
+
+def floor_robust_scaler(model, floor: float):
+    """Floor the robust window scaler's spread at ``floor`` in ``model``, in place.
+
+    The library scales each input over the input weeks by its median and MAD. A covariate
+    that barely moved there (a price drifting by 0.001 with CPI) gets a tiny spread, so a
+    discount in the forecast weeks becomes hundreds of scaled units. The floor bounds that.
+    The patch is on the model instance, so it survives the copy ``NeuralForecast.fit`` makes,
+    but a model loaded from disk has the library's scaler again.
+    """
+    from neuralforecast.common._scalers import TemporalNorm
+
+    norms = [m for m in model.modules()
+             if isinstance(m, TemporalNorm) and m.scaler_type == "robust"]
+    if not norms:
+        raise ValueError("floor_robust_scaler: the model has no robust scaler")
+    for norm in norms:
+        norm.compute_statistics = partial(_floored_robust_statistics, floor=floor)
+    return model
+
+
 def build_nbeatsx(params: dict, data: NixtlaData, max_steps: int, seed: int, alias: str,
                   recipe: bool = True, loss=None, valid_loss=None):
     """An NBEATSx from a params dict (as stored in configs) plus the training recipe.

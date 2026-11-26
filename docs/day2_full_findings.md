@@ -93,6 +93,9 @@ All forecasts capped at 3× the item's largest training week, as in 08.
   weeks steepens the response further (chosen arm, validation 0.593).
 - **05 HPO round 2.** The accuracy-optimal trial wins (test 0.546). Tuning moved accuracy,
   not the price response, which barely changes across the Pareto front.
+- **05c Scaler floor.** Flooring the robust scaler's spread at 0.01 halves the exploding
+  forecasts and improves accuracy (validation 0.574 against 0.583), but the rule written in
+  advance needed a tenfold cut, so the cap stays. Not yet carried forward.
 - **05b Synthetic discounts.** Training copies with planted discounts did not help: tied on
   the one-week cut, worse on validation (0.593 against 0.583). 05 goes forward.
 - **06 Clusters.** One pooled model beats per-cluster models (0.546 against 0.570); they lose
@@ -141,7 +144,13 @@ All forecasts capped at 3× the item's largest training week, as in 08.
 - **Exploding item forecasts.** On every series (08, 11) a few hundred N-BEATSx item forecasts
   explode, which put the bottom-up total 47% too high and the GFM's all-series WAPE from 0.26
   to 0.40. Fixed by capping each item at 3× its largest training week, applied to every model.
-  The likely cause is the robust scaler on inputs that did not move in the input window.
+  Part of the cause is the robust scaler: `discount_depth` and `price_index` barely move in a
+  quiet input window (CPI drift of ≈ 0.001), so a discount becomes hundreds of scaled units.
+  **05c** floors the scaler's spread at 0.01. That halves the exploding items (101 → 56) and
+  makes the GFM better (capped median RMSSE on all series 0.511 against 0.540; one-week cut
+  elasticity −1.95 against −1.77), but it is not a cure. The worst remaining case is a data
+  error (`1120_S1` has `price_index` up to 29,000; 29 series have one above 3), and one seed
+  still blows up a normal-priced item. So the cap stays; floor *and* cap is an untested arm.
 - **A silent library bug in sparse MinT.** `hierarchicalforecast`'s `MinTraceSparse` solves its
   system iteratively and ignores whether it converged. With this panel's spread of error
   variances, `wls_var` returned forecasts in the millions and took 37 min per reconcile.
