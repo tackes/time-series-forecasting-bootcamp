@@ -11,12 +11,11 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 05 (full data) — Lab: tuning for accuracy *and* price response (30 min)
 #
 # Notebook 02 tuned for accuracy alone. Here we tune for two things at once: accuracy, and a
-# price response with the right sign and a plausible size. The research found these pull
-# against each other (§6, [100k set]). So there is no single best setting, only a **front** of
+# price response with the right sign and a plausible size. Our research found that these pull
+# against each other (§6, [100k set]), so there is no single best setting, only a **front** of
 # settings where you cannot improve one without giving up some of the other.
 #
 # Goals
@@ -26,9 +25,9 @@
 # 3. Find the Pareto front and its knee, two ways, and choose by a rule on validation numbers.
 # 4. Confirm on the test window, once, for a pre-registered set of settings.
 #
-# The research's most important lesson (`docs/gfm_learnings.md` §6, [100k set]): **accuracy
-# transferred from tuning to test; elasticity did not.** It shrank 7–18×, and no setting could
-# be told apart from zero. This notebook checks whether that holds here.
+# The most important lesson from our research (`docs/gfm_learnings.md` §6, [100k set]) was that
+# **accuracy transferred from tuning to test, but elasticity did not.** It shrank 7–18×, and no
+# setting could be told apart from zero. In this notebook we check whether that holds here.
 #
 # **In the chain:** reads `04_price`, `02_shortlist` and `01_recipe`, writes `05_selected`.
 
@@ -52,23 +51,22 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 warnings.filterwarnings("ignore", category=optuna.exceptions.ExperimentalWarning)  # TPE options
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: a front, not a winner
 #
-# Choosing a car on fuel economy and speed is like this. Some cars are worse on both, and you
-# drop them. The rest form a **front**: to gain speed you must give up economy. The **knee** is
-# the car where the trade turns bad, where a little more speed starts to cost a lot of economy.
+# When we judge a model on two goals, some settings are worse on both, and we can drop them. The
+# rest form a **front**, where gaining on one goal means giving up some of the other. The
+# **knee** is the point on the front where the trade turns bad, i.e. where a little more price
+# response starts to cost a lot of accuracy.
 #
-# Here each trial is a car: accuracy along the bottom, price response up the side, lower is
-# better on both. A trial is on the front if no other trial beats it on both.
+# Each trial here is plotted with accuracy along the bottom and price response up the side,
+# where lower is better on both. A trial is on the front if no other trial beats it on both.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. Settings carried forward
 #
 # The features, covariates and oversampling come from `04_price`, and the noise floor from
-# `02_shortlist`. The **incumbent** is the model 04 selected. The cell also prints a rough GPU
-# budget from 01's minutes per fit.
+# `02_shortlist`. The **incumbent** is the model that 04 selected. The cell also prints a rough
+# GPU budget from 01's minutes per fit.
 
 # %%
 cfg01 = gd.load_config("01_recipe")
@@ -94,14 +92,13 @@ if minutes:
 print(f"data from 04: {data_cfg}")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. Two windows: tune on validation, confirm on test
 #
-# This is the fix for the research's early mistake of tuning on the test window (§1, [method]).
-# Tuning fits use weeks before `VALID_START` and are scored on the 14 weeks after it. Every
-# per-series statistic, including which series get discount copies, comes from those inner
-# weeks only; `gp.prepare(cfg, cutoff=bc.VALID_START)` builds the tuning data that way. The
-# test window is used once, in section 7.
+# This fixes our research's early mistake of tuning on the test window (§1, [method]). Tuning
+# fits use the weeks before `VALID_START` and are scored on the 14 weeks after it. Every
+# per-series statistic, the oversampling included, comes from those inner weeks only;
+# `gp.prepare(cfg, cutoff=bc.VALID_START)` builds the tuning data that way. The test window is
+# used once, in section 7.
 
 # %%
 raw = gd.train_panel()
@@ -161,12 +158,11 @@ def evaluate(runs: list[dict], window, history) -> dict:
 
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. The incumbent, and the rules fixed before any trial
 #
-# First the 04 model on the validation window, with 3 seeds. Its accuracy sets the limit. The
-# plausibility bound comes from the empirical elasticity of the weeks before `VALID_START`,
-# so no validation or test week shapes the objective.
+# We start with the 04 model on the validation window, with 3 seeds, and its accuracy sets the
+# limit. The plausibility bound comes from the empirical elasticity of the weeks before
+# `VALID_START`, so no validation or test week shapes the objective.
 
 # %%
 incumbent_runs = fit_config(incumbent_params, inner_data, "05_trial", gd.SEEDS, valid_report)
@@ -185,29 +181,29 @@ print(f"accuracy limit {ACC_LIMIT:.4f} | empirical elasticity before VALID_START
       f"{empirical_all:.2f} | plausibility bound |e| <= {PLAUSIBLE_BOUND:.2f}")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # **The rules, fixed here, before any trial runs:**
 #
 # * **Objective 1, accuracy:** median RMSSE of the seed-mean forecast on the validation window.
 #   It never sees elasticity.
 # * **Objective 2, elasticity:** the median arc elasticity at ±20% of the **seed-mean sweep**
 #   (units averaged over seeds for each series and shift, then the arc elasticity, as in 04;
-#   single channel, report series). Set to 0 if fewer than two seeds finished, if it is not
-#   finite, or if `|e|` is above the plausibility bound: **twice the empirical elasticity** of
-#   the weeks before `VALID_START`. (The research used 2, but its empirical value was about
-#   −0.5; here it is ≈ −3.6.)
+#   single channel, report series). It is set to 0 if fewer than two seeds finished, if it is
+#   not finite, or if `|e|` is above the plausibility bound of **twice the empirical
+#   elasticity** of the weeks before `VALID_START`. (Our research used 2, but its empirical
+#   value was about −0.5; here it is ≈ −3.6.)
 # * **Constraint:** a trial is feasible only if its accuracy is at most **1.10 × the
 #   incumbent's**.
 # * **Confirm set:** the accuracy-optimal feasible point, the knee by both methods, and the
 #   incumbent as a control. Each is refitted on the full training window and scored on the test
 #   window once, with `CONFIRM_SEEDS`. This reports what transferred; it chooses nothing.
 # * **Selection, on the validation numbers:** a knee wins if its validation elasticity is
-#   negative in at least 2 of 3 seeds **and** its validation median RMSSE is within the 02
-#   noise floor of the accuracy-optimal point's. The gain knee is checked first, then the
-#   distance knee. Otherwise the accuracy-optimal point wins.
+#   negative in at least 2 of 3 seeds **and** its validation median RMSSE is within the 02 noise
+#   floor of the accuracy-optimal point's. We check the gain knee first, then the distance knee.
+#   Otherwise the accuracy-optimal point wins.
 #
-# Weight decay was in the research's search space. It is left out here: the library's default
-# optimiser has none, and adding one would change how every later notebook builds the model.
+# Weight decay was in our research's search space, but we leave it out here: the library's
+# default optimiser has none, and adding one would change how every later notebook builds the
+# model.
 
 # %%
 SELECTION_RULE = ("on the validation window: knee (gain first, then distance) if e20 < 0 in "
@@ -256,14 +252,14 @@ def constraint(trial) -> list[float]:
 
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. The search
 #
-# Forced **coverage cells** run first: every block layout at two learning rates, so the search
-# does not miss a region by chance. Then Optuna's TPE sampler takes over. The study is stored
-# in SQLite and every fit is cached by a hash of its settings, so a crash resumes where it
-# stopped: `gd.run_study` queues an interrupted trial again, and its finished seeds load from
-# the cache.
+# Forced **coverage cells** run first, i.e. every block layout at two learning rates, so the
+# search does not miss a region by chance. Then Optuna's TPE sampler takes over: after a few
+# tries, it proposes settings that look like the good trials and unlike the bad ones. The study
+# is stored in SQLite and every fit is cached by a hash of its settings, so a crash resumes
+# where it stopped: `gd.run_study` queues an interrupted trial again, and its finished seeds
+# load from the cache.
 
 # %%
 def run_study() -> None:
@@ -313,20 +309,19 @@ show_cols = ["trial", "accuracy", "elasticity", "e20_raw", "feasible", "n_blocks
 trials.sort_values("accuracy")[show_cols].round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. The front and the knee
 #
-# **How to read the Pareto chart.** Each dot is one trial: median validation RMSSE along the
-# bottom, median e20 up the side (more negative is a stronger response). Blue dots are
-# feasible and grey dots broke the accuracy limit. The red line joins the front. The open
+# **How to read the Pareto chart.** Each dot is one trial, with median validation RMSSE along
+# the bottom and median e20 up the side (more negative is a stronger response). Blue dots are
+# feasible and grey dots broke the accuracy limit. The red line joins the front, and the open
 # diamond is the incumbent.
 #
-# The knee is found two ways, and both are marked:
+# We find the knee two ways, and mark both:
 #
 # * **gain** (star): the most elasticity gained per unit of accuracy lost, against the
 #   accuracy-optimal point;
-# * **distance** (plus): the point furthest from the straight line joining the front's two
-#   ends, with both axes scaled 0–1.
+# * **distance** (plus): the point furthest from the straight line joining the front's two ends,
+#   with both axes scaled 0–1.
 
 # %%
 feasible = trials[trials["feasible"]]
@@ -341,25 +336,24 @@ gplt.plot_pareto(trials, front, knees, incumbent=(incumbent["accuracy"], incumbe
 front[show_cols].round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * Dots at exactly 0 on the vertical axis had an implausible or undefined response, and were
 #   scored as "no response".
-# * A steep front means a little accuracy buys a lot of response. A flat one means the trade is
-#   poor. Front size 3 of 30 trials; knee e20 ≈ −1.44 (gain) and −1.39 (distance).
-# * If the two knee methods disagree, the research's rule was that a person decides. Here the
+# * A steep front means a little accuracy buys a lot of response; a flat one means the trade is
+#   poor. Front size 3 of 30 trials; knee e20 ≈ −1.44 (gain) and −1.39 (distance). The price
+#   response barely moves across the front.
+# * If the two knee methods disagree, our research's rule was that a person decides. Here the
 #   rule from section 3 decides between them, on the validation numbers.
 #
 # *Reference run: full panel, GPU box, 3 seeds per trial. Exact numbers vary with seed and
 # hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. Applying the selection rule, on the validation numbers
 #
-# The rule from section 3, applied as written to each trial's validation accuracy and its
-# per-seed validation e20. The test window has not been used yet.
+# We apply the rule from section 3, exactly as written, to each trial's validation accuracy and
+# its per-seed validation e20. The test window has not been used yet.
 
 # %%
 roles = {}
@@ -402,13 +396,12 @@ print(f"selected on validation: {selected_role} ({selected_key})")
 valid_table.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 7. The confirm run: refit on the full training window, score the test window once
 #
 # Each setting in the confirm set is refitted on all training weeks and scored on test. This
-# reports what transferred; it does not change the choice above. The chart after the table
-# puts validation against test, for accuracy and for elasticity. On the dashed diagonal a
-# setting scored the same on both windows.
+# reports what transferred and does not change the choice above. The chart after the table puts
+# validation against test, for accuracy and for elasticity; a setting on the dashed diagonal
+# scored the same on both windows.
 
 # %%
 confirm_params = {role: json.loads(trials.loc[idx, "params"]) for role, idx in roles.items()}
@@ -460,22 +453,21 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * **Accuracy:** if the points keep their order from left to right, tuning on validation
 #   transferred to the test window.
-# * **Elasticity:** in the research the tuned elasticities shrank 7–18× on the new window, and
+# * **Elasticity:** in our research the tuned elasticities shrank 7–18× on the new window, and
 #   no setting could be told apart from zero (§6, [100k set]). Points above the dashed line here
-#   (closer to zero on test) mean the response measured during tuning was optimistic.
-# * Remember the windows differ: validation has no event week, and test opens with Easter.
+#   (closer to zero on test) mean the response we measured during tuning was optimistic.
+# * Remember that the windows differ: validation has no event week, and test opens with Easter.
 # * Knee e20: validation ≈ −1.44 (gain) and −1.39 (distance), test ≈ −1.30 and −1.41.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The confirm set on test, in the strength, by-class and arm comparison charts from notebook 04.
+# Here is the confirm set on test, in the strength, by-class and arm comparison charts from
+# notebook 04.
 
 # %%
 strength = {}
@@ -493,10 +485,9 @@ seed_e20 = {role: res["seed_e20"] for role, res in confirm_eval.items()}
 gplt.plot_arm_comparison(confirm_arms, metrics=seed_rmsse, elasticity=seed_e20, band=band)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 8. The selected setting on the board
 #
-# The setting chosen in section 6. Its seed-mean test forecast goes on the board as
+# This is the setting chosen in section 6. Its seed-mean test forecast goes on the board as
 # `GFM_selected`, and its first seed is saved for the later notebooks.
 
 # %%
@@ -544,16 +535,15 @@ gd.save_config("05_selected", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # * Did accuracy keep its order from validation to test? Did elasticity? If elasticity shrank,
 #   was it the window (a different 14 weeks, perhaps with Easter in it) or the settings?
-# * The rule was fixed before the trials. What would have gone wrong if we had looked at the
-#   front first and then decided what "good enough" accuracy meant?
-# * Three seeds per trial is the minimum. The research found a 3-seed mean picked extremes that
-#   did not hold up, and advised 6+ seeds for elasticity claims (§6). How many would you want
-#   before quoting an elasticity to a pricing team?
+# * We fixed the rule before the trials. What would have gone wrong if we had looked at the front
+#   first and then decided what "good enough" accuracy meant?
+# * Three seeds per trial is the minimum. Our research found that a 3-seed mean picked extremes
+#   that did not hold up, and advised 6+ seeds for elasticity claims (§6). How many would you
+#   want before quoting an elasticity to a pricing team?
 #
 # **Try it:** change `CONFIRM_SEEDS` to five seeds and rerun only section 7. The choice cannot
 # change, because it was made on validation. Does the selected setting's test elasticity move,

@@ -14,7 +14,7 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
     notebook's board shows only its own and earlier notebooks' rows, never later ones.
 - **Tune on validation, test once.**
   - HPO and model choice use the window from `bc.VALID_START`. Pass `cutoff=` explicitly to `bc.split`.
-  - Per-series statistics use training weeks only: scaling, statics, oversampling counts, the reference price and clusters.
+  - Per-series statistics use training weeks only: scaling, statics, oversampling, the reference price and clusters.
 - **Configs carry ideas forward.** Each notebook writes `results/day2_full/configs/NN_<name>.json` and reads the previous one rather than hardcoding settings.
 - **Train once, load on the day.**
   - `GD_TRAIN=1` fits and saves; the default only loads.
@@ -76,7 +76,6 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   - `## Intuition:`;
   - numbered sections, with `### Reading the result` after key outputs;
   - `## Discussion` and `**Try it:**`.
-- Prose not yet reviewed carries `<!-- DRAFT: Graeme to edit -->`.
 
 ## Running
 ```bash
@@ -96,9 +95,9 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `01_recipe` | 01 | `params` (NBEATSx, see `gd.NBEATSX_DEFAULTS`), `recipe`, ★`y_shift`, ★`futr_exog`, `stat_exog`, `max_steps`, `seeds`, `minutes_per_fit`, `median_rmsse`, `seed_spread`, `saved_model` |
 | `02_shortlist` | 02 | `base_params`, `grid`, `max_steps`, `seeds`, `noise_floor`, `shortlist` (list of `{params, median_rmsse_valid, seed_sd}`), `best_params`, ★`futr_exog`, ★`y_shift` |
 | `03_features` | 03 | `params`, ★`features` (`deflate`, `events`, `fourier_k`, `hierarchy_level`), ★`futr_exog`, ★`y_shift`, `max_steps`, `seeds`, `median_rmsse` |
-| `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
+| `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (its settings) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
 | `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `role` (chosen on validation), `selection_rule`, `confirm`, `saved_model`, `forecasts`, `forecast_column` |
-| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
+| `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic`, `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
 | `05c_scaler_floor` | 05c | as `05_selected`, plus `scale_floor` (0.01), `use` (`"floor"` or `"cap"`), `checks`, `valid`, `explosions` (item-weeks above the cap, every series), `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` (`GFM_floor`) |
 | `05c_price_clean` | 05c | as `05_selected`, plus ★`price_clean` (`k`, `floor`: `gp.clean_prices`), `scale_floor`, `replaced`, `recommended` (`"clean"`, `"clean_floor"` or `"05"`), `cap_kept`, `checks`, `valid`, `explosions`, `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` |
 | `05c_input_clip` | 05c | as `05c_price_clean`, plus `input_clip` (50: `gd.floor_robust_scaler(model, floor, clip=)`), `recommended` (the rule's pick: `"clean_floor"`), ★`use` (`"clean_floor_clip"`: carried forward, `chosen_by`, `choice_reason`), `saved_model` (`05c_selected`), `checks`, `valid`, `explosions`, `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` |

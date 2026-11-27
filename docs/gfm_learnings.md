@@ -17,9 +17,9 @@ Each finding is marked **accepted**, **rejected** or **experimental**.
 |---|---|---|---|
 | 0–1 | [single store], daily, ~2,700-series department subset | A hand-built N-BEATSx in Darts, then NeuralForecast | Darts too slow; daily data pulled the model toward noise. **Rejected** |
 | 1→2 | [single store], weekly | NeuralForecast NBEATSx / NHITS, relative-price features, Huber loss | RMSSE ≈ 0.76 → ≈ 0.50. **Accepted** |
-| 2 | [single store] | Oversampling series that have promotions | Stronger, less often perverse elasticity. **Accepted**, in graduated form |
+| 2 | [single store] | Oversampling | Stronger, less often perverse elasticity. **Accepted**, in graduated form |
 | 3 | [single store] | CPI deflation; drop series with price ≤ 0 | Perverse (positive) elasticity largely removed. **Accepted** |
-| 4 | [single store] | NBEATSx vs NHITS, TSMixerx and others; oversampling weight grid | NBEATSx chosen: NHITS gave poor elasticity with oversampling. **Accepted** |
+| 4 | [single store] | NBEATSx vs NHITS, TSMixerx and others; oversampling variants | NBEATSx chosen: NHITS gave poor elasticity with oversampling. **Accepted** |
 | 5 | [100k set] | Scaling up: step budget, filters, scalers, targets, LightGBM benchmark | See §3 |
 | 6a | [100k set] | Training stability | Warm-up, best-weights retention, gradient clip. **Accepted** |
 | 6b–c | [100k set], 50k sample | Optuna HPO: single-objective, then two-objective Pareto | **Accepted** method; results did not fully transfer |
@@ -72,7 +72,7 @@ Each finding is marked **accepted**, **rejected** or **experimental**.
 | Stopping | No early stopping. Run the full budget, then restore the best validation weights (checked every 500 steps) | Usable runs went from 3/6 to 6/6, and the spread of forecast error fell 80% | [100k set] |
 | Gradient clip | 1.0 | 0.1 was erratic; 5.0 lost accuracy | [100k set] |
 | Prices | CPI-deflated | Otherwise inflation looks like a price rise | [single store] |
-| Oversampling | Copy series with real discount weeks (sale < 0.9 × RRP), counted on the training window only. Tiers: 10–24 weeks → 4 copies, 25–49 → 2, 50+ → 1; × sales-class weight × 5; cap 15. Copies are dropped before scoring | More price variation for the model to learn from. The promo flag barely correlates with real discounts (r ≈ −0.03) | [single store] + [100k set] |
+| Oversampling | Rebalance the training data, built from the training window only; the extra training series are dropped before scoring | More price variation for the model to learn from. The promo flag barely correlates with real discounts (r ≈ −0.03) | [single store] + [100k set] |
 | Seeds | At least 3 for any quoted number | Seed noise was bigger than many of the effects | [method] |
 
 ### Rejected
@@ -85,15 +85,6 @@ Each finding is marked **accepted**, **rejected** or **experimental**.
 | Per-series scaling (a competition winner's approach) | Elasticity weakened sharply; ~25% of series became price-insensitive | [100k set] |
 | Automatic divergence cut-off | Fired on every run, including the best one | [100k set] |
 | Daily resolution | Noisy and slow | [single store] |
-
-### Oversampling weight schemes [single store]
-Four class-weight schemes were compared, each run once:
-- **baseline:** mid classes D/E up-weighted;
-- **mid_boost:** a stronger D/E peak;
-- **flat_core:** A, I and J at zero, C–G at 1.5;
-- **volume_scaled:** a smooth taper from the mid classes.
-
-`flat_core` with cap 15 was carried forward. Later seed studies showed seed noise exceeded the gaps between schemes, so treat the ranking as indicative.
 
 ---
 
@@ -165,7 +156,7 @@ class BestWeights(pl.Callback):
      - *sustained*: every horizon week;
      - *pulse*: one week, to show lift in that week and spill into the rest.
      - Pass bar: median elasticity ≤ −0.3 with the right sign.
-   - **Synthetic training discounts** place one-week price cuts in ordinary weeks inside the oversampled copies, with a planted lift schedule. An "echo" check measures how well the model recovers the planted response.
+   - **Synthetic training discounts** add synthetic price changes, with a known lift, to the training data. An "echo" check measures how well the model recovers the planted response.
    - **Experimental.** This is `code_full/05b`.
 
 ### Benchmarks

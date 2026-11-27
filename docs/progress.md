@@ -85,7 +85,7 @@ Total ≈ 200 full-panel fits. Multiply by 01's minutes per fit to get GPU hours
 
 ## Decisions (23 Nov)
 - Plan, learnings doc, CPI source and the −3.6 framing approved.
-- DRAFT tags stay until step 11 (release), then are removed.
+- DRAFT tags stay until step 11 (release), then are removed (done 27 Nov for 00–06 and 12).
 - 06's report-only verdict on test is accepted.
 
 ## Timing log (GPU run, 23–24 Nov)
@@ -132,7 +132,7 @@ Median RMSSE on the 2,000-series eval sample, test window, 3-seed means unless n
   Fourier and event inputs. Calendar + hierarchy is still worse on test (0.647), which holds three
   event weeks. The base arm goes forward.
 - **04 price response:** CPI deflation helps both accuracy and the price response; oversampling
-  promo weeks steepens the response further.
+  deepens the response further.
   | Arm | Valid | Test | e20 valid | e20 test | Perverse (test) |
   |---|---|---|---|---|---|
   | A features | 0.606 | 0.568 | −0.54 | −0.60 | 1.0% |
@@ -184,7 +184,7 @@ headline is a one-week 20% cut, every input rebuilt (`pulse_all`). The sweep sta
 | GFM_synthetic (05b) | 0.546 | −1.73 | +47% | +59% | 99.3% | +26 / +55 / +90% |
 | LightGBM | 0.568 | −1.10 | +28% | +43% | 97.6% | +10 / +27 / +44% |
 | implied by the data (e ≈ −3.6) | | −3.46 | +125% | | | +47 / +125 / +266% |
-| planted in 05b's copies | | −2.08 | +60% | | | +35 / +60 / +150% |
+| planted in 05b's training data | | −2.08 | +60% | | | +35 / +60 / +150% |
 
 - **Every model is right-signed and too weak:** the best gives back about 40% of the lift the
   data implies. Moving the price alone understates the response: LightGBM's one-week cut gives
@@ -195,7 +195,7 @@ headline is a one-week 20% cut, every input rebuilt (`pulse_all`). The sweep sta
   `use` stays "05", so 06–09 did not need rerunning. On test, 05b ties on accuracy and is
   slightly weaker. The 05 reference refit reproduced 05's stored forecasts exactly (gap 0.0).
 - **Echo check:** 05 already gives back about the planted lift up to a 20% cut; at 25–30% both
-  models fall well short of it (+90% against +150% at 30%). The copies taught 05b nothing new.
+  models fall well short of it (+90% against +150% at 30%). The synthetic data taught 05b nothing new.
 - **Chronos-2** reads the price in context: a lift that grows with depth and no spill into other
   weeks, but it is the least consistent (≈ 10% of calendar cuts do not lift its forecast).
 - **RMSSE in 10's table** is on the 1,996 series every model covers, so GFM_synthetic shows 0.543
@@ -287,7 +287,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 
 
 ## 05c: flooring the robust scaler's spread (26 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **Diagnosis first (read-only script):** in exploding items, `promo` is often exactly flat
   then moves, but the scaler's fallback keeps it near 1. `discount_depth` and `price_index`
   are near-flat (spread ≈ 0.0004 and 0.001, from CPI drift), so a discount scales to hundreds
@@ -305,7 +304,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Cost:** 37 min on one GPU (6 fits of ≈ 6 min).
 
 ## 05c part 2: cleaning the prices (26 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **`price_index`** = the week's price ÷ the series' median price before the cutoff (1 =
   usual, 0.8 = 20% off). Bad prices: £0.01–0.05 placeholders (229 weeks, 79 series; they
   look like 99% discounts) and prices beyond 6× or 1/6 of the usual price (196 series in
@@ -322,7 +320,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Cost:** 74 min on one GPU (12 fits of ≈ 6 min).
 
 ## 05c part 3: clipping the scaled price inputs at ±50 (26 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **Clip level from the inputs alone:** with the floor, the scaled `price_index` has a 99th
   percentile of ≈ 43; ±10 would flatten 40% of series' real price signal, ±50 touches ≈ 0.5%
   of item-weeks.
@@ -335,7 +332,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Cost:** 36 min on one GPU (6 fits).
 
 ## Carrying clean + floor + clip forward; 00 and 06–11 on cleaned prices (26 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **Choice:** clean + floor + clip, with the cap, over the rule's tie-break (clean + floor,
   0.005 better on validation, inside the noise floor), for stable training calculations.
   Recorded in `05c_input_clip` (`use`, `chosen_by`, `choice_reason`); reasons and the effect
@@ -356,7 +352,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Cost:** ≈ 2.5 h on one GPU (06 ≈ 1 h, 09 25 min, 08 21 min, 11 16 min, 07b 11 min).
 
 ## Day 1 comparison and the price-plan leak test, 12 (26 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **Nothing new from Day 1 on GitHub:** `day1-framework`'s tip (19 Nov) is already in our
   branch; `main`'s only new change is the v1 Day 2 update (it moves `bootcamp.py` to
   `day2_neural/v1/code/`, same scoring; merging needs `gd_helpers.py` repointed).
@@ -370,7 +365,6 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Cost:** ≈ 5 minutes on one GPU (inference only, LightGBM refit on CPU).
 
 ## Merged `main`: the v1 Day 2 update (27 Nov)
-<!-- DRAFT: Graeme to edit -->
 - **What moved:** the original labs, `bootcamp.py` and the v1 deck now live in
   `day2_neural/v1/`. `gd_helpers.py` and `slides_full/make_figures.py` import from
   `day2_neural/v1/code/`; `bc.RAW_DIR` is pointed at `results/day2_full/raw`.
@@ -382,3 +376,15 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Same numbers:** cached forecasts (00, 10) re-scored with the old and new harness agree
   exactly (WAPE to 1e-16). The new `summarise` adds `median_mase` and `bias_pct` columns.
   No rerun needed.
+
+## Prose pass (27 Nov)
+- **Notebooks 00–06 and 12:** markdown rewritten in a personal, explanatory voice, matching the
+  edited slides (1–21 of the new deck). Direct edits to 00's notebook are folded in. Code
+  cells and saved outputs are unchanged (checked cell by cell), and the DRAFT tags are gone.
+- **Oversampling and synthetic discounts** are now described by their effect, not their
+  mechanics, in the notebook prose and the docs. The code and configs still hold the settings.
+- **Docs:** `stability_choices.md` and `day2_full_findings.md` rewritten in the same voice;
+  tags removed elsewhere.
+- **Not done:** 07, 07b and 08–11 are left for a separate edit, tags included. Their figure links still
+  point at `../slides/img/`, which moved with the v1 update; 00–06 now use
+  `../slides_full/img/`.

@@ -43,7 +43,7 @@ Packt Nov 2026 · Weekly retail sales · 18,692 products · one supermarket
 `neuralforecast` · `statsforecast` · `mlforecast` · `timecopilot` · `polars`
 
 <!--
-DRAFT: Graeme to edit. This copy carries the full-panel results from day2_neural/code_full (trained on all 17,241 series on a GPU, scored on the original labs' 2,000-series sample; notebook 11 rescores on all 17,238). The v1 deck is on lm.day2-slides.
+This copy carries the full-panel results from day2_neural/code_full (trained on all 17,241 series on a GPU, scored on the original labs' 2,000-series sample; notebook 11 rescores on all 17,238). The v1 deck is on lm.day2-slides.
 
 Welcome back. Yesterday: baselines, evaluation, gradient boosting. Today: neural global models, tuning, covariates, foundation models, hierarchy, uncertainty, and how to pick and combine models. Same data, same split, same leaderboard.
 -->
@@ -306,7 +306,7 @@ The finalists are the accuracy-optimal trial, two "knee" trials (best trade-off 
 
 - **Future** covariates the model may use: planned price index, promo flag, discount depth; **static**: log mean sales, share of zero / promo weeks
 - **Accuracy** asks "did you predict what happened?"; **responsiveness** asks "if we changed the price, would you predict the right thing?"
-- **Arms**: calendar and hierarchy features (`03`); price features, CPI deflation, oversampling promotion weeks (`04`); planted synthetic discounts (`05b`); cleaned prices and a stable scaler (`05c`)
+- **Arms**: calendar and hierarchy features (`03`); price features, CPI deflation, oversampling (`04`); synthetic discounts (`05b`); cleaned prices and a stable scaler (`05c`)
 - **What-if probes**: cut the price 10–30 % in one week, **rebuild every input built from price**, and read the forecast lift
 
 <!--
@@ -322,7 +322,7 @@ Confounding: retailers cut prices when they expect high demand, so a model can l
 ![h:220](img/res_lab03.png)
 
 - **Calendar and hierarchy features hurt** (0.647 against 0.568): Fourier and event inputs make the model overfit
-- **CPI deflation helps** accuracy and response (0.568 → 0.540); **oversampling promotion weeks** steepens the response further and wins on validation. Planted synthetic discounts (`05b`) did not help
+- **CPI deflation helps** accuracy and response (0.568 → 0.540); **oversampling** deepens the response further and wins on validation. Synthetic discounts (`05b`) did not help
 - **Every model is right-signed and too weak**: a 20 % cut implies +125 % in the data; the best models forecast +50 %
 
 > **Takeaway:** Judge covariates on accuracy and on response, and check the size of the response, not just its sign.

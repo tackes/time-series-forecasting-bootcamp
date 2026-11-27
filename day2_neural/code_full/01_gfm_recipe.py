@@ -11,12 +11,11 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 01 (full data) — Lab: a training recipe for global models (20 min)
 #
 # The original lab 01 trains NHITS and N-BEATS with library defaults for 500 steps. On ≈17,000
-# series that under-trains, and the score moves a lot from one random seed to the next. The
-# research hit the same problem and settled on a short **training recipe**
+# series this under-trains the models, and the score moves a lot from one random seed to the
+# next. Our earlier research hit the same problem and settled on a short **training recipe**
 # (`docs/gfm_learnings.md` §3):
 #
 # | Ingredient | What the research found | Tag |
@@ -48,23 +47,24 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: why a recipe and not just more steps?
 #
-# Training a network is a walk downhill in fog. A **warm-up** takes small steps until you have
-# your footing. **Clipping** stops one steep patch from sending you over a cliff. **Keeping the
-# best weights** means remembering the lowest point you passed, rather than stopping wherever
-# you stood when time ran out.
+# Early in training the weights are random, so each step is noisy. If we allow full-size steps
+# straight away, the loss can blow up to a point the model never fully recovers from. A
+# **warm-up** starts with a small learning rate and only allows full-size steps once training
+# has settled. **Clipping gradients** acts like a speed limit on each step, so one odd batch
+# (e.g. a promotion spike or a bad price) can't throw the weights around the loss surface.
+# Finally, **keeping the best weights** means we run the full budget, check validation as we go
+# and keep the best point we passed, rather than wherever training happened to stop.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. Data and the starting configuration
 #
-# The future covariates are the original labs' scale-free set (`promo`, `discount_depth`,
-# `price_index`), with the three numeric statics. The starting settings are the research's
-# **phase 4 defaults** [single store]. One honest caveat: the research chose them by scoring
-# trials on the test window, a mistake it fixed later (§1). Here every tuning decision uses the
-# validation window, and the test window is scored once.
+# Our future covariates are the original labs' scale-free set (`promo`, `discount_depth`,
+# `price_index`), along with the three numeric statics. The starting settings are the research's
+# **phase 4 defaults** [single store]. We should be honest about one caveat: the research chose
+# them by scoring trials on the test window, a mistake it fixed later (§1). Here every tuning
+# decision uses the validation window, and the test window is scored only once.
 
 # %%
 baselines_cfg = gd.load_config("00_baselines")
@@ -83,7 +83,6 @@ print(f"{recipe_data.fit_df['unique_id'].nunique():,} training series -> {max_st
 pd.Series(params)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. Three arms, three seeds each
 #
 # Each arm changes one thing, so any gap between them has one cause.
@@ -91,7 +90,7 @@ pd.Series(params)
 # * `NBEATSx_off`: the same model and budget with library defaults (MAE loss, step decay, no
 #   clipping, final weights, no shift).
 # * `NBEATSx_recipe`: the full recipe.
-# * `NHITS_recipe`: NHITS with the recipe, to link back to the original lab.
+# * `NHITS_recipe`: NHITS with the recipe, which links us back to the original lab.
 #
 # Each fit validates on the last 14 training weeks (`val_size = H`), and the recipe picks its
 # best weights there. Every run is cached, so this cell only trains on the GPU box.
@@ -124,12 +123,11 @@ arms = {
 }
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Training curves: recipe off vs on
 #
-# One panel per run: training loss (blue) and validation loss (orange) against step, on a log
-# scale. The dotted grey line is where the warm-up ends. The dashed green line is the step whose
-# weights were kept.
+# Each panel shows one run: training loss (blue) and validation loss (orange) against step, on a
+# log scale. The dotted grey line marks the end of the warm-up, and the dashed green line the
+# step whose weights were kept.
 #
 # Look for early spikes in the off arm, and for how far the kept step sits from the end.
 
@@ -140,10 +138,9 @@ for runs in arms.values():
 gplt.plot_training(first_seeds, warmup=gd.warmup_steps(max_steps), title="First seed of each arm")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. Accuracy and seed spread
 #
-# Each seed is scored on its own: its median RMSSE over the 2,000 series. The table gives the
+# We score each seed on its own, as its median RMSSE over the 2,000 series. The table gives the
 # middle of the three, and the gap between the best and worst seed.
 
 # %%
@@ -161,36 +158,34 @@ spread = pd.DataFrame({name: {"median of seed medians": s.median(),
 spread.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The arm comparison chart puts the seeds side by side. Left: every seed's validation curve,
-# one colour per arm. Then a box per arm for oscillation and for median RMSSE, with each black
-# dot one seed. Tight boxes mean the seeds agree.
+# The arm comparison chart puts the seeds side by side. On the left is every seed's validation
+# curve, one colour per arm. Then comes a box per arm for oscillation and for median RMSSE, where
+# each black dot is one seed. Tight boxes mean the seeds agree.
 
 # %%
 gplt.plot_arm_comparison(arms, metrics=seed_scores)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Compare the gap between arms with the seed spread inside each arm. A gap smaller than the
+# * Compare the gap between arms with the seed spread inside each arm; a gap smaller than the
 #   spread is not a finding.
 # * Median RMSSE: recipe ≈ 0.570, off ≈ 0.808, NHITS ≈ 0.550. Seed spread: recipe ≈ 0.012,
 #   off ≈ 0.052.
-# * In the research the bigger prize was **stability**, not accuracy [100k set].
+# * In our research the bigger prize was **stability** rather than accuracy [100k set]: without
+#   the recipe, one seed in three can land far from the others.
 #
 # *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
 # reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Training health
 #
 # We screen runs on the validation curve only, never on price response (§4, [method]):
 #
-# * `oscillation`: how much validation loss jumps between checks late in training;
+# * `oscillation`: how much the validation loss jumps between checks late in training;
 # * `best_frac`: where the kept weights came from. Above ≈ 0.65 suggests the budget is short;
-# * `neg_share`: the share of negative forecasts. Discard a run above 10%.
+# * `neg_share`: the share of negative forecasts. We discard a run above 10%.
 
 # %%
 health_cols = ["arm", "seed", "fit_seconds", "oscillation", "best_frac", "final_over_best",
@@ -198,11 +193,10 @@ health_cols = ["arm", "seed", "fit_seconds", "oscillation", "best_frac", "final_
 pd.DataFrame(health)[health_cols].round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. On the board, and against the Day 1 models
 #
 # The three seeds of each arm are averaged into one forecast and recorded. We then compare the
-# recipe model with LightGBM and SeasonalNaive using the charts from notebook 00.
+# recipe model with LightGBM and SeasonalNaive, using the charts from notebook 00.
 
 # %%
 board_fcst = forecasts["NBEATSx_off"][["unique_id", "ds"]]
@@ -231,21 +225,20 @@ gplt.plot_wins(rmsse, info, model="NBEATSx_recipe_mean", baseline="SeasonalNaive
 gplt.plot_wins(rmsse, info, model="NBEATSx_recipe_mean", baseline="LightGBM")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Against SeasonalNaive the recipe model should win most series. Against LightGBM, look at
-#   the by-volume bars: does the network win where the sales are?
+# * Against SeasonalNaive the recipe model should win most series. Against LightGBM, look at the
+#   by-volume bars: does the network win where the sales are?
 # * Recipe model: median RMSSE ≈ 0.568 (mean ≈ 1.114); LightGBM: median ≈ 0.569 (mean ≈ 1.161).
+#   Getting the training right is enough to catch a well-set-up GBDT.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. The example series, with forecasts
 #
-# The examples from notebook 00, with the recipe model and LightGBM dashed over the test
-# window. Each title gives the forecast bias over the 14 weeks.
+# Here are the examples from notebook 00, with the recipe model and LightGBM dashed over the
+# test window. Each title gives the forecast bias over the 14 weeks.
 
 # %%
 gplt.plot_series_price(panel, baselines_cfg["examples"], both,
@@ -270,13 +263,12 @@ gd.save_config("01_recipe", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # * Does the recipe win on accuracy, on seed spread, or both? Which would you rather have when
-#   every later notebook compares settings that differ by a little?
-# * Look at `best_frac`. If the kept weights come from the very end, the budget is too short.
-#   If they come from the middle, the run kept going after its best. Which do you see?
+#   every later notebook compares settings that differ only a little?
+# * Look at `best_frac`. If the kept weights come from the very end, the budget is too short; if
+#   they come from the middle, the run kept going after its best. Which do you see?
 # * The minutes per fit in `01_recipe` size the search in notebook 02. How many fits could you
 #   afford in an afternoon?
 #

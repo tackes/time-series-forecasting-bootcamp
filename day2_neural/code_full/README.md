@@ -6,18 +6,18 @@ Each notebook builds on the one before: it reads the previous notebook's config 
 
 | # | Notebook | Starts from | Adds |
 |---|---|---|---|
-| 00 | `00_recap_full` | `../code/00` | full panel, eval ids, dropped-series report, example series, median-led board, baseline error and win charts |
-| 01 | `01_gfm_recipe` | `../code/01` | NBEATSx and NHITS with the research training recipe off vs on, seed spread, training health |
-| 02 | `02_hpo_round1` | `../code/02` | accuracy-only grid, 3 seeds per cell, noise floor, shortlist |
-| 03 | `03_calendar_hierarchy` | `../code/03` (part) | calendar and event features (Easter, Anzac Day, Christmas, Mother's Day), hierarchy statics |
-| 04 | `04_price_response` | `../code/03` (part) | single-channel vs compound price sweeps, CPI deflation, oversampling, probes, elasticity charts |
+| 00 | `00_recap_full` | `../v1/code/00` | full panel, eval ids, dropped-series report, example series, median-led board, baseline error and win charts |
+| 01 | `01_gfm_recipe` | `../v1/code/01` | NBEATSx and NHITS with the research training recipe off vs on, seed spread, training health |
+| 02 | `02_hpo_round1` | `../v1/code/02` | accuracy-only grid, 3 seeds per cell, noise floor, shortlist |
+| 03 | `03_calendar_hierarchy` | `../v1/code/03` (part) | calendar and event features (Easter, Anzac Day, Christmas, Mother's Day), hierarchy statics |
+| 04 | `04_price_response` | `../v1/code/03` (part) | single-channel vs compound price sweeps, CPI deflation, oversampling, probes, elasticity charts |
 | 05 | `05_hpo_round2_pareto` | new | two-objective search (accuracy, price response), Pareto front and knee, confirm run |
-| 05b | `05b_synthetic_discounts` | new | planted one-week discounts in the oversampled copies |
+| 05b | `05b_synthetic_discounts` | new | synthetic price changes in the training data |
 | 06 | `06_cluster_gfms` | new | pooled vs pooled with a cluster static vs one model per cluster |
-| 07 | `07_foundation` | `../code/04` | Chronos-2 against the selected GFM |
-| 08 | `08_hierarchy_reconcile` | `../code/05` | the selected GFM as the item-level base, reconciled up the hierarchy |
-| 09 | `09_uncertainty` | `../code/06` | quantile GFM, conformal intervals by class and horizon |
-| 10 | `10_selection_standings` | `../code/07` | final board on accuracy and price response |
+| 07 | `07_foundation` | `../v1/code/04` | Chronos-2 against the selected GFM |
+| 08 | `08_hierarchy_reconcile` | `../v1/code/05` | the selected GFM as the item-level base, reconciled up the hierarchy |
+| 09 | `09_uncertainty` | `../v1/code/06` | quantile GFM, conformal intervals by class and horizon |
+| 10 | `10_selection_standings` | `../v1/code/07` | final board on accuracy and price response |
 
 **Helpers:**
 - `gd_helpers.py`: paths, data, configs, training recipe, fitting and caching.

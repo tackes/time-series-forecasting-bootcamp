@@ -11,13 +11,12 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 04 (full data) — Lab: does the model respond to price? (30 min)
 #
-# An accurate forecast that ignores price is no use for planning a promotion. The original lab
-# 03 moves the planned price and asks whether the forecast moves the right way. The research
-# found that **how** you move the price matters as much as the model (`docs/gfm_learnings.md`
-# §5):
+# An accurate forecast that ignores price is of little use when you plan a promotion. The
+# original lab 03 moves the planned price and asks whether the forecast moves the right way. Our
+# research found that **how** you move the price matters as much as the model
+# (`docs/gfm_learnings.md` §5):
 #
 # | Section | What we do | Research finding |
 # |---|---|---|
@@ -27,15 +26,15 @@
 # | 9 | two ways to sweep price | moving derived features too flipped the sign [100k set] |
 # | 10 | LightGBM's price response | it shrinks as the shift grows: a tree artefact |
 #
-# The sweep is the standard one [method]: move **one** price channel (`price_index`) by
+# The sweep is the standard one [method]: we move **one** price channel (`price_index`) by
 # ±5/10/20%, keep everything else as observed, and report the midpoint (arc) elasticity. We
 # report on series selling at least 3 units a week in classes A–I.
 #
 # Goals
 #
 # 1. Build a benchmark elasticity from history, and learn why it is so strong on this data.
-# 2. Test whether CPI deflation and discount oversampling improve the price response, choosing
-#    on the validation window.
+# 2. Test whether CPI deflation and oversampling improve the price response, choosing on the
+#    validation window.
 # 3. See how the sweep method, and the model type, can change the answer.
 #
 # **In the chain:** reads `03_features`, `02_shortlist` and `00_baselines`, writes `04_price`.
@@ -61,20 +60,21 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: elasticity is a "what if", not a forecast
 #
-# Elasticity asks: if the price were 10% lower and nothing else changed, how many more units
-# would we sell? We cannot observe that, so we ask the model. It is like a flight simulator:
-# hold the promo flag, the calendar and the history fixed, move one lever (the price), and watch
-# the forecast. A sensible model sells more when the price falls (negative elasticity). A
-# **perverse** one sells more when the price rises.
+# Under accuracy we ask how far off we were in predicting history the model has not seen. Under
+# **responsiveness** we ask a different question: if we changed an input like price, how much
+# would the forecast move, and would that move be within what we expect? Elasticity puts a
+# number on this. If the price were 10% lower and nothing else changed, how many more units
+# would we sell? We cannot observe that, so we ask the model: we hold the promo flag, the
+# calendar and the history fixed, move the price, and watch the forecast. A sensible model sells
+# more when the price falls (negative elasticity), while a **perverse** one sells more when the
+# price rises.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. Data and the settings carried forward
 #
-# Everything starts from `03_features`: model settings, calendar features and future
+# Everything starts from `03_features`: the model settings, calendar features and future
 # covariates. `gp.prepare(cfg)` rebuilds the training data from any config.
 
 # %%
@@ -92,13 +92,13 @@ print(f"future covariates: {futr_exog}\nnoise floor from 02: {noise_floor:.4f}")
 pd.Series(cfg03["features"])
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. What does `regular_price` mean here?
 #
-# Oversampling needs a rule for "a real discount week". The obvious rule is "sale price at least
-# 10% below the regular price". Before trusting it, check how often items sell *above* their
-# regular price, and how well each rule lines up with the promo flag. These numbers come from
-# the data alone, so they do not depend on any model run.
+# Before we move prices, we need to know what the price columns actually mean. The obvious
+# definition of a discount week is "sale price at least 10% below the regular price". Before we
+# trust it, we check how often items sell *above* their regular price, and how well each
+# definition lines up with the promo flag. These numbers come from the data alone, so they do
+# not depend on any model run.
 
 # %%
 # raw (undeflated) prices, no oversampling
@@ -127,28 +127,25 @@ for rule in ("regular", "rolling"):
 pd.DataFrame(rule_rows).set_index("rule").round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * About 30% of training weeks sell above the "regular" price, so it is not a ceiling. It
 #   behaves more like an occasional list price that the shelf price drifts above.
-# * The "below regular" rule lines up well with the promo flag, but it flags many more weeks.
-#   An item that sits below a stale regular price for months counts as "on discount" the whole
-#   time, though its price never moved.
-# * The **rolling** rule compares each week with the item's own 4-week average price
-#   (`discount_depth ≥ 0.10`, ≈ 8.5% of weeks). It needs no reference price and flags only weeks
-#   where the price actually **fell**. That is the variation oversampling should show the
-#   network more of.
-# * This differs from the research's large set, where the promo flag barely tracked real
-#   discounts (r ≈ −0.03, §3, [100k set]). We oversample with the rolling rule; the **Try it**
-#   at the end swaps them.
+# * The "below regular" definition lines up well with the promo flag, but it flags many more
+#   weeks. An item that sits below a stale regular price for months counts as "on discount" the
+#   whole time, even though its price never moved.
+# * Comparing each week with the item's own 4-week average price instead
+#   (`discount_depth ≥ 0.10`, ≈ 8.5% of weeks) needs no reference price and flags only weeks
+#   where the price actually **fell**. That is the variation a model has to learn price
+#   response from.
+# * This differs from our research's large set, where the promo flag barely tracked real
+#   discounts (r ≈ −0.03, §3, [100k set]).
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. The empirical benchmark
 #
-# A two-way within regression of log(units + 1) on log price, on the series we report on.
-# Removing each series' average and each week's average leaves only price moves *within* an
+# We fit a two-way within regression of log(units + 1) on log price, on the series we report on.
+# Removing each series' average and each week's average leaves only the price moves *within* an
 # item, net of what every item did that week.
 
 # %%
@@ -162,38 +159,38 @@ print(f"{len(report_ids):,} report series | empirical (all) {empirical_all:.2f} 
 empirical.round(2)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# On the research's large multi-store set this regression gave −0.4 to −0.7 [100k set]. Here
-# it is far stronger, ≈ −3.6 (data only, no model involved). Why?
+# On our research's large multi-store set this regression gave −0.4 to −0.7 [100k set]. Here it
+# is far stronger, ≈ −3.6 (from the data alone, no model involved). Why?
 #
-# * Price variation here is mostly **temporary promotional cuts**, not lasting price changes.
-#   A one-week 20% cut with a display and a flyer can double sales for that week.
+# * Price variation here is mostly **temporary promotional cuts**, not lasting price changes. A
+#   one-week 20% cut with a display and a flyer can double sales for that week.
 # * Shoppers **pull purchases forward** into the promo week and buy less afterwards. A
 #   regression on weekly data counts the spike but not the dip spread over the following weeks.
 # * The promo flag and the price cut arrive together, so the regression credits price with part
 #   of the promo's effect.
 # * The data itself is **cleaner** than the later research sets: the promo flag lines up with
-#   real price cuts, and prices are recorded consistently. A clear, well-measured signal gives
-#   a strong estimate rather than one shrunk towards zero by noise.
+#   real price cuts, and prices are recorded consistently. A clear, well-measured signal gives a
+#   strong estimate, rather than one shrunk towards zero by noise.
 #
-# So the band describes "a short promotion", not "a permanent price change". The charts shade
-# it as a reference, not a target. The research constant is printed for comparison only.
+# So the band describes "a short promotion", not "a permanent price change". Our charts shade it
+# as a reference, not a target, and the research constant is printed for comparison only.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. Three arms
 #
-# Each arm adds one change to the one before, as the research did (§1, [single store]).
+# Each arm adds one change to the one before, as our research did (§1, [single store]).
 #
 # * **A**: the 03 features, with CPI deflation switched off (so B can switch it on).
-# * **B**: A + CPI deflation. Prices are in base-week money, so inflation is not a price rise.
-# * **C**: B + oversampling: extra copies of series with real discount weeks (rolling rule, ×5,
-#   capped at 15 copies), counted on training weeks only. Copies are dropped before scoring.
+# * **B**: A + CPI deflation. Prices are in base-week money, so inflation does not look like a
+#   price rise.
+# * **C**: B + oversampling, which rebalances the training data so the model sees more of the
+#   price variation it has to learn from. It is built from training weeks only, and the extra
+#   training series are dropped before scoring.
 #
-# All arms use the same step budget, so they differ only in their data. Each arm is built
-# twice: on the weeks before `VALID_START`, to choose, and on every training week, to report.
+# All arms use the same step budget, so they differ only in their data. We build each arm twice:
+# on the weeks before `VALID_START`, to choose, and on every training week, to report.
 
 # %%
 OVERSAMPLE = {"rule": "rolling", "cap": gp.COPY_CAP, "multiplier": gp.COPY_MULTIPLIER}
@@ -230,11 +227,9 @@ def builder(arm: str, data: gd.NixtlaData):
 
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. How we will choose an arm (fixed before looking)
 #
-# The rule is written down before any arm is fitted, and it reads the **validation** window
-# only:
+# We write the rule down before any arm is fitted, and it reads the **validation** window only:
 #
 # 1. keep arms whose median elasticity at ±20% (seed-mean sweep) is **negative**;
 # 2. and whose median validation RMSSE is within the 02 **noise floor** of arm A;
@@ -248,12 +243,11 @@ SELECTION_RULE = ("on the validation window: lowest share perverse among arms wi
                   "< 0 and median RMSSE <= arm A + 02 noise floor; else A")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. Choosing on the validation window
 #
-# Each arm is fitted with 3 seeds on the weeks before `VALID_START` and scored on the 14 weeks
-# after it. While each model is in memory we sweep the price on the report series of that
-# window. The table shows why each arm did or did not qualify.
+# We fit each arm with 3 seeds on the weeks before `VALID_START` and score it on the 14 weeks
+# after. While each model is in memory, we sweep the price on that window's report series. The
+# table shows why each arm did or did not qualify.
 
 # %%
 def valid_extras(nf, data):
@@ -298,11 +292,10 @@ print(f"selected arm: {selected_arm}")
 choice.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 7. Refit on every training week, score the test window once
 #
-# The same three arms, refitted with the same seeds on all training weeks. These fits are the
-# reported result: nothing below changes the choice. After each fit we sweep the price on a
+# The same three arms are refitted with the same seeds on all training weeks. These fits are the
+# reported result, and nothing below changes the choice. After each fit we sweep the price on a
 # single channel. For arm A we also sweep the **compound** way of the original lab 03, which
 # recomputes `discount_depth` from the moved price. Each run also probes sustained and one-week
 # price shocks, and keeps forecasts at −20% / base / +20% for the example series.
@@ -330,11 +323,10 @@ for arm in arm_cfgs:
         print(f"{arm}: {t.seconds / 60:.1f} min for {len(gd.SEEDS)} seeds")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 8. Accuracy of each arm
 #
-# The seed-mean forecast of each arm goes on the board, then the training-health table from
-# notebook 01. Arm C's `n_train_series` includes its copies.
+# The seed-mean forecast of each arm goes on the board, followed by the training-health table
+# from notebook 01. Arm C's `n_train_series` includes the extra training series it adds.
 
 # %%
 forecasts = {arm: gd.seed_forecasts(runs) for arm, runs in arms.items()}
@@ -363,17 +355,16 @@ health = [gd.summaries(runs).assign(arm=arm) for arm, runs in arms.items()]
 pd.concat(health)[health_cols].round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 9. Price response: single channel against compound
 #
-# Every sweep is averaged over seeds before the elasticity is taken. Each row is one report
+# Every sweep is averaged over seeds before we take the elasticity. Each row is one report
 # (§5, [method]):
 #
 # * `median_e20`: median arc elasticity at ±20%, the headline;
 # * `share_perverse`: share of series with e > 0; `share_flat`: share with |e| < 0.05;
 # * `n_estimable`: series whose forecast moved at all;
-# * `invariance`: median at ±5% ÷ median at ±20%. Near 1 means the response grows in
-#   proportion to the price move.
+# * `invariance`: median at ±5% ÷ median at ±20%. Near 1 means the response grows in proportion
+#   to the price move.
 
 # %%
 elasticity = {"A_features (compound)": gp.arc_elasticity(
@@ -384,9 +375,8 @@ reports = {name: gp.elasticity_report(el) for name, el in elasticity.items()}
 pd.DataFrame(reports).T.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# Did the choice carry over? Each arm's validation numbers, which made the choice, next to its
-# test numbers, which only report it.
+# Did the choice carry over? Here are each arm's validation numbers, which made the choice, next
+# to its test numbers, which only report it.
 
 # %%
 transfer_rows = []
@@ -401,28 +391,27 @@ for arm in arm_cfgs:
 pd.DataFrame(transfer_rows).set_index("arm").round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Compare the compound row with `A_features`: the **same fitted model**, swept two ways. The
-#   compound sweep also raises `discount_depth` when it cuts the price, so the model sees "a
-#   deeper discount" and "a lower price" at once. The two inputs move together in training, so
-#   the network may have split the effect between them in any proportion. Moving both reads off
-#   a mixture that can even have the wrong sign. In the research it gave +0.45 (§5, [100k set]).
+# * Compare the compound row with `A_features`: it is the **same fitted model**, swept two ways.
+#   The compound sweep also raises `discount_depth` when it cuts the price, so the model sees "a
+#   deeper discount" and "a lower price" at once. Because the two inputs move together in
+#   training, the network may have split the effect between them in any proportion, and moving
+#   both reads off a mixture that can even have the wrong sign. In our research it gave +0.45
+#   (§5, [100k set]).
 # * Median e20: compound ≈ −0.94, single channel ≈ −0.60; B ≈ −1.13, C ≈ −1.25.
 #
 # *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
 # reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 10. LightGBM's response to price
 #
-# The reference LightGBM from notebook 00, with `price_index` in place of the raw sale price,
-# trained on the full panel. We move `price_index` alone, over a wider range of shifts, and
-# check how much of the tree's split gain the price and promo features carry.
-
-# LightGBM gets the cleaned prices, as in 00 and every model in the final comparison
+# This is the reference LightGBM from notebook 00, with `price_index` in place of the raw sale
+# price, trained on the full panel. We move `price_index` alone, over a wider range of shifts,
+# and check how much of the tree's split gain the price and promo features carry.
+#
+# LightGBM gets the cleaned prices, as in 00 and as every model in the final comparison does
 # (`gp.PRICE_CLEAN`, `docs/stability_choices.md`); the GFM arms above keep the raw ones.
 
 # %%
@@ -487,10 +476,9 @@ print(f"price and promo features: {price_gain:.1%} of LightGBM's split gain")
 gain.head(8).round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The next chart has one line per model: the median arc elasticity at each shift size, with the
-# empirical band shaded. A smooth response gives a flat line. A line that drifts towards zero as
-# the shift grows is responding less than in proportion.
+# The next chart has one line per model, giving the median arc elasticity at each shift size,
+# with the empirical band shaded. A smooth response gives a flat line; a line that drifts towards
+# zero as the shift grows is responding less than in proportion.
 
 # %%
 shrink = pd.DataFrame({"LightGBM": lgbm_el_all.groupby("shift")["e_arc"].median()})
@@ -510,26 +498,24 @@ plt.show()
 shrink.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * A tree predicts a constant between split points, and nothing changes beyond the last split
-#   it has seen. Once a price move passes that split, a bigger move adds nothing, so dividing
-#   by the size of the move makes the "elasticity" shrink as the shift grows. Small moves can
-#   also stay inside one leaf and read as zero. The shape comes from the splits, not shoppers.
-# * In the research, price features carried ≈ 1.5% of LightGBM's split gain, against over 60%
-#   for a 13-week rolling mean (§5). Here: ≈ 38%.
-# * So: use LightGBM for accuracy and the network for price response.
+#   it has seen. Once a price move passes that split, a bigger move adds nothing, so dividing by
+#   the size of the move makes the "elasticity" shrink as the shift grows. Small moves can also
+#   stay inside one leaf and read as zero. The shape comes from the splits, not from shoppers.
+# * In our research, price features carried ≈ 1.5% of LightGBM's split gain, against over 60%
+#   for a 13-week rolling mean (§5). Here they carry ≈ 38%.
+# * So we use LightGBM for accuracy, and the network for price response.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 11. What the selected arm does on the example series
 #
-# The chart from notebook 00, now with three forecasts: at the planned price (base), and with
-# every test-week price 20% lower and 20% higher. The −20% line should sit above base and the
-# +20% line below it. If they cross or swap, that series' response is perverse.
+# This is the chart from notebook 00, now with three forecasts: at the planned price (base), and
+# with every test-week price 20% lower and 20% higher. The −20% line should sit above base and
+# the +20% line below it. If they cross or swap, that series' response is perverse.
 
 # %%
 scenarios = pd.concat([run["scenarios"] for run in arms[selected_arm]])
@@ -539,19 +525,19 @@ gplt.plot_series_price(panel_a, examples, scenarios,
                        title=f"Arm {selected_arm}: forecasts at -20% / base / +20% price")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 12. The elasticity charts
 #
-# Arm A first, then the selected arm, both from the single-channel sweep. Each chart has three
-# panels, and the shaded band on each is the empirical inter-quartile range across classes from
-# section 3.
+# Arm A comes first, then the selected arm, both from the single-channel sweep. Each chart has
+# three panels, and the shaded band on each is the empirical inter-quartile range across classes
+# from section 3.
 #
-# * **Histogram** of per-series arc elasticity at ±20%, clipped to [−5, 2]. Dashed: the median
-#   of all series. Dotted: the median of responsive series only (|e| > 0.05).
+# * **Histogram** of per-series arc elasticity at ±20%, clipped to [−5, 2]. Dashed: the median of
+#   all series. Dotted: the median of responsive series only (|e| > 0.05).
 # * **Box plot by sales class**, A–I. The red line is zero.
 # * **Median against shift size**, for the arc, down-only and up-only elasticity. Flat lines mean
-#   the response is in proportion to the move. The research found price rises to be
-#   extrapolation, because few sales happened at higher prices (§5), so trust the down line more.
+#   the response is in proportion to the move. Our research found price rises to be
+#   extrapolation, because few sales happened at higher prices (§5), so we trust the down line
+#   more.
 
 # %%
 gplt.plot_elasticity(elasticity["A_features"], info, band=band,
@@ -563,9 +549,8 @@ if selected_arm != "A_features":
                          title=f"Arm {selected_arm} (selected), single-channel sweep")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The **strength chart** sorts each series into a category by its elasticity at ±20%, and
-# shows one bar per arm, split by the share of series in each category:
+# The **strength chart** sorts each series into a category by its elasticity at ±20%, and shows
+# one bar per arm, split by the share of series in each category:
 #
 # | Category | Elasticity e |
 # |---|---|
@@ -575,8 +560,8 @@ if selected_arm != "A_features":
 # | Flat | −0.05 < e ≤ 0 |
 # | Perverse | e > 0 |
 #
-# The **by-class chart** after it gives each arm's median elasticity per sales class, with the
-# empirical value per class dashed in black and zero dotted.
+# The **by-class chart** that follows gives each arm's median elasticity per sales class, with
+# the empirical value per class dashed in black and zero dotted.
 
 # %%
 strength = {name: gp.e20(el) for name, el in elasticity.items()}
@@ -586,32 +571,31 @@ gplt.plot_elasticity_strength(strength, title="Strength of price response at ±2
 gplt.plot_elasticity_by_class(strength, info, empirical=empirical)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * Read the strength chart from the right. The orange "perverse" share is what we most want to
-#   shrink. Does CPI deflation (B) or oversampling (C) shrink it? In the research both did
+#   shrink. Does CPI deflation (B) or oversampling (C) shrink it? In our research both did
 #   (§1, [single store]). Perverse share: A ≈ 1.0%, B ≈ 0.6%, C ≈ 0.1%.
 # * Expect the empirical line to sit well below the models. The regression credits price with
-#   part of the promo's lift; the models see the promo flag as a separate input, held fixed in
-#   the sweep.
+#   part of the promo's lift, whereas the models see the promo flag as a separate input, held
+#   fixed in the sweep.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 13. Probes: a sustained cut against a one-week pulse
 #
-# The oversampled arm C, all seeds pooled. Price shocks of −10%, −20%, −30% and +20%
-# (§5, [method]). A **sustained** shock lasts the whole horizon; a **pulse** lasts one week.
+# Here we probe the oversampled arm C, with all seeds pooled, using price shocks of −10%, −20%,
+# −30% and +20% (§5, [method]). A **sustained** shock lasts the whole horizon; a **pulse** lasts
+# one week.
 #
 # * Left: median lift in units by shock size, one line per mode. A cut should lift sales.
 # * Right: for the pulse, the median change in the weeks that were not shocked. Ideally ≈ 0.
 #
-# The research's pass bar was a median elasticity of −0.3 or stronger, with the right sign. On
+# Our research's pass bar was a median elasticity of −0.3 or stronger, with the right sign. On
 # this data, with an empirical value of ≈ −3.6, that bar is easy to clear.
 #
-# These arm probes move `price_index` alone, as the sweep does: a cut arrives with no discount
+# These arm probes move `price_index` alone, as the sweep does, so a cut arrives with no discount
 # depth. They were computed while each arm's model was in memory, and the arms were not saved,
 # so they stay as they are. From 05b on, the probes rebuild every price input (next section).
 
@@ -622,11 +606,10 @@ gplt.plot_probe(probe_table, title="Arm C_cpi_over: probe responses (price_index
 probe_table.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### LightGBM under the phase 7b probes
 #
-# LightGBM is refitted in a few minutes, so we can probe it the way 05b, 07 and 10 probe every
-# model: the price moves and every input built from it is rebuilt (`discount_depth` and
+# LightGBM refits in a few minutes, so we can probe it the way 05b, 07 and 10 probe every model:
+# the price moves and every input built from it is rebuilt (`discount_depth` and
 # `price_ratio_to_rolling_mean`, from the 4-week rolling mean), in fixed probes and in random
 # promotion calendars (three one-week cuts per series, 10–30% deep, in ordinary weeks). The
 # results go to 10's final price-response table.
@@ -660,23 +643,21 @@ gplt.plot_probe(lgbm_probe_table, title="LightGBM: probe responses, every price 
 lgbm_calendar_table.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * A tree reads `discount_depth` and the rolling ratio through its splits, so rebuilding them
 #   can move LightGBM more than moving `price_index` alone did.
-# * In the calendar table, look for lift growing with depth. A tree can give the same lift for
+# * In the calendar table, look for lift that grows with depth. A tree can give the same lift for
 #   15% and 25% if both land in one leaf.
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 14. The accuracy cost of oversampling, and seeds against arms
 #
-# First the marginal wins of arm C over arm A: does oversampling cost accuracy, and where? Then
-# the arm comparison chart, with an extra panel: each seed's median elasticity, empirical band
-# shaded.
+# First we look at the marginal wins of arm C over arm A: does oversampling cost accuracy, and
+# where? Then comes the arm comparison chart, with an extra panel showing each seed's median
+# elasticity, with the empirical band shaded.
 
 # %%
 both = forecasts["A_features"].merge(forecasts["C_cpi_over"], on=["unique_id", "ds"])
@@ -693,13 +674,12 @@ gplt.plot_arm_comparison(arms, metrics=seed_scores, elasticity=seed_e20, band=ba
 pd.DataFrame(seed_e20, index=[f"seed {s}" for s in gd.SEEDS]).round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * In the research each run's response was all one sign, and the seeds disagreed in size
-#   (§6, [100k set]). Three seeds are the minimum for any number quoted here. Look at the spread
-#   before you read a difference between arms.
-# * If the seed boxes for two arms overlap, the arms are not separable on elasticity.
+# * In our research each run's response was all one sign, but the seeds disagreed on its size
+#   (§6, [100k set]). Three seeds are the minimum for any number we quote here, so look at the
+#   spread before you read a difference between arms.
+# * If the seed boxes for two arms overlap, we can't separate the arms on elasticity.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
@@ -732,16 +712,11 @@ gd.save_config("04_price", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # * The compound and single-channel rows come from the same model. Which would you show a
 #   category manager, and why?
-# * The empirical benchmark here is ≈ −3.6; the research's was about −0.5. What does that say
-#   about using one "plausible range" across retailers?
-# * LightGBM is the most accurate model on the board. Why is it still not the model to plan
-#   prices with?
-#
-# **Try it:** set `OVERSAMPLE["rule"] = "regular"` and rerun arm C (delete its `runs/04_C_*`
-# and `runs/04_valid_C_*` folders first). How many more series get copies, and does the
-# perverse share move?
+# * Our empirical benchmark here is ≈ −3.6, while the research's was about −0.5. What does that
+#   say about using one "plausible range" across retailers?
+# * LightGBM is the most accurate model on the board. Why is it still not the model we would
+#   plan prices with?

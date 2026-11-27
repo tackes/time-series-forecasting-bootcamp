@@ -11,11 +11,10 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 02 (full data) — Lab: hyperparameter search, round 1 (25 min)
 #
-# The original lab 02 moves one NHITS setting at a time, then runs a small Optuna search. Here
-# we tune the N-BEATSx from notebook 01, with its training recipe, on **accuracy only**:
+# The original lab 02 moves one NHITS setting at a time, then runs a small Optuna search. Here we
+# tune the N-BEATSx from notebook 01, with its training recipe, on **accuracy only**:
 #
 # | | |
 # |---|---|
@@ -32,7 +31,7 @@
 # 3. Keep a **shortlist** of cells the noise floor cannot separate from the best.
 # 4. Refit the best cell on the full training window and score it on test, once.
 #
-# Price response waits for round 2 (notebook 05). See `docs/gfm_learnings.md` §6.
+# Price response waits for round 2 (notebook 05); see `docs/gfm_learnings.md` §6.
 #
 # **In the chain:** reads `01_recipe`, writes `02_shortlist`.
 
@@ -62,28 +61,23 @@ GRID = SMOKE_GRID if gd.SMOKE else FULL_GRID
 MAX_SHORTLIST = 3
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: a score is only a finding if it beats the seed noise
 #
-# Weigh the same parcel three times on a kitchen scale and the readings differ a little. Two
-# parcels whose readings differ by less than that are, as far as this scale can tell, the same
-# weight.
-#
-# A network is the same. Refit it with a different random seed and the score moves, because
-# the starting weights and the order of the mini-batches change. That movement is the **noise
-# floor**. Two settings closer than it are a tie, however good the better one looks. In the
-# research, seed noise was bigger than many of the effects being chased (§3, [method]), so
-# every cell here gets three seeds before we compare it with anything.
+# Neural networks are stochastic. If we refit one with a different random seed, the score moves,
+# because the starting weights and the order of the mini-batches change. That movement is the
+# **noise floor**, and two settings that are closer than it are a tie, however good the better
+# one looks. In our research, seed noise was larger than many of the effects we were chasing
+# (§3, [method]), which is why every cell here gets three seeds before we compare it with
+# anything.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. Data and the starting point
 #
-# The settings come from `01_recipe`. The training window is split again: the model trains on
+# The settings come from `01_recipe`. We split the training window again: the model trains on
 # the **inner** training weeks and is scored on the 14 validation weeks that follow.
-# `gp.prepare(cfg, cutoff=bc.VALID_START)` builds that split, with the reference price and the
-# statics taken from the inner weeks only. RMSSE is scaled by the inner weeks too, so nothing
-# after `VALID_START` is used until section 5.
+# `gp.prepare(cfg, cutoff=bc.VALID_START)` builds that split, taking the reference price and the
+# statics from the inner weeks only. RMSSE is scaled by the inner weeks too, so nothing after
+# `VALID_START` is used until section 5.
 
 # %%
 recipe_cfg = gd.load_config("01_recipe")
@@ -100,12 +94,11 @@ print(f"inner train → {inner['ds'].max()} | validation {valid['ds'].min()} →
 pd.Series(base_params)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. The grid
 #
-# Every combination of the grid values, each as a small set of overrides on the 01 settings.
-# The **incumbent** is the cell with the 01 settings. It is always fitted, because its seeds
-# set the noise floor.
+# The grid holds every combination of its values, each written as a small set of overrides on
+# the 01 settings. The **incumbent** is the cell with the 01 settings. We always fit it, because
+# its seeds set the noise floor.
 
 # %%
 def grid_cells(grid: dict) -> list[dict]:
@@ -133,10 +126,9 @@ print(f"{len(cells)} cells × {len(gd.SEEDS)} seeds = {len(cells) * len(gd.SEEDS
       f"incumbent: {incumbent_label}")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# Each cell's runs are cached under a hash of its full parameter set: a summary and a small loss
-# curve per seed, and no saved model. If the GPU run crashes, rerun this cell and it picks up
-# where it stopped.
+# Each cell's runs are cached under a hash of its full parameter set, as a summary and a small
+# loss curve per seed (we save no model). If the GPU run crashes, you can rerun this cell and it
+# picks up where it stopped.
 
 # %%
 def fit_cell(cell: dict) -> list[dict]:
@@ -152,10 +144,9 @@ def fit_cell(cell: dict) -> list[dict]:
 runs = {label: fit_cell(cell) for label, cell in cells_by_label.items()}
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Validation scores and the noise floor
 #
-# Each seed is scored on its own: the median RMSSE over the evaluation series. A cell's score
+# We score each seed on its own, as the median RMSSE over the evaluation series. A cell's score
 # is the mean of its seed medians, and `seed_sd` is how far they spread. The noise floor is the
 # incumbent's `seed_sd`.
 
@@ -182,11 +173,10 @@ print(f"noise floor (seed sd of the incumbent): {noise_floor:.4f}")
 cell_table.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### The grid as a heatmap
 #
-# Learning rate down the side, architecture across the top. Each square shows the cell's
-# validation score with its seed spread underneath. Greener is better.
+# Learning rate runs down the side and architecture across the top. Each square shows the
+# cell's validation score with its seed spread underneath; greener is better.
 
 # %%
 heat = cell_table.assign(arch="b" + cell_table["blocks"] + " m"
@@ -201,12 +191,11 @@ gplt.plot_heatmap(means, "Median validation RMSSE, mean of seeds (± seed sd)",
                   xlabel="architecture (blocks per stack, MLP width)", ylabel="learning rate")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### One setting at a time
 #
-# The original lab moved one setting at a time. The grid gives the same view for free: average
-# the cells over the other settings, and see how far each setting moves the score. The last
-# column divides that spread by the noise floor. Below 1 is not a finding.
+# The original lab moved one setting at a time, and our grid gives us the same view for free: we
+# average the cells over the other settings and see how far each setting moves the score. The
+# last column divides that spread by the noise floor, and anything below 1 is not a finding.
 
 # %%
 effects = []
@@ -219,16 +208,15 @@ for name in GRID:
 pd.DataFrame(effects).set_index("setting").round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. The shortlist
 #
-# Cells within one noise floor of the best (at most three) form the shortlist. They cannot be
-# told apart on accuracy. The shortlist is saved in `02_shortlist` as a record; the best cell is
-# the one that carries forward, and is refitted for the test window below.
+# Cells within one noise floor of the best (at most three) form the shortlist, because we can't
+# tell them apart on accuracy. The shortlist is saved in `02_shortlist` as a record; the best
+# cell is the one we carry forward, and it is refitted for the test window below.
 #
-# Why not simply crown the best cell? The research found that the most accurate trials had the
-# **weakest** price response (§6, [100k set]). Round 2 (notebook 05) therefore searches on
-# accuracy and price response together.
+# Why not simply crown the best cell? Our research found that the most accurate trials had the
+# **weakest** price response (§6, [100k set]), so round 2 (notebook 05) searches on accuracy and
+# price response together.
 
 # %%
 best_score = cell_table["median_rmsse_valid"].min()
@@ -240,8 +228,8 @@ print(f"best cell: {best_label} | shortlist: {list(shortlist.index)}")
 shortlist[["median_rmsse_valid", "seed_sd", "oscillation", "best_frac"]].round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The shortlist and the incumbent side by side, in the arm comparison chart from notebook 01.
+# Here are the shortlist and the incumbent side by side, in the arm comparison chart from
+# notebook 01.
 
 # %%
 compare = list(shortlist.index)
@@ -251,8 +239,7 @@ gplt.plot_arm_comparison({label: runs[label] for label in compare},
                          metrics={label: seed_scores[label] for label in compare})
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# Per-series validation errors of the same cells, from their seed-mean forecasts.
+# And the per-series validation errors of the same cells, from their seed-mean forecasts.
 
 # %%
 valid_wide = []
@@ -264,27 +251,27 @@ valid_wide = pd.concat(valid_wide, axis=1)
 gplt.plot_error_dist(valid_wide, info)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Compare each gap in the heatmap with the noise floor. A cell that wins by less than one
-#   noise floor is a tie with the incumbent, not a better model.
+# * Compare each gap in the heatmap with the noise floor. A cell that wins by less than one noise
+#   floor is a tie with the incumbent, not a better model.
 # * Noise floor ≈ 0.005; best cell ≈ 0.613 against the incumbent's ≈ 0.613 (median validation
-#   RMSSE): the best cell is the incumbent, and no other cell is within one noise floor of it.
-# * The one-at-a-time table says which settings deserve search budget in round 2. A spread of
+#   RMSSE). The best cell is the incumbent, and no other cell is within one noise floor of it.
+#   This is less surprising than it looks: our settings came from research on a similar dataset,
+#   so the grid is searching the neighbourhood of settings that were already tuned.
+# * The one-at-a-time table tells us which settings deserve search budget in round 2. A spread of
 #   a few noise floors is a real but small effect.
-# * Check `best_frac` before trusting a cell. If its kept weights come from the very end, it
+# * Check `best_frac` before you trust a cell. If its kept weights come from the very end, it
 #   wanted more steps, and its score reflects the budget rather than the model.
 #
 # *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
 # reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. Refit the best cell and score it on test, once
 #
-# The best cell is refitted on the whole training window with three seeds. It uses the same
-# series, so the same step budget. The seed-mean forecast goes on the board as `NBEATSx_tuned`.
+# We refit the best cell on the whole training window with three seeds. It uses the same series,
+# and so the same step budget. The seed-mean forecast goes on the board as `NBEATSx_tuned`.
 
 # %%
 def nbeatsx_tuned(seed):
@@ -305,11 +292,10 @@ gd.record(board_fcst, test, train, lab="02 HPO round 1 (3-seed mean)",
 gd.median_board("02")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Marginal wins over the 01 recipe model
 #
 # Series by series, does the tuned model beat the untuned recipe model from notebook 01? Read
-# it with the noise floor in mind: a small median gain can still be many small wins.
+# this with the noise floor in mind, as a small median gain can still be many small wins.
 
 # %%
 recipe_fcst = pd.read_parquet(gd.FORECAST_DIR / "01_recipe.parquet")
@@ -337,17 +323,16 @@ gd.save_config("02_shortlist", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * **Why not a big search?** Every cell costs three full fits: 12 cells is already 36 fits,
+# * **Why not a big search?** Every cell costs three full fits, so 12 cells is already 36 fits,
 #   and an Optuna study of 50 trials would be 150. The noise floor sets how fine a difference
-#   any search can resolve. Would you spend budget on more trials or more seeds?
+#   any search can resolve. Would you spend your budget on more trials or on more seeds?
 # * **One at a time hides interactions.** A higher learning rate may suit the small network and
 #   hurt the large one. Does the heatmap show that? A one-at-a-time sweep could not.
 # * **Tuning on one window overfits that window.** The research's phase 4 defaults were picked
-#   on the test window (§1, [method]). Compare the best cell's validation and test scores. If
+#   on the test window (§1, [method]). Compare the best cell's validation and test scores: if
 #   test is much worse, how much of the choice was luck?
 #
-# **Try it:** add `"dropout_prob_theta": [0.1, 0.257]` to `FULL_GRID` and see whether its
-# spread beats the noise floor. It doubles the number of fits.
+# **Try it:** add `"dropout_prob_theta": [0.1, 0.257]` to `FULL_GRID` and see whether its spread
+# beats the noise floor. Be aware that it doubles the number of fits.

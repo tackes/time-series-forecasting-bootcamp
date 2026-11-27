@@ -11,26 +11,25 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 05b (full data) — Lab: teaching price response with synthetic discounts (15 min)
 #
-# 05's price response is learnt from the discounts the shop actually ran. Those are few, short
-# and bunched in the same series. Here we try a research idea from phase 7: **plant extra
-# one-week price cuts** in the oversampled training copies, each with a known lift, and see
-# whether the model learns from them. This is **experimental**: the research tried it but never
+# The price response in 05 is learnt from the discounts the shop actually ran, and those are few,
+# short and bunched in the same series. Here we try an idea from phase 7 of our research: we add
+# **synthetic price changes** to the training data, each with a known effect on sales, and see
+# whether the model learns from them. This is **experimental**; our research tried it but never
 # accepted it (`docs/gfm_learnings.md` §5, [100k set]).
 #
 # | | |
 # |---|---|
 # | Starts from | the selected 05 model |
-# | Adds | two one-week cuts per oversampled copy, 10–30% deep, with a planted lift |
-# | Originals | untouched: only the copies get synthetic weeks |
+# | Adds | synthetic price changes in the training data, with a known lift |
+# | Originals | untouched: the real series keep their own history |
 # | Measured | the sweep, the phase 7b probes and calendars, and an **echo check** |
 # | Decides | whether 06–10 use 05 or 05b, by a rule written before the results |
 #
 # Goals
 #
-# 1. Build 05's training data with and without synthetic cuts, and see what was planted.
+# 1. Build 05's training data with and without synthetic changes, and see what was added.
 # 2. Choose between 05 and 05b by a rule on the validation window (3 seeds each).
 # 3. Fit 05's model on the synthetic data (3 seeds) and score the test window once.
 # 4. Check whether the model gives back the lift we planted.
@@ -52,24 +51,22 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: worked examples with the answer written in
 #
-# ![Ask the model 'what if?'](../slides/img/response_sketch.png)
+# ![Ask the model 'what if?'](../slides_full/img/response_sketch.png)
 #
-# A model learns price response from weeks where the price moved. If the shop rarely cuts prices
-# outside a few promotions, there is little to learn from. Synthetic cuts are worked examples in
-# a textbook. In a copy of a series we lower the price for one week and raise its sales by a lift
-# we choose. If the model learnt from them, a probe with the same cut should **echo** back
-# roughly that lift. The risk is that it learns our made-up rule rather than the shop's
-# customers, so we check accuracy on real test weeks too.
+# A model learns price response from weeks where the price moved. If the shop rarely changes
+# prices outside a few promotions, there is little for it to learn from. Synthetic price changes
+# work like worked examples in a textbook, where we know the answer because we wrote it in. If
+# the model learnt from them, a probe with the same price change should **echo** back roughly
+# the lift we planted. The risk is that it learns our made-up rule rather than the behaviour of
+# the shop's customers, so we check accuracy on real test weeks too.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. From 05's config to 05b's
 #
-# 05b is 05's config plus one key, `synthetic`. The cuts are planted with **one fixed random
-# seed** for all three training seeds. So the fits see the same data, and their spread is
+# 05b is 05's config plus one key, `synthetic`. The changes are added with **one fixed random
+# seed** for all three training seeds, so every fit sees the same data and their spread is
 # training noise only, as in 05.
 
 # %%
@@ -107,17 +104,16 @@ pd.Series({"oversample": cfg_b["oversample"], "synthetic": cfg_b["synthetic"],
            "synthetic_seed": synthetic_seed, "price_channel": price_channel})
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### What was planted
 #
-# Each copy is its original series with a few weeks changed. Comparing them row by row finds
-# the planted weeks: lower price, higher units. The table counts them by depth, with the lift
-# we asked for and the lift that landed (units are whole numbers, so small sellers round).
+# We can find the synthetic weeks by comparing the training data with and without them: a lower
+# price and higher units. The table counts them by depth, with the lift we asked for and the
+# lift that landed (units are whole numbers, so small sellers round).
 #
-# The planted lifts imply an elasticity of roughly −3 to −5 (lift ÷ cut: +60% for a 20% cut is
-# −3). That is close to the ≈ −3.6 measured on this data (`docs/progress.md`), and far stronger
-# than the research's −0.4 to −0.7 [100k set]. This panel's price variation is mostly short
-# promo cuts with big short-term lifts.
+# The planted lifts imply an elasticity of roughly −3 to −5. That is close to the ≈ −3.6
+# measured on this data (`docs/progress.md`), and far stronger than our research's −0.4 to −0.7
+# [100k set], because this panel's price variation is mostly short promo cuts with big
+# short-term lifts.
 
 # %%
 def planted_weeks(fit_df: pd.DataFrame, y_shift: float) -> pd.DataFrame:
@@ -142,35 +138,33 @@ print(f"{len(planted):,} planted weeks in {planted['unique_id'].nunique():,} cop
 planted_table.round(2)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. The rule, written before the results
 #
-# Notebooks 06–10 use 05b **only if all three hold**; otherwise they keep 05. Every check reads
-# the **validation window**: 05's config and 05b's are each fitted with 3 seeds on the weeks
-# before `VALID_START`, and probed on that window's report series (seed-mean responses).
+# Notebooks 06–10 use 05b **only if all three checks hold**; otherwise they keep 05. Every check
+# reads the **validation window**: 05's config and 05b's are each fitted with 3 seeds on the
+# weeks before `VALID_START`, and probed on that window's report series (seed-mean responses).
 #
-# 1. 05b's median elasticity for a **one-week 20% cut** is **more negative** than 05's. The
-#    price falls in one week and every input built from price (`discount_depth`) is rebuilt to
-#    match, as in a real discount week (`gp.price_probes`, mode `pulse_all`).
-# 2. its share of **right-signed cuts** under **random promotion calendars** is **higher**
-#    than 05's: three one-week cuts per series, 10–30% deep, in ordinary weeks, five draws
+# 1. 05b's median elasticity for a **one-week 20% cut** is **more negative** than 05's. The price
+#    falls in one week and every input built from price (`discount_depth`) is rebuilt to match,
+#    as in a real discount week (`gp.price_probes`, mode `pulse_all`).
+# 2. Its share of **right-signed cuts** under **random promotion calendars** is **higher** than
+#    05's: three one-week cuts per series, 10–30% deep, in ordinary weeks, five draws
 #    (`gp.promo_calendars`).
-# 3. its median validation RMSSE is no more than the 02 noise floor above 05's.
+# 3. Its median validation RMSSE is no more than the 02 noise floor above 05's.
 #
-# The first two ask for a stronger, more consistent price response, measured as the forecasts
-# would be used: a discount week with all its inputs. The third says it must not cost real
-# accuracy. The test window is scored once afterwards, as the reported outcome.
+# The first two ask for a stronger, more consistent price response, measured the way the
+# forecasts would be used, i.e. a discount week with all its inputs. The third says it must not
+# cost real accuracy. The test window is scored once afterwards, as the reported outcome.
 #
 # *An earlier version of this rule moved `price_index` alone, over all 14 weeks, so a cut came
 # with no discount depth. The probes in `gp` explain the difference; `median_e20` from the old
 # sweep is still reported alongside.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Choosing on the validation window
 #
-# Both configs are rebuilt with `cutoff=bc.VALID_START`, so the reference price, the copies and
-# the planted cuts all come from the weeks before it. Each is fitted with the same 3 seeds.
+# Both configs are rebuilt with `cutoff=bc.VALID_START`, so the reference price and the
+# synthetic changes all come from the weeks before it. Each is fitted with the same 3 seeds.
 
 # %%
 _, inner_train, valid, valid_a = gp.prepare(cfg_a, panel=raw, cutoff=bc.VALID_START)
@@ -254,26 +248,25 @@ valid_numbers.round(4)
 pd.Series(checks)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * The one-week 20% cut is a tie: both models give a median elasticity of ≈ −1.77 (a lift of
-#   ≈ +49%), equal to the third decimal. The planted cuts did not make the response stronger.
+#   ≈ +49%), equal to the third decimal. The synthetic changes did not make the response
+#   stronger.
 # * Under the random calendars 05b gets slightly more cuts right-signed (≈ 99.6% against
-#   ≈ 99.4%), but both are close to every cut.
-# * 05b's validation RMSSE is ≈ 0.593 against 05's ≈ 0.583, a gap of about twice the noise
-#   floor (≈ 0.005). So 05b fails two of the three checks and later notebooks keep 05.
+#   ≈ 99.4%), but both get close to every cut right.
+# * 05b's validation RMSSE is ≈ 0.593 against 05's ≈ 0.583, a gap of about twice the noise floor
+#   (≈ 0.005). So 05b fails two of the three checks, and later notebooks keep 05.
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. Fit 05's model on the synthetic data, all training weeks (3 seeds)
 #
-# The choice is made; these fits are the reported result. While each model is in memory, we
+# The choice is made, so these fits are the reported result. While each model is in memory, we
 # run the single-channel sweep and the phase 7b probes on the report series, and the price
-# scenarios on the example series. Only the first seed is saved, for later notebooks. The
-# random calendars are drawn once, so every model and seed meets the same promotions.
+# scenarios on the example series. Only the first seed is saved, for later notebooks. The random
+# calendars are drawn once, so every model and seed meets the same promotions.
 
 # %%
 calendars = gp.promo_calendars(data_a.futr_df, report_ids)
@@ -306,13 +299,12 @@ gd.summaries(runs)[health_cols].round(3)
 gplt.plot_training(runs, warmup=gd.warmup_steps(max_steps), title="05b: every seed")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### 05's reference numbers (3 seeds)
 #
-# 05 kept one model, but its probes need the model in memory. So we refit 05's selected setting
-# here, with the same 3 seeds and the same data, and probe each fit. Training is deterministic
-# for a given seed, so these are 05's own models: the check below compares their forecasts with
-# the ones 05 stored.
+# 05 kept one model, but its probes need the model in memory, so we refit 05's selected setting
+# here with the same 3 seeds and the same data, and probe each fit. Training is deterministic for
+# a given seed, which means these are 05's own models; the check below compares their forecasts
+# with the ones 05 stored.
 
 # %%
 def model_05(seed):
@@ -335,11 +327,10 @@ print("refit against 05's stored forecasts, largest difference (units):",
 sweep_a = gp.seed_mean_sweep(runs_a)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# For both models, each series' sweep and probes are averaged over the three seeds first,
-# then summarised: the response of the seed-mean model. The per-seed table shows the spread. The
-# research found each run tends to be all-negative or all-positive in its response (§6), so
-# watch for one seed that disagrees with the others.
+# For both models, each series' sweep and probes are averaged over the three seeds before we
+# summarise them, so we report the response of the seed-mean model. The per-seed table shows the
+# spread. Our research found that each run tends to be all-negative or all-positive in its
+# response (§6), so watch for one seed that disagrees with the others.
 
 # %%
 sweep_b = seed_mean([r["sweep"] for r in runs], ["unique_id", "shift"])
@@ -364,16 +355,15 @@ per_seed.round(3)
 reports.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. The echo check: does the model give back the planted lift?
 #
-# The random promotion calendars are the measuring twin of the planted cuts: one-week cuts of
-# 10–30% in ordinary weeks, with every price input rebuilt, exactly as 05b's copies were built.
-# So we compare, depth by depth, the lift we planted with the median lift each model predicts
-# in the cut week. We also draw the lift the data's own elasticity (≈ −3.6) implies.
+# The random promotion calendars mirror the synthetic changes: one-week cuts of 10–30% in
+# ordinary weeks, with every price input rebuilt. So we can compare, depth by depth, the lift we
+# planted with the median lift each model predicts in the cut week. We also draw the lift that
+# the data's own elasticity (≈ −3.6) implies.
 #
-# In the chart (F13), the x-axis is the depth of the one-week cut and the y-axis the median
-# lift in that week. Dashed lines are references; solid lines are what 05 and 05b give back.
+# In the chart (F13), the x-axis is the depth of the one-week cut and the y-axis the median lift
+# in that week. Dashed lines are references, and solid lines are what 05 and 05b give back.
 
 # %%
 summary_a = gp.probe_report(gp.seed_mean_q([r["probe7b"] for r in runs_a], gp.PROBE_KEYS))
@@ -399,42 +389,39 @@ gplt.plot_lift_by_depth({"05 selected": echo["05"], "05b synthetic": echo["05b"]
                         title="Echo check: lift by cut depth, random promotion calendars")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * The planted line is the answer we wrote in. 05 never saw it; 05b saw it in about 2 weeks
-#   per copy.
-# * If 05b's line sits near the planted one, the model learnt the rule. That shows it *can*
-#   learn a price response from data like this, not that the shop's customers behave so.
-# * The calendar cut changes the price and the discount depth together, as a planted cut did.
-#   The last column shows the depth the model was actually given: the data defines depth
-#   against a 4-week rolling mean that includes the cut week, so a 20% cut reads as ≈ 16%
-#   at most, less when an earlier cut is still in the mean.
-# * Here the two solid lines lie on top of each other: ≈ +26% at a 10% cut, ≈ +56% at 20%,
-#   ≈ +90% at 30%. 05 already gives back about the planted lift up to 20%, so the copies had
-#   little to teach it there; at 25–30% both fall well short of the planted +100% and +150%.
-#   Both stay far below the lift the data implies (≈ +125% at 20%).
+# * The planted line is the answer we wrote in. 05 never saw it, while 05b was trained with it.
+# * If 05b's line sits near the planted one, the model learnt the rule. That shows it *can* learn
+#   a price response from data like this, not that the shop's customers behave that way.
+# * A calendar cut changes the price and the discount depth together. The last column shows the
+#   depth the model was actually given: the data defines depth against a 4-week rolling mean that
+#   includes the cut week, so a 20% cut reads as ≈ 16% at most, and less when an earlier cut is
+#   still in the mean.
+# * Here the two solid lines lie on top of each other: ≈ +26% at a 10% cut, ≈ +56% at 20% and
+#   ≈ +90% at 30%. 05 already gives back about the planted lift up to 20%, so the synthetic data
+#   had little to teach it there; at 25–30% both fall well short of the planted lift. Both stay
+#   far below the lift the data implies (≈ +125% at 20%).
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. Probes: sustained against pulse (F11)
 #
-# The probes are the research's phase 7b price shocks: −10%, −20%, −30% and +20%, applied to
-# every test week (**sustained**) or to one week only (**pulse**, test week 5, the first after
-# the three event weeks). `_price` moves `price_index` alone; `_all` rebuilds every input built
-# from price; `pulse_all_promo` also sets the promotion flag. Each chart has two panels:
+# These are our research's phase 7b price shocks: −10%, −20%, −30% and +20%, applied to every
+# test week (**sustained**) or to one week only (**pulse**, test week 5, the first after the
+# three event weeks). `_price` moves `price_index` alone; `_all` rebuilds every input built from
+# price; `pulse_all_promo` also sets the promotion flag. Each chart has two panels:
 #
 # * **left, lift:** median change in units against the shock. A cut should lift sales, so the
 #   points should sit above zero for the cuts and below zero for the +20% rise.
 # * **right, spill:** for the pulses only, the median change in the weeks that were *not*
-#   shocked. Ideally about zero. A large spill means the model smears one week's price across
-#   the horizon.
+#   shocked. Ideally this is about zero; a large spill means the model smears one week's price
+#   across the horizon.
 #
-# The research's pass bar was a median elasticity of −0.3 or stronger, with the right sign
-# (§5). On this data, with an empirical ≈ −3.6, a model can pass that bar and still be far
-# weaker than the shop's customers.
+# Our research's pass bar was a median elasticity of −0.3 or stronger, with the right sign (§5).
+# On this data, with an empirical ≈ −3.6, a model can pass that bar and still be far weaker than
+# the shop's customers.
 
 # %%
 gplt.plot_probe(summary_a, title="05 selected: probe responses")
@@ -443,15 +430,14 @@ gplt.plot_probe(summary_a, title="05 selected: probe responses")
 gplt.plot_probe(summary_b, title="05b synthetic (seed mean): probe responses")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 7. Price response by strength and class (F6, F7)
 #
-# The same charts as 04 and 05, now with 05 and 05b side by side:
+# These are the same charts as in 04 and 05, now with 05 and 05b side by side:
 #
-# * **strength (F6):** one bar per model, split into the share of series that are highly
-#   elastic (≤ −3), elastic, inelastic, flat (|e| < 0.05) or perverse (e > 0);
+# * **strength (F6):** one bar per model, split into the share of series that are highly elastic
+#   (≤ −3), elastic, inelastic, flat (|e| < 0.05) or perverse (e > 0);
 # * **by class (F7):** median elasticity per sales class A–I, with the empirical values dashed.
-#   More negative is a stronger response; below the dotted zero line is the right sign.
+#   More negative is a stronger response, and below the dotted zero line is the right sign.
 
 # %%
 empirical = gp.empirical_elasticity(train, report_ids)
@@ -462,22 +448,20 @@ gplt.plot_elasticity_strength(strength, title="Strength of price response at ±2
 gplt.plot_elasticity_by_class(strength, info, empirical=empirical)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * In F6, look first at the perverse (orange) share: if the cuts helped, it shrinks for 05b.
-#   Then at how much of each bar is elastic or stronger.
+# * In F6, look first at the perverse (orange) share: if the synthetic changes helped, it shrinks
+#   for 05b. Then look at how much of each bar is elastic or stronger.
 # * In F7, a model line closer to the dashed empirical line is more realistic. Both models may
 #   sit well above it (weaker); the question is whether 05b closes some of the gap.
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 8. Accuracy on the test window
 #
-# 05b's seed-mean forecast against 05's. The synthetic weeks sit only in the copies, so this
-# shows how far the planted cuts reach the forecasts for real series and real weeks.
+# Here we compare 05b's seed-mean forecast with 05's. The real series keep their own history, so
+# this shows how far the synthetic changes reach the forecasts for real series and real weeks.
 #
 # The wins chart (F4) has three panels: the share of series 05b wins by class, by count and by
 # volume (0.5 is a draw); the spread of per-series gains; and one dot per series, head to head
@@ -501,15 +485,13 @@ accuracy.round(4)
 gplt.plot_wins(rmsse, info, model="GFM_synthetic", baseline="GFM_selected")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ 0.546 against
-#   ≈ 0.546)? Yes: the two are equal to the third decimal, well inside the noise floor
-#   (≈ 0.005). The mean sits alongside
-#   on the board.
-# * A win share near 0.5 in every class means the cuts left ordinary forecasts alone. Losses
-#   bunched in one class point to where the made-up rule hurts.
+# * We lead with the median RMSSE: is 05b's within the noise floor of 05's (≈ 0.546 against
+#   ≈ 0.546)? Yes, the two are equal to the third decimal, well inside the noise floor
+#   (≈ 0.005). The mean sits alongside on the board.
+# * A win share near 0.5 in every class means the synthetic changes left ordinary forecasts
+#   alone. Losses bunched in one class point to where the made-up rule hurts.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -522,12 +504,11 @@ gd.record(forecasts_b[["unique_id", "ds", "GFM_synthetic"]], test, train,
 gd.median_board("05b")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 9. What the synthetic model does on the example series (F12)
 #
-# Forecasts at the planned price (base), and with every test-week price 20% lower and higher,
-# averaged over the three seeds. The lines should keep their order, with −20% on top; the gap
-# between them is the response, week by week.
+# Here are the forecasts at the planned price (base), and with every test-week price 20% lower
+# and higher, averaged over the three seeds. The lines should keep their order, with −20% on
+# top, and the gap between them is the response, week by week.
 
 # %%
 scenarios = seed_mean([r["scenarios"] for r in runs], ["unique_id", "ds"])
@@ -535,11 +516,10 @@ gplt.plot_series_price(panel, examples, scenarios, models=["-20% price", "base",
                        title="05b: forecasts at -20% / base / +20% price")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 10. The same checks on the test window (report only)
 #
-# The three checks from section 2, now on the test window. They do not change `use`, which
-# was set on validation in section 3; they show whether the choice held.
+# We now run the three checks from section 2 on the test window. They do not change `use`,
+# which was set on validation in section 3; they show whether the choice held.
 
 # %%
 test_numbers = pd.DataFrame({"05": response_numbers(runs_a),
@@ -557,13 +537,12 @@ print(f"later notebooks use: {use} (chosen on validation)")
 pd.DataFrame({"validation (chose)": checks, "test (report)": test_checks})
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * On the test window the accuracy check passes, but the response checks do not: 05b's
-#   one-week 20% cut gives ≈ −1.73 against 05's ≈ −1.79, and the calendars are right-signed
-#   ≈ 99.3% of the time for both. The validation choice holds: the copies cost nothing in
-#   accuracy here and add no price response.
+# * On the test window the accuracy check passes, but the response checks do not: 05b's one-week
+#   20% cut gives ≈ −1.73 against 05's ≈ −1.79, and the calendars are right-signed ≈ 99.3% of the
+#   time for both. So the validation choice holds: the synthetic changes cost nothing in accuracy
+#   here, but add no price response.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -596,17 +575,13 @@ gd.save_config("05b_synthetic", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * The echo check shows whether the model *can* learn a response it is shown. We planted
-#   lifts close to the data's own ≈ −3.6. Would you plant the same lifts on a panel where the
-#   empirical elasticity was −0.5?
-# * Synthetic cuts sit in copies only. Did they change forecasts for real series in weeks with
-#   no price change?
+# * The echo check shows whether the model *can* learn a response it is shown. We planted lifts
+#   close to the data's own ≈ −3.6. Would you plant the same lifts on a panel where the empirical
+#   elasticity was −0.5?
+# * The real series keep their own history. Did the synthetic data still change forecasts for
+#   real series in weeks with no price change?
 # * The rule needed all three checks. Which was hardest to pass, and why?
 # * The first version of this rule moved `price_index` alone, so a cut arrived with no discount
 #   depth. Which probe would you trust to plan a promotion, and why?
-#
-# **Try it:** set `cuts_per_copy` to 4, or scale `gp.SYNTHETIC_LIFT` down by half, and rerun the
-# echo check. Does the measured lift follow the planted one?

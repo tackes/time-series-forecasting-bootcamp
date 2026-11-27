@@ -1,4 +1,3 @@
-<!-- DRAFT: Graeme to edit -->
 # Day 2 slides: our copy, with the full-panel results
 
 A copy of the v1 Day 2 deck (`day2_neural/v1/slides/` on `lm.day2-slides`, 25 Nov 2026), with

@@ -11,24 +11,23 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 05c (full data) — Lab: fixing the exploding forecasts at the cause (10 min)
 #
-# On every series (08, 11) a few hundred N-BEATSx item forecasts explode, up to ≈ 8,000 times
-# the item's largest training week. 08 and 11 cap them. Here we test a fix at the cause.
+# When we looked at our 2,000-item sample everything seemed fine. But when we forecast every
+# series (08, 11), a few hundred N-BEATSx item forecasts exploded, up to ≈ 8,000 times the item's
+# largest training week. 08 and 11 cap them; here we test a fix at the cause.
 #
-# **The cause.** The robust scaler scales each window's inputs by their median and MAD over
-# the 14 input weeks. `discount_depth` and `price_index` drift by ≈ 0.001 a week with CPI
-# deflation, so in a quiet window their spread is tiny. A 20% cut in the forecast weeks then
-# becomes hundreds of scaled units, and the exogenous stack passes it straight to the forecast.
-# In the exploding items, `discount_depth`'s largest scaled future value has a median of
-# ≈ 600 (11 for the other items), and both price inputs move together on every discount, so
-# dropping one would not help. `promo` is exactly flat then, but the scaler's fallback keeps it
-# near 1.
+# **The cause.** The robust scaler scales each window's inputs by their median and MAD over the
+# 14 input weeks. With CPI deflation, `discount_depth` and `price_index` drift by ≈ 0.001 a week,
+# so in a quiet window their spread is tiny. A 20% cut in the forecast weeks then becomes
+# hundreds of scaled units, and the exogenous stack passes it straight into the forecast. In the
+# exploding items, `discount_depth`'s largest scaled future value has a median of ≈ 600 (11 for
+# the other items), and both price inputs move together on every discount, so dropping one would
+# not help. `promo` is exactly flat in these windows, but the scaler's fallback keeps it near 1.
 #
-# **The fix.** Keep the robust scaler, but never let its spread fall below **0.01**, fixed
-# before any result. A 20% cut is then at most 20 scaled units. Sales are in units, so their
-# spread is almost never that small and the floor leaves them alone.
+# **The fix.** We keep the robust scaler, but never let its spread fall below **0.01**, a value
+# fixed before any result. A 20% cut is then at most 20 scaled units. Sales are in units, so
+# their spread is almost never that small, and the floor leaves them alone.
 #
 # | | |
 # |---|---|
@@ -37,15 +36,15 @@
 # | Measured | validation accuracy and price probes; exploding item-weeks on every series |
 # | Decides | whether the floor replaces the cap, by a rule written before the results |
 #
-# **Part 2 (sections 6–9)** cleans the prices first, then tests two more arms: cleaned
-# prices alone, and cleaned prices with the floor. That part was added after part 1's result
-# showed a data error behind the worst explosions; part 1 is unchanged. **Part 3 (sections
-# 10–11)** adds a clip on the scaled price inputs, after part 2 showed large real price moves
-# still exploding.
+# **Part 2 (sections 6–9)** cleans the prices first, then tests two more arms: cleaned prices
+# alone, and cleaned prices with the floor. We added that part after part 1's result showed a
+# data error behind the worst explosions; part 1 is unchanged. **Part 3 (sections 10–11)** adds
+# a clip on the scaled price inputs, after part 2 showed that large real price moves still
+# explode.
 #
 # **In the chain:** reads `05_selected`, `02_shortlist` and `08_reconcile`, 05b's cached
 # validation and probe runs of 05, and 11's all-series forecasts. Writes `05c_scaler_floor`,
-# `05c_price_clean` and `05c_input_clip`. `05c_input_clip`'s `use` key makes
+# `05c_price_clean` and `05c_input_clip`. The `use` key in `05c_input_clip` makes
 # `gd.selected_config()` return the chosen arm, so 06–11 build on it.
 
 # %%
@@ -60,7 +59,6 @@ bc = gd.bc
 gd.status()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. Settings
 
 # %%
@@ -98,29 +96,27 @@ print(f"floor {FLOOR} | {max_steps:,} steps | seeds {gd.SEEDS} | covariates {dat
       f"{len(all_ids):,} series")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. The rule, written before the results
 #
-# The floor replaces the cap for the GFM **only if all three hold**:
+# The floor replaces the cap for the GFM **only if all three checks hold**:
 #
-# 1. **Accuracy.** Its median validation RMSSE on the sample is no more than the 02 noise
-#    floor above 05's.
+# 1. **Accuracy.** Its median validation RMSSE on the sample is no more than the 02 noise floor
+#    above 05's.
 # 2. **Price response.** On validation, its one-week 20% cut elasticity is no more than 0.1
-#    weaker than 05's (≈ −1.8), and its share of right-signed random calendar cuts no more
+#    weaker than 05's (≈ −1.8), and its share of right-signed random calendar cuts is no more
 #    than 1 point lower.
 # 3. **Explosions.** On every series, the 3-seed mean forecast goes above `CAP` × the item's
 #    largest training week in at most a tenth as many item-weeks as 05's does (11's count).
 #
-# 1 and 2 are the checks any arm meets (05b's rule). 3 is what the floor is for. It reads the
-# test window, because 05's all-series forecasts exist only there (11); it is a count of
-# failures, not a score, and no setting is tuned on it.
+# Checks 1 and 2 are the ones any arm has to meet (05b's rule), and 3 is what the floor is for.
+# Check 3 reads the test window, because 05's all-series forecasts exist only there (11); it is a
+# count of failures rather than a score, and no setting is tuned on it.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Validation: the floor against 05 (3 seeds each)
 #
-# 05's validation fits are 05b's, cached with the same seeds and data. The floored fits
-# forecast every series, so we can also count explosions on validation.
+# 05's validation fits are 05b's, cached with the same seeds and data. The floored fits forecast
+# every series, so we can also count explosions on validation.
 
 # %%
 valid_calendars = gp.promo_calendars(valid_data.futr_df, valid_report_ids)
@@ -182,26 +178,24 @@ print("floor, validation, every series:",
 valid_numbers.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * **Accuracy improves.** The floored model's median validation RMSSE is 0.574 against 05's
-#   0.583: better by ≈ 2× the noise floor (0.005), not just within it.
+#   0.583, better by ≈ 2× the noise floor (0.005), not just within it.
 # * **The price response is stronger.** A one-week 20% cut gives an elasticity of −1.95 against
-#   −1.77 (lift +55% against +49%), and 99.7% of random calendar cuts lift the forecast.
-# * **But explosions remain.** On every series the floored model still has 646 items above
-#   the cap on validation, and one forecast at 7 × 10⁷ times its item's largest week. The mean
-#   RMSSE (1.13 against 1.08) shows it.
+#   −1.77 (a lift of +55% against +49%), and 99.7% of random calendar cuts lift the forecast.
+# * **But explosions remain.** On every series the floored model still has 646 items above the
+#   cap on validation, and one forecast at 7 × 10⁷ times its item's largest week. The mean RMSSE
+#   (1.13 against 1.08) shows it.
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. The test window: every series, 3 seeds
 #
-# The floored model on all training weeks, forecasting every series, with the test-window
-# probes. 05's numbers come from 11's first run (forecasts, kept in
-# `05c_reference_05_all_series`) and 05b (probes), with the same seeds.
+# Here the floored model is fitted on all training weeks and forecasts every series, with the
+# test-window probes. 05's numbers come from 11's first run (forecasts, kept in
+# `05c_reference_05_all_series`) and from 05b (probes), with the same seeds.
 
 # %%
 calendars = gp.promo_calendars(data.futr_df, report_ids)
@@ -259,7 +253,6 @@ test_scores.round(3)
 test_response.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. The decision
 
 # %%
@@ -279,26 +272,26 @@ print(f"the GFM uses: {use}")
 pd.Series(checks)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * **The rule keeps the cap.** The floor passes on accuracy and price response, but it only
-#   halves the explosions (236 item-weeks in 56 items, against 466 in 101), not the tenfold
-#   cut the rule asked for.
+#   halves the explosions (236 item-weeks in 56 items, against 466 in 101), rather than the
+#   tenfold cut the rule asked for.
 # * **The largest explosions are a data error.** Item `1120_S1` has `price_index` values of
-#   2,000 to 29,000 in some weeks: a price in the wrong units. With the floor, its forecast
+#   2,000 to 29,000 in some weeks, i.e. a price in the wrong units. With the floor, its forecast
 #   reaches 5 × 10⁹ units in one seed and carries almost all of the uncapped WAPE (12.6). 29
-#   series have a `price_index` above 3 somewhere in training (3 in the sample). No scaler
+#   series have a `price_index` above 3 somewhere in training (3 in the sample), and no scaler
 #   can make sense of such inputs.
 # * **One seed (90218) still blows up a normal-priced item** (`6653_S1`, ≈ 550× its largest
-#   week). The floor bounds each scaled input, but the exogenous stack can still extrapolate
-#   far from a deep discount. Seed 46335 is clean apart from `1120_S1`: uncapped WAPE 0.237.
-# * **Many of the remaining "explosions" are moderate** (35–45×) and in items whose sales
+#   week). The floor bounds each scaled input, but the exogenous stack can still extrapolate far
+#   from a deep discount. Seed 46335 is clean apart from `1120_S1`, with an uncapped WAPE of
+#   0.237.
+# * **Many of the remaining "explosions" are moderate** (35–45×), and in items whose sales
 #   changed sharply, for example a collapse after a big week. A 3× cap is the right guard for
 #   those.
-# * **Capped, the floor is the better model:** all-series median RMSSE 0.511 against 0.540,
-#   WAPE 0.251 against 0.258; on the sample 0.523 against 0.546. Uncapped, its sample WAPE
-#   is 6.99, so its board row must be read with the cap in mind.
+# * **Capped, the floor is the better model:** all-series median RMSSE 0.511 against 0.540, and
+#   WAPE 0.251 against 0.258; on the sample, 0.523 against 0.546. Uncapped, its sample WAPE is
+#   6.99, so you should read its board row with the cap in mind.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -330,26 +323,25 @@ gd.save_config("05c_scaler_floor", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. Part 2: cleaning the prices
 #
-# `price_index` is this week's price divided by the series' usual price (its median before
-# the cutoff): 1 is the usual price, 0.8 is 20% off, 3 is triple. Two kinds of bad price:
+# `price_index` is this week's price divided by the series' usual price (its median before the
+# cutoff), so 1 is the usual price, 0.8 is 20% off and 3 is triple. We found two kinds of bad
+# price:
 #
-# * **placeholders**: weeks priced £0.01–0.05 (229 weeks in 79 series) with normal sales.
-#   They look like 99% discounts. When they are most of a series' weeks, as in `1120_S1`,
-#   the placeholder becomes the usual price and every real price looks thousands of times
-#   too high;
+# * **placeholders**: weeks priced £0.01–0.05 (229 weeks in 79 series) with normal sales. They
+#   look like 99% discounts. When they make up most of a series' weeks, as in `1120_S1`, the
+#   placeholder becomes the usual price and every real price looks thousands of times too high;
 # * **out-of-range prices**: more than 6× above or below the usual price, most likely in the
 #   wrong units.
 #
-# `gp.clean_prices` replaces both with the median of the good prices in the 9 weeks around
-# them (the series' usual price if there are none), then rebuilds `discount_depth` and
-# `price_index`. The thresholds (£0.05, 6×) were fixed before any fit. Sales are untouched,
-# so the scored series are the same. Setting them to missing is not an option: N-BEATSx
-# cannot take missing future inputs. Shifting prices by +1 is not one either: a £0.60 item
-# is a real cheap item, and the shift would shrink cheap items' discounts more than dear
-# ones'.
+# `gp.clean_prices` replaces both with the median of the good prices in the 9 weeks around them
+# (or the series' usual price if there are none), then rebuilds `discount_depth` and
+# `price_index`. The thresholds (£0.05, 6×) were fixed before any fit. Sales are untouched, so
+# the scored series are the same. Setting bad prices to missing is not an option, because
+# N-BEATSx cannot take missing future inputs. Neither is shifting prices by +1: a £0.60 item is a
+# real cheap item, and the shift would shrink the discounts of cheap items more than those of
+# dear ones.
 
 # %%
 CLEAN = {"k": 6.0, "floor": 0.05}
@@ -369,22 +361,20 @@ print(f"{len(replaced):,} weeks replaced in {replaced['unique_id'].nunique():,} 
 ranges.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 7. The rule for part 2, written before the results
 #
-# Each arm (**clean**, **clean + floor**) is compared with 05 on the validation window, with
-# the same checks as section 2's first two:
+# Each arm (**clean**, **clean + floor**) is compared with 05 on the validation window, using the
+# first two checks of section 2:
 #
 # 1. median validation RMSSE no more than the 02 noise floor above 05's;
 # 2. one-week 20% cut elasticity no more than 0.1 weaker than 05's, and right-signed calendar
 #    cuts no more than 1 point fewer.
 #
-# Of the arms that pass, the one with the lower validation median RMSSE is recommended. The
-# cap stays in every case, as a safety net: part 1 showed no setting removes every
-# explosion. The exploding item-weeks on every series (test window) are reported for each.
+# Of the arms that pass, we recommend the one with the lower validation median RMSSE. The cap
+# stays in every case, as a safety net, because part 1 showed that no setting removes every
+# explosion. We report the exploding item-weeks on every series (test window) for each arm.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 8. Validation and test: the two arms (3 seeds each)
 
 # %%
@@ -439,7 +429,6 @@ test_scores2.round(3)
 test_response2.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 9. The decision for part 2
 
 # %%
@@ -458,24 +447,24 @@ print(f"recommended: {recommended} (the cap stays in every case)")
 pd.DataFrame(checks2)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * **Cleaning alone fails the rule.** Validation median 0.599 against 05's 0.583, 3× the
+# * **Cleaning alone fails the rule.** Its validation median is 0.599 against 05's 0.583, 3× the
 #   noise floor worse. It also has *more* exploding items (156 against 101): with the fake 99%
-#   discounts gone, more input windows are near-flat, which is the mechanism the floor targets.
-# * **Clean + floor passes and is recommended.** Validation 0.562 against 0.583 (≈ 4× the
-#   noise floor better), one-week cut elasticity −2.03 against −1.77. On the test window,
-#   capped, it ties the floor alone (all series 0.514 against 0.511; sample 0.519 against
-#   0.523) and beats 05 (0.540 and 0.546).
-# * **The cap is still essential.** Uncapped, clean + floor's all-series WAPE is 221: one item,
-#   `1120_S1`, carries it. Its prices are now in range but swing 2–5× its input-window level,
-#   and even floored at 0.01 that is ≈ 400 scaled units. The floor bounds small moves in
-#   near-flat inputs, not large moves; the exogenous stack is linear in its inputs and
+#   discounts gone, more input windows are near-flat, which is exactly the mechanism the floor
+#   targets. The fixes interact.
+# * **Clean + floor passes and is recommended.** Validation 0.562 against 0.583 (≈ 4× the noise
+#   floor better), and a one-week cut elasticity of −2.03 against −1.77. On the test window,
+#   capped, it ties the floor alone (all series 0.514 against 0.511; sample 0.519 against 0.523)
+#   and beats 05 (0.540 and 0.546).
+# * **The cap is still essential.** Uncapped, clean + floor's all-series WAPE is 221, and one
+#   item, `1120_S1`, carries it. Its prices are now in range but swing 2–5× its input-window
+#   level, and even floored at 0.01 that is ≈ 400 scaled units. The floor bounds small moves in
+#   near-flat inputs, not large moves, and the exogenous stack is linear in its inputs, so it
 #   extrapolates. `1120_S1` sells nothing in 90% of its weeks.
 # * **Training is less steady than 05's.** Several fits find their best weights early
-#   (`best_frac` 0.3–0.4) and one ends 3.4× worse than its best; the best-weights callback
-#   recovers them, but it is a sign the price inputs still kick the training around.
+#   (`best_frac` 0.3–0.4), and one ends 3.4× worse than its best. The best-weights callback
+#   recovers them, but it is a sign that the price inputs still kick the training around.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -509,22 +498,22 @@ gd.save_config("05c_price_clean", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 10. Part 3: clipping the scaled price inputs
 #
 # The floor bounds the *spread*, so a small move in a near-flat input stays small. It does not
 # bound a large move: `1120_S1`'s price at 5× its input-window level is still ≈ 400 scaled
-# units. Clipping bounds the scaled inputs themselves. The target is never clipped.
+# units. Clipping bounds the scaled inputs themselves; the floor bounds the divisor, and the clip
+# bounds the result. The target is never clipped.
 #
-# **How far to clip** was chosen from the inputs alone, before any fit. With the floor, a
-# normal 20% cut is already ≈ 20 units. On the cleaned test-window inputs, the scaled
-# `price_index` has a 99th percentile of ≈ 43 and a 99.9th of ≈ 75 (`discount_depth` ≈ 23 and
-# ≈ 43; `promo` never above 6). A clip of ±10 would flatten 40% of series' real price
-# signal. **±50** touches ≈ 0.5% of item-weeks and cuts the worst (≈ 440) about ninefold.
+# **How far to clip** was chosen from the inputs alone, before any fit. With the floor, a normal
+# 20% cut is already ≈ 20 units. On the cleaned test-window inputs, the scaled `price_index` has
+# a 99th percentile of ≈ 43 and a 99.9th of ≈ 75 (`discount_depth` ≈ 23 and ≈ 43; `promo` is
+# never above 6). A clip of ±10 would flatten the real price signal of 40% of series, whereas
+# **±50** touches ≈ 0.5% of item-weeks and cuts the worst (≈ 440) about ninefold.
 #
-# **The rule**, as section 7's: within the noise floor of 05 on validation, and a price
+# **The rule** is that of section 7: within the noise floor of 05 on validation, and a price
 # response no weaker. Of every arm that passes (clean + floor from part 2, or clean + floor +
-# clip), the lower validation median RMSSE is recommended. The cap stays either way.
+# clip), we recommend the lower validation median RMSSE. The cap stays either way.
 
 # %%
 CLIP = 50.0
@@ -571,7 +560,6 @@ test_scores3.round(3)
 test_response3.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 11. The decision for part 3
 
 # %%
@@ -590,44 +578,43 @@ print(f"recommended: {recommended3} (the cap stays in every case)")
 pd.DataFrame(checks3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * **The rule recommends clean + floor**, but it is a tie: validation 0.562 against 0.567 for
-#   clean + floor + clip, 0.005 apart, inside the noise floor. Both beat 05 (0.583).
-# * **The clip does what it was for.** The largest forecast falls from 2 × 10⁸ times the
-#   item's largest week to 300×; `1120_S1` no longer explodes. Capped, the clipped arm has
-#   the best all-series WAPE (0.248) and ties on median RMSSE (0.513).
-# * **One explosion is left, and it is not the inputs.** In seed 46335, `6653_S1`, a best
-#   seller, is forecast at ≈ 900× its largest week, with every scaled input inside ±5 and
-#   ordinary promotions. That is a rare blow-up inside the network, which no input fix can
-#   reach; the other two seeds are clean (uncapped all-series WAPE 0.235 and 0.268).
-# * **The price response is a little weaker with the clip** (−1.85 against −2.03), still
+#   clean + floor + clip, 0.005 apart and inside the noise floor. Both beat 05 (0.583).
+# * **The clip does what it was for.** The largest forecast falls from 2 × 10⁸ times the item's
+#   largest week to 300×, and `1120_S1` no longer explodes. Capped, the clipped arm has the best
+#   all-series WAPE (0.248) and ties on median RMSSE (0.513).
+# * **One explosion is left, and it is not the inputs.** In seed 46335, `6653_S1`, a best seller,
+#   is forecast at ≈ 900× its largest week, with every scaled input inside ±5 and ordinary
+#   promotions. That is a rare blow-up inside the network, which no input fix can reach; the
+#   other two seeds are clean (uncapped all-series WAPE 0.235 and 0.268).
+# * **The price response is a little weaker with the clip** (−1.85 against −2.03), but still
 #   stronger than 05's −1.77.
 #
 # *Exact numbers vary with seed and hardware.*
 
 # %%
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### The choice: clean + floor + clip
 #
-# The rule's tie-break picks clean + floor, by 0.005 of validation median RMSSE, inside the
-# noise floor: on accuracy the two are the same model. We carry **clean + floor + clip**
-# forward instead, and say so here. The reason is not a score: it is that the calculations
-# training relies on should be stable. With the clip, no input can be scaled beyond ±50, so
-# no window can push the exogenous stack, its gradients or its forecast to extremes (the worst
-# forecast is 300× the item's largest week, against 2 × 10⁸). Its training was also the
-# steadiest of the cleaned arms. The cost is a slightly weaker price response (−1.85 against
-# −2.03, still stronger than 05's −1.77). `docs/stability_choices.md` sets out each choice.
+# The rule's tie-break picks clean + floor, by 0.005 of validation median RMSSE, which is inside
+# the noise floor, so on accuracy the two are the same model. We carry **clean + floor + clip**
+# forward instead, and we say so plainly here: this is a judgement, not the rule. The reason is
+# not a score but that the calculations training relies on should be stable. With the clip, no
+# input can be scaled beyond ±50, so no window can push the exogenous stack, its gradients or
+# its forecast to extremes (the worst forecast is 300× the item's largest week, against
+# 2 × 10⁸). Its training was also the steadiest of the cleaned arms. The cost is a slightly
+# weaker price response (−1.85 against −2.03, still stronger than 05's −1.77).
+# `docs/stability_choices.md` sets out each choice.
 #
-# The cap is part of the carried-forward model: its saved forecasts, which 06–10 read, and
-# its board row are capped at 3× the item's largest training week, as 08 and 11 cap every
-# item. The other 05c arms are diagnostics and stay uncapped on the board.
+# The cap is part of the carried-forward model: its saved forecasts, which 06–10 read, and its
+# board row are capped at 3× the item's largest training week, as 08 and 11 cap every item. The
+# other 05c arms are diagnostics and stay uncapped on the board.
 #
-# The first seed is refitted once more and saved as `05c_selected`, for 08, 09 and 11, which
-# need the model itself. The saved model notes its floor and clip, and `gd.load_model`
-# reapplies them.
+# The first seed is refitted once more and saved as `05c_selected`, for 08, 09 and 11, which need
+# the model itself. The saved model records its floor and clip, and `gd.load_model` reapplies
+# them.
 
 # %%
 CHOSEN = "clean_floor_clip"
@@ -676,28 +663,30 @@ gd.save_config("05c_input_clip", {
 gd.median_board("05c")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# The robust scaler's tiny spreads were one cause of the explosions, and the floor removes it:
-# it halves the exploding items and makes the GFM more accurate and more price-responsive. But
-# it is not a fix on its own. A handful of series carry corrupted prices, and N-BEATSx's
-# exogenous stack can still extrapolate wildly in a rare seed. So the cap stays, as the rule
-# says.
+# The robust scaler's tiny spreads were one cause of the explosions, and the floor removes it: it
+# halves the exploding items and makes the GFM more accurate and more responsive to price. But it
+# is not a fix on its own. A handful of series carry corrupted prices, and N-BEATSx's exogenous
+# stack can still extrapolate wildly in a rare seed, so the cap stays, as the rule says.
 #
-# Part 2 cleaned the prices: placeholders and out-of-range weeks replaced from their
+# Part 2 cleaned the prices, replacing placeholders and out-of-range weeks from their
 # neighbours. That is right as data hygiene, but on its own it costs accuracy and adds
-# explosions. With the floor it is the best GFM so far on validation (0.562), with the
-# strongest price response (−2.03), and it ties the floor alone on the test window.
+# explosions. With the floor it is the best GFM so far on validation (0.562), with the strongest
+# price response (−2.03), and it ties the floor alone on the test window.
 #
-# Part 3 clipped the scaled price inputs at ±50, which bounds the large real price moves the
+# Part 3 clipped the scaled price inputs at ±50, which bounds the large real price moves that the
 # floor leaves alone. It removes the input-driven explosions; what is left is a rare blow-up
-# inside the network in one seed, with ordinary inputs. That is why the cap stays: it is the
-# guard for a failure no input treatment can prevent.
+# inside the network in one seed, with ordinary inputs. That is why the cap stays: it guards
+# against a failure no input treatment can prevent.
+#
+# Taken together, these stability guards bind what the network sees, how hard any one window can
+# push its gradients, and how far its forecasts can go. To set them well you need to know your
+# data, and you should track and investigate the series that trigger them.
 #
 # **The rule's pick is clean prices + floor; clean + floor + clip ties it, and is the one we
 # carry forward**, with the cap, for stable training calculations (section 11). From here on
 # `gd.selected_config()` returns it, and every model in the final comparison uses the cleaned
 # prices (`gp.PRICE_CLEAN`): LightGBM (00, 04), the GFMs (06, 08, 09, 11) and the foundation
-# models (07, 07b, 11). The GFM development notebooks 01–05 keep the raw prices they were
-# run with.
+# models (07, 07b, 11). The GFM development notebooks 01–05 keep the raw prices they were run
+# with.

@@ -11,20 +11,20 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 12 (full data) — Lab: does the realized price give the sales away? (10 min)
 #
 # Every price-aware model today reads the test window's **realized** selling price as its price
-# plan. In production a planned `sale_price` is given for the future, and it is usually close
-# to the price realized, so that is a fair stand-in. But this dataset has a quirk: a week with
-# **no sales** is recorded at exactly the **regular price** (84% of test-window zero-sale weeks
-# are priced at regular; weeks at regular have no sales 66% of the time, other weeks 1.7%). A
-# real plan would not carry that fingerprint. The Day 1 framework (`shared/README.md`) treats
-# realized future prices as leaky for this reason.
+# plan. In production we are given a planned `sale_price` for the future, which is usually close
+# to the price realized, so the realized price is a fair stand-in. But this dataset has a quirk:
+# a week with **no sales** is recorded at exactly the **regular price** (84% of test-window
+# zero-sale weeks are priced at regular; weeks at regular have no sales 66% of the time, other
+# weeks 1.7%). A real plan would not carry that fingerprint, and the Day 1 framework
+# (`shared/README.md`) treats realized future prices as leaky for this reason.
 #
-# So we separate two things: the value of knowing the price, which a production plan gives,
-# and the value of the zero-sales fingerprint, which it does not. Same trained models, same
-# test window; only the future price changes:
+# Being at the regular price makes a zero more likely, but it does not tell us what demand is.
+# So we separate two things: the value of knowing the price, which a production plan gives us,
+# and the value of the zero-sales fingerprint, which it does not. We keep the same trained
+# models and the same test window, and change only the future price:
 #
 # | Plan | Test-window `sale_price` | Stands for |
 # |---|---|---|
@@ -32,15 +32,16 @@
 # | `no_fingerprint` | as recorded, but zero-sale weeks at regular take last week's price | a plan |
 # | `no_change` | the last training week's price, all 14 weeks | no future prices |
 #
-# `no_fingerprint` stands for a production plan: close to the realized price, without the
-# zero-sales fingerprint. `no_change` is a strict lower bound: knowing no future prices.
+# `no_fingerprint` stands for a production plan, close to the realized price but without the
+# zero-sales fingerprint. `no_change` is a strict lower bound, where we know no future prices at
+# all.
 #
 # The promotion flag stays as recorded in every plan, and every derived input
 # (`discount_depth`, `price_index`, the rolling ratio) is rebuilt from the plan's price.
 #
 # **In the chain:** reads the selected config (`gd.selected_config()`), its saved model
 # `05c_selected` and `02_shortlist`; writes `12_price_plan`. Nothing is retrained except
-# LightGBM (minutes on CPU): the GFM and the foundation models only forecast.
+# LightGBM (minutes on CPU), so the GFM and the foundation models only forecast.
 
 # %%
 import numpy as np
@@ -54,16 +55,15 @@ bc = gd.bc
 gd.status()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. The rule, written before the results
 #
 # * **The fingerprint matters** for a model if `no_fingerprint` is worse than `realized` by more
-#   than the 02 noise floor in median RMSSE. Then part of that model's score came from reading
-#   zero-sales weeks off the price, not from forecasting.
-# * `realized` − `no_change` is the value of knowing the future price. That part a production
-#   price plan does give, so it is not a leak.
-# * Every forecast is clipped at 0 and capped at 3× the item's largest training week, as on
-#   the board.
+#   than the 02 noise floor in median RMSSE. In that case part of the model's score came from
+#   reading zero-sales weeks off the price, rather than from forecasting.
+# * `realized` − `no_change` is the value of knowing the future price. A production price plan
+#   does give us that part, so it is not a leak.
+# * Every forecast is clipped at 0 and capped at 3× the item's largest training week, as on the
+#   board.
 
 # %%
 cfg = gd.selected_config()
@@ -108,13 +108,12 @@ print(f"{len(eval_ids):,} series | covariates {covariates} | share of test weeks
       f"the plan changes: " + ", ".join(f"{p} {v:.1%}" for p, v in changed.items()))
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. Forecasts under each plan
 #
 # The GFM is the saved first seed of the selected model (`05c_selected`, with its scaler floor
 # and input clip). Chronos-2, t0-gamma and Timestral are zero-shot with the main setup's
-# covariates, as in 07b. LightGBM is 00's model, fitted once on the training weeks (identical
-# for every plan) and asked to forecast under each plan.
+# covariates, as in 07b. LightGBM is 00's model, fitted once on the training weeks (identical for
+# every plan) and asked to forecast under each plan.
 
 # %%
 def capped(fc: pd.DataFrame, col: str) -> pd.DataFrame:
@@ -194,11 +193,10 @@ for name, make in MODELS.items():
             print(f"{name:9s} {plan:15s} {tm.seconds:6.1f}s")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### A check: the realized plan repeats the board
 #
-# Under `realized` each model should match its board forecasts (the GFM against 05c's run of
-# the same seed, the others against 07, 07b and 00), up to GPU noise.
+# Under `realized` each model should match its board forecasts (the GFM against 05c's run of the
+# same seed, the others against 07, 07b and 00), up to GPU noise.
 
 # %%
 board = bc.load_forecasts()
@@ -217,7 +215,6 @@ for name, ref in refs.items():
 pd.DataFrame(check).T.round(4)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Scores under each plan
 
 # %%
@@ -246,21 +243,20 @@ median.round(4)
 scores.set_index(["model", "plan"]).round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * **The check passes**: under `realized` every model repeats its board score exactly.
 # * **The fingerprint is real but small.** Removing it costs every model 0.005–0.008 of median
-#   RMSSE (t0-gamma 0.502 → 0.507, Chronos-2 0.512 → 0.518, LightGBM 0.572 → 0.580): about one
-#   noise floor. It changes 4.5% of test weeks' prices, and the order of the models does not
-#   change. By the rule it "matters" for every model, but only just.
-# * **Knowing the price is worth far more**: 0.11–0.15 of median RMSSE between
-#   `no_fingerprint` and `no_change`. That is the value a production price plan gives, and it is
-#   most of what the covariates were credited with.
+#   RMSSE (t0-gamma 0.502 → 0.507, Chronos-2 0.512 → 0.518, LightGBM 0.572 → 0.580), which is
+#   about one noise floor. It changes the price in 4.5% of test weeks, and the order of the
+#   models does not change. By the rule it "matters" for every model, but only just.
+# * **Knowing the price is worth far more**: 0.11–0.15 of median RMSSE between `no_fingerprint`
+#   and `no_change`. That is the value a production price plan gives us, and it is most of what
+#   the covariates were credited with.
 # * **Without any future price** every model scores 0.65–0.69, level with the best Day 1
 #   LightGBM that uses no future information (0.664 on the same series and window).
-# * The GFM here is the saved first seed (0.526), the one with the remaining blow-up, hence its
-#   WAPE.
+# * The GFM here is the saved first seed (0.526), the one with the remaining blow-up, which
+#   explains its WAPE.
 #
 # *Exact numbers vary with seed and hardware.*
 
@@ -277,16 +273,15 @@ gd.save_config("12_price_plan", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # The realized selling price does carry a fingerprint of zero-sales weeks, and every model reads
-# it a little, but it is worth about one noise floor. What the price-aware models gain over the
+# it a little, but it is worth about one noise floor. What our price-aware models gain over the
 # Day 1 benchmarks comes mainly from knowing the price, which a production plan supplies. In
 # production the planned `sale_price` is close to, but not exactly, the price realized, so the
-# honest Day 2 number is the `no_fingerprint` one: ≈ 0.005–0.008 above the board.
+# honest Day 2 number is the `no_fingerprint` one, ≈ 0.005–0.008 above the board.
 #
-# Two caveats. The promotion flag is the recorded one for all 14 weeks; the Day 1 framework
-# assumes a promotion plan only four weeks ahead. And the models were trained on history that
-# contains the fingerprint, so they may have learned to rely on it; removing it at forecast time
-# measures that reliance, which is small.
+# There are two caveats. The promotion flag is the recorded one for all 14 weeks, whereas the
+# Day 1 framework assumes a promotion plan only four weeks ahead. And our models were trained on
+# history that contains the fingerprint, so they may have learnt to rely on it; removing it at
+# forecast time measures that reliance, and it is small.

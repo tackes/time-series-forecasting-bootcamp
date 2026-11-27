@@ -11,17 +11,17 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 06 (full data) — Lab: one global model, or one per cluster? (20 min)
 #
-# A global model pools every series. That is its strength (more examples) and its risk (a fast
-# seller and a slow, lumpy one share the same weights). A middle road is to **group similar
-# series**, then either tell the model the group or train one model per group.
+# A global model pools every series. That is its strength, because it sees more examples, and
+# also its risk, because a fast seller and a slow, lumpy one have to share the same weights. A
+# middle road is to **group similar series**, then either tell the model the group or train one
+# model per group.
 #
-# This is **new work**. The research pooled one GFM with the cluster as a static, and tried
+# This is **new work**. Our research pooled one GFM with the cluster as a static, and tried
 # per-cluster arms with LightGBM only; it never trained per-cluster N-BEATSx models
-# (`docs/gfm_learnings.md` §8, [100k set]). Its clusters used Ward linkage on raw features;
-# here we use k-means on a few demand features.
+# (`docs/gfm_learnings.md` §8, [100k set]). Its clusters used Ward linkage on raw features,
+# whereas here we use k-means on a few demand features.
 #
 # | Arm | What it is |
 # |---|---|
@@ -35,9 +35,9 @@
 # 2. Group them with k-means, choosing the number of groups by silhouette.
 # 3. Fit the two cluster arms (3 seeds each) and score all three on the test window.
 #
-# **In the chain:** reads the selected config (`gd.selected_config()`: `05_selected` or
-# `05b_synthetic`) and `02_shortlist`, writes `06_clusters`. It records a verdict only: later
-# notebooks keep the pooled model whatever wins here.
+# **In the chain:** reads the selected config (`gd.selected_config()`: `05_selected`,
+# `05b_synthetic` or, as now, 05c's chosen arm) and `02_shortlist`, writes `06_clusters`. It
+# records a verdict only, and later notebooks keep the pooled model whatever wins here.
 
 # %%
 from dataclasses import replace
@@ -58,24 +58,22 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# ## Intuition: one big class, or reading groups?
+# ## Intuition: one model for everyone, or one per group?
 #
-# ![Local against global models](../slides/img/global_vs_local.png)
+# ![Local against global models](../slides_full/img/global_vs_local.png)
 #
-# Think of a teacher with one big class. Teaching everyone together is efficient, but the fast
-# readers and the beginners need different things. You can tell the teacher who is in which
-# reading group (a cluster static), or split the class and give each group its own teacher (one
-# model per cluster). Splitting helps if the groups really learn differently. It hurts if each
-# teacher now has too few pupils to learn from. Per-cluster models sit between the two halves
-# of the picture.
+# Local models are bespoke to a single series, while a global model learns typical behaviour
+# across all of them. Clustering sits in between. We can tell one global model which group each
+# series belongs to (a cluster static), or split the panel and train a separate model for each
+# group (one model per cluster). Splitting helps if the groups really behave differently, but it
+# hurts if each model is left with too few series to learn from. Per-cluster models sit between
+# the two halves of the picture.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. The selected model and its data
 #
-# `gp.prepare` rebuilds the selected config's training data exactly, including any oversampled
-# copies and synthetic cuts.
+# `gp.prepare` rebuilds the selected config's training data exactly, including any oversampling
+# and synthetic data it uses.
 
 # %%
 cfg = gd.selected_config()
@@ -89,12 +87,11 @@ print(f"selected: {pooled_name} | {panel['unique_id'].n_unique():,} series | "
       f"{data.fit_df['unique_id'].nunique():,} incl. copies | {cfg['max_steps']:,} steps")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. Series features from the training weeks
 #
-# Each series is described by numbers computed **before the test window**. The shipped
+# We describe each series with numbers computed **before the test window**. The shipped
 # `series_features.parquet` has clusters too, but they use the full history, test weeks
-# included, so we do not use them. The research kept intermittency (zero share, CV²) for a
+# included, so we do not use them. Our research kept intermittency (zero share, CV²) for a
 # reason: clusters that dropped it did worse (§8).
 #
 # | Feature | Meaning |
@@ -138,13 +135,12 @@ scaled = StandardScaler().fit_transform(features[FEATURES])
 features[FEATURES].describe().T.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. How many clusters? A silhouette sweep
 #
-# The silhouette compares each series' distance to its own cluster with its distance to the
-# next one (1 = well separated, 0 = on the border). The rule, fixed before looking: **take the
-# K in 4–8 with the highest silhouette**. It is computed on a sample of 5,000 series for speed.
-# A low, flat curve means the series form a continuum rather than clear groups.
+# The silhouette compares each series' distance to its own cluster with its distance to the next
+# one (1 = well separated, 0 = on the border). The rule, fixed before we look, is to **take the K
+# in 4–8 with the highest silhouette**. For speed, it is computed on a sample of 5,000 series. A
+# low, flat curve means the series form a continuum rather than clear groups.
 
 # %%
 K_RANGE = [3] if gd.SMOKE else [4, 5, 6, 7, 8]
@@ -176,9 +172,8 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The final clustering is cached, so every later run uses the same labels. Clusters are
-# numbered from the highest-selling (0) to the lowest.
+# The final clustering is cached, so every later run uses the same labels. Clusters are numbered
+# from the highest-selling (0) to the lowest.
 
 # %%
 def make_clusters() -> pd.DataFrame:
@@ -195,12 +190,11 @@ cluster_of = clusters.set_index("unique_id")["cluster"]
 info["cluster"] = cluster_of
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Cluster profiles
 #
-# Feature means per cluster, with its size, how many scored series fall in it and its most
-# common sales class. Give each cluster a plain name before going on (e.g. "steady fast
-# sellers", "mostly zeros"): it makes the results easier to read.
+# These are the feature means per cluster, with each cluster's size, how many scored series fall
+# in it and its most common sales class. It is worth giving each cluster a plain name before you
+# go on (e.g. "steady fast sellers", "mostly zeros"), as it makes the results easier to read.
 
 # %%
 profile = clusters.groupby("cluster")[FEATURES].mean()
@@ -211,20 +205,18 @@ profile.insert(2, "main_class", info.groupby("cluster")["sale_class"].agg(
 profile.round(2)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. The rule, written before the results
 #
-# The three arms are scored once on the test window. A cluster arm **beats pooled** only if
-# its median RMSSE is lower by more than the 02 noise floor. Otherwise pooled stays, because it
-# is one model instead of several. Because the rule reads the test window, it only reports
-# whether clustering is worth pursuing; it does not change the model later notebooks use.
+# The three arms are scored once on the test window. A cluster arm **beats pooled** only if its
+# median RMSSE is lower by more than the 02 noise floor; otherwise pooled stays, because it is one
+# model instead of several. As the rule reads the test window, it only reports whether
+# clustering is worth pursuing, and does not change the model that later notebooks use.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. Arm 1: pooled + cluster static
 #
-# The selected model's data, with one one-hot cluster column per cluster added to the statics.
-# Oversampled copies take their original series' cluster.
+# This is the selected model's data, with one one-hot cluster column per cluster added to the
+# statics. The oversampled training data keeps each series' cluster.
 
 # %%
 def with_cluster_statics(data: gd.NixtlaData, cluster_of: pd.Series) -> gd.NixtlaData:
@@ -249,12 +241,11 @@ static_runs = gd.fit_seeds(cluster_static_model, static_data, "06_cluster_static
 static_fcst = gd.seed_forecasts(static_runs)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 6. Arm 2: one model per cluster
 #
-# Each cluster gets its own model, trained only on its series and their copies. The step budget
-# is scaled to its size (`gd.scaled_max_steps`, ≈174 visits per series, §3), so a small cluster
-# is not over-trained. Clusters without a scored series are skipped. The forecasts are then
+# Each cluster gets its own model, trained only on its own series. The step budget is scaled to
+# the cluster's size (`gd.scaled_max_steps`, ≈174 visits per series, §3), so a small cluster is
+# not over-trained. Clusters without a scored series are skipped, and the forecasts are then
 # stacked into one frame.
 
 # %%
@@ -291,10 +282,10 @@ for k in sorted(clusters["cluster"].unique()):
 per_cluster_fcst = pd.concat(per_cluster_fcst, ignore_index=True)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 7. Scores on the test window
 #
-# Median and mean RMSSE for each arm, with the spread of the seed medians for the two new arms.
+# Here are the median and mean RMSSE for each arm, with the spread of the seed medians for the
+# two new arms.
 
 # %%
 pooled = gd.selected_forecasts(cfg).rename(columns={"GFM_selected": "GFM_pooled"})
@@ -334,25 +325,23 @@ gd.record(board, test, train, lab=f"06 clusters ({len(gd.SEEDS)}-seed mean)",
 gd.median_board("06")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * Median RMSSE first. Is either gain over pooled bigger than the noise floor (≈ 0.005)?
-#   If not, it is a tie. Here neither arm gains: cluster static ≈ 0.526 and per cluster
-#   ≈ 0.542, against pooled ≈ 0.520 (05c's cleaned-price model with the scaler floor and
-#   input clip).
+# * Median RMSSE first: is either gain over pooled bigger than the noise floor (≈ 0.005)? If
+#   not, it is a tie. Here neither arm gains: cluster static ≈ 0.526 and per cluster ≈ 0.542,
+#   against pooled ≈ 0.520 (05c's cleaned-price model with the scaler floor and input clip).
 # * The pooled mean (≈ 1.72) is higher than the arms' (≈ 1.09–1.10) because of one seed's
-#   blow-up on a best seller (`6653_S1`, 05c). The board here is not capped; 08 and 11 cap
-#   every item at 3× its largest training week.
-# * Compare each arm's seed spread with the gain. A gain smaller than the spread could vanish
+#   blow-up on a best seller (`6653_S1`, 05c). The board here is not capped, whereas 08 and 11
+#   cap every item at 3× its largest training week.
+# * Compare each arm's seed spread with its gain. A gain smaller than the spread could vanish
 #   with a new seed.
 #
 # *Exact numbers vary with seed and hardware.*
 #
 # ### Marginal wins over pooled (F4)
 #
-# Share of series won by class (by count and by volume), the spread of gains, and one dot per
-# series. A win share near 0.5 everywhere means the arms are interchangeable.
+# This shows the share of series won by class (by count and by volume), the spread of gains,
+# and one dot per series. A win share near 0.5 everywhere means the arms are interchangeable.
 
 # %%
 gplt.plot_wins(rmsse, info, model="GFM_per_cluster", baseline="GFM_pooled")
@@ -361,12 +350,12 @@ gplt.plot_wins(rmsse, info, model="GFM_per_cluster", baseline="GFM_pooled")
 gplt.plot_wins(rmsse, info, model="GFM_cluster_static", baseline="GFM_pooled")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Where each arm wins: by cluster and by sales class
 #
-# Two heatmaps: rows are arms, columns are clusters (then sales classes), each cell the median
-# RMSSE. Greener is better. Read **down a column**: the colour change between arms is the
-# effect. Reading across mixes in how hard each group is to forecast, which is not the point.
+# There are two heatmaps. Rows are arms, columns are clusters (then sales classes), and each
+# cell is the median RMSSE; greener is better. Read **down a column**, as the colour change
+# between arms is the effect. Reading across mixes in how hard each group is to forecast, which
+# is not the point here.
 
 # %%
 by_cluster = rmsse.join(info["cluster"]).groupby("cluster")[list(arms)].median().T
@@ -378,19 +367,17 @@ gplt.plot_heatmap(by_cluster.rename(columns=lambda c: f"cluster {c}"),
 gplt.plot_class_heatmap(rmsse, info)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The whole distribution (F2): per-series RMSSE as a histogram, a cumulative curve and a box
-# plot by class. A median gain that comes from the tail shows up here.
+# The whole distribution (F2) shows per-series RMSSE as a histogram, a cumulative curve and a
+# box plot by class. A median gain that comes from the tail shows up here.
 
 # %%
 gplt.plot_error_dist(rmsse, info)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 8. Apply the rule
 #
-# The gain of each cluster arm over pooled, against the noise floor. The config records the
-# winner for notebook 10 to report.
+# Here is the gain of each cluster arm over pooled, against the noise floor. The config records
+# the winner for notebook 10 to report.
 
 # %%
 pooled_median = summary.loc["GFM_pooled", "median_rmsse"]
@@ -420,15 +407,14 @@ gd.save_config("06_clusters", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
 # * Per-cluster models see fewer series each. Is the smallest cluster where splitting costs
 #   most?
-# * If the cluster static does no better than pooled, the model may already infer the group
-#   from the statics and the history it sees. What would convince you otherwise?
-# * The features describe demand, not price response. Would clusters built on discount depth
-#   and lift group the series differently?
+# * If the cluster static does no better than pooled, the model may already infer the group from
+#   the statics and the history it sees. What would convince you otherwise?
+# * The features describe demand, not price response. Would clusters built on discount depth and
+#   lift group the series differently?
 #
 # **Try it:** add `log_mean_price` or the department one-hot to `FEATURES`, delete
 # `06_clusters.parquet` and `06_silhouette.parquet`, and rerun with `GD_TRAIN=1`.

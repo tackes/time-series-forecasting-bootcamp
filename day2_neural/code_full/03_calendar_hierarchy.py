@@ -11,11 +11,10 @@
 # ---
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # # Day 2 · 03 (full data) — Lab: calendar, events and the hierarchy (25 min)
 #
-# The original lab 03 adds price and promotion as future covariates and the hierarchy as
-# statics. Here price response gets its own notebook (04). We take the tuned N-BEATSx from
+# The original lab 03 adds price and promotion as future covariates and the hierarchy as statics.
+# Here price response gets a notebook of its own (04). Instead, we take the tuned N-BEATSx from
 # notebook 02 and ask whether it forecasts better when it also knows **when** a week is:
 #
 # | Arm | Adds | Future covariates |
@@ -51,22 +50,21 @@ gd.status()
 gplt.use_style()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Intuition: smooth seasons and sharp events
 #
-# Fourier terms are like a dimmer switch turned slowly through the year. They can say "sales
-# rise towards December", but not "this one week is Easter", because Easter moves by up to five
-# weeks from year to year. An event dummy is a light switch: on in that one week, whenever it
-# falls. A department static is a name tag. It lets the model share patterns among items that
-# sit together on the shelf, without one model per department.
+# Fourier terms describe the year as a smooth curve. They can tell the model that sales rise
+# towards December, but not that one particular week is Easter, because Easter moves by up to
+# five weeks from year to year. An event dummy does the opposite: it switches on in that one
+# week, whenever it falls, and is off otherwise. A department static is a label that lets the
+# model share patterns among items that sit together on the shelf, without needing one model per
+# department.
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 1. The starting point and the three arms
 #
 # The model settings, step budget and covariates come from `02_shortlist`. Each arm is a small
-# config, and `gp.prepare(cfg)` turns it into training data. Switches that are off are written
-# out too, so the config says exactly what was used.
+# config, and `gp.prepare(cfg)` turns it into training data. We write out the switches that are
+# off too, so the config records exactly what was used.
 
 # %%
 shortlist_cfg = gd.load_config("02_shortlist")
@@ -101,18 +99,18 @@ for arm, cfg in arm_cfgs.items():
 pd.DataFrame(arm_rows).set_index("arm")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Where the events fall
 #
-# The data has fewer than two years of training weeks, so the model sees **one** Easter, one
+# Our data has fewer than two years of training weeks, so the model sees **one** Easter, one
 # Anzac Day and one Mother's Day to learn from. The validation window (January to early April
-# 2025) holds **no** event at all. It can judge the Fourier terms and the department static,
-# but not the event dummies.
+# 2025) holds **no** event at all, which means it can judge the Fourier terms and the department
+# static, but not the event dummies.
 #
-# The test window is different. Good Friday 2025 (18 April) falls in the **first test week**,
-# the week starting 16 April, and Anzac Day in the second. Easter also fell in the research's
-# held-back window, one reason its price response did not transfer (§6, [100k set]). How to
-# represent Easter is still an open question (§9). The table below lists every event week.
+# The test window is different. Good Friday 2025 (18 April) falls in the **first test week**, the
+# week starting 16 April, and Anzac Day in the second. Easter also fell in our research's
+# held-back window, which is one reason its price response did not transfer (§6, [100k set]).
+# How best to represent Easter is still an open question (§9). The table below lists every event
+# week.
 
 # %%
 def window_of(ds: pd.Series) -> pd.Series:
@@ -133,13 +131,12 @@ event_weeks["window"] = window_of(event_weeks["ds"])
 event_weeks.reset_index(drop=True)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Hierarchy ids are labels, not numbers
 #
-# `department_id` is a number in the data, but department 41 is not "more" than department 3.
-# Fed in as a number, the network would read a distance between them that means nothing, and
-# the scaler would treat it as a quantity (§7, [method]). So `gp.hierarchy_statics` one-hot
-# encodes the 12 largest departments; the rest share an "other" column.
+# `department_id` is a number in the data, but department 41 is not "more" than department 3. If
+# we fed it in as a number, the network would read a distance between departments that means
+# nothing, and the scaler would treat it as a quantity (§7, [method]). So `gp.hierarchy_statics`
+# one-hot encodes the 12 largest departments, and the rest share an "other" column.
 
 # %%
 hierarchy = gp.hierarchy_statics(panel, "department_id")
@@ -148,13 +145,12 @@ print(f"{panel['department_id'].n_unique()} departments → {hierarchy.shape[1] 
 hierarchy.head()
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 2. Fit the three arms on the tuning split
 #
 # `gp.prepare(cfg, cutoff=bc.VALID_START)` builds each arm on the inner training weeks and
-# forecasts the validation window. The reference price and statics use the inner weeks only.
-# Calendar columns are known for any week, and a department is a membership, so neither needs
-# a statistic from later weeks.
+# forecasts the validation window, with the reference price and statics taken from the inner
+# weeks only. Calendar columns are known for any week, and a department is a membership, so
+# neither needs a statistic from later weeks.
 
 # %%
 def fit_arm(arm: str, data: gd.NixtlaData, stage: str) -> list[dict]:
@@ -172,11 +168,10 @@ for arm, cfg in arm_cfgs.items():
     valid_runs[arm] = fit_arm(arm, data, "valid")
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 3. Choose on the validation window
 #
-# Each seed is scored on its own (median RMSSE over the evaluation series). The rule is fixed
-# before looking: start from `base`, and move to a richer arm only if it beats the current
+# We score each seed on its own (median RMSSE over the evaluation series). The rule is fixed
+# before we look: start from `base`, and only move to a richer arm if it beats the current
 # choice by more than the **noise floor** from notebook 02.
 
 # %%
@@ -206,25 +201,25 @@ valid_table.round(4)
 gplt.plot_arm_comparison(valid_runs, metrics=valid_scores)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
-# * If no arm clears the noise floor, the choice stays `base`. The extra columns cost nothing to
-#   compute, but a feature that cannot be shown to help is one more thing to explain.
-# * Validation median RMSSE: base ≈ 0.613, calendar ≈ 0.717, calendar + hierarchy ≈ 0.703.
-# * Remember what validation could not test: it has no event week. A calendar arm that ties
-#   here may still differ in the Easter and Anzac weeks of the test window.
+# * If no arm clears the noise floor, we stay with `base`. The extra columns cost nothing to
+#   compute, but a feature we can't show to help is one more thing to explain.
+# * Validation median RMSSE: base ≈ 0.613, calendar ≈ 0.717, calendar + hierarchy ≈ 0.703. The
+#   Fourier and event inputs made the model worse, most likely because it overfits them and
+#   responds to noise.
+# * Remember what validation could not test: it has no event week. A calendar arm that ties here
+#   may still differ in the Easter and Anzac weeks of the test window.
 #
 # *Reference run: full panel, GPU box, 3 seeds. Exact numbers vary with seed and hardware; the
 # reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 4. Refit on the full training window and score the test window once
 #
-# The best feature arm (the chosen one, or the runner-up if `base` was kept) is refitted with
-# three seeds, and its seed-mean forecast goes on the board. `base` is not refitted: it is
-# notebook 02's `NBEATSx_tuned` (same settings, same data), so we reuse its saved forecasts.
+# We refit the best feature arm (the chosen one, or the runner-up if `base` was kept) with three
+# seeds, and its seed-mean forecast goes on the board. `base` is not refitted: it is notebook
+# 02's `NBEATSx_tuned` (same settings, same data), so we reuse its saved forecasts.
 
 # %%
 base_col = ALIASES["base"]
@@ -254,12 +249,11 @@ gplt.plot_error_dist(rmsse, info, models=[challenger_col, base_col])
 gplt.plot_wins(rmsse, info, model=challenger_col, baseline=base_col)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## 5. The event weeks
 #
-# RMSSE pools the 14 test weeks, so it hides single weeks. To see Easter and Anzac Day, go week
-# by week: total forecast over the evaluation series ÷ total sold − 1 (the bias), with each
-# event marked. Positive means over-forecast.
+# RMSSE pools the 14 test weeks, so it hides what happens in any single week. To see Easter and
+# Anzac Day we go week by week, computing the total forecast over the evaluation series ÷ the
+# total sold − 1 (the bias), with each event marked. Positive means over-forecast.
 
 # %%
 def weekly_bias(fcst: pd.DataFrame, actual, models: list[str]) -> pd.DataFrame:
@@ -280,20 +274,19 @@ bias.insert(0, "event", week_events.reindex(bias.index).fillna(""))
 bias.round(3)
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ### Reading the result
 #
 # * Look at the first two rows. A model without events cannot know that the week of 16 April is
-#   Easter. Its bias there is what the event dummy has to fix.
+#   Easter, so its bias there is what the event dummy has to fix.
 # * Easter-week bias: base ≈ −3.6%, feature arm ≈ −2.4%.
 # * One good Easter week does not make a feature. The dummy was learnt from a single Easter, and
-#   a seed-mean forecast can still be lucky. Compare with the other weeks' bias first.
+#   a seed-mean forecast can still be lucky, so compare it with the other weeks' bias first.
 #
 # *Exact numbers vary with seed and hardware; the reading should not.*
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
-# The example series from notebook 00, with both forecasts and the event weeks marked (dotted).
+# Here are the example series from notebook 00, with both forecasts and the event weeks marked
+# (dotted).
 
 # %%
 gplt.plot_series_price(event_panel, examples, test_fcst, models=[base_col, challenger_col],
@@ -313,14 +306,13 @@ gd.save_config("03_features", {
 })
 
 # %% [markdown]
-# <!-- DRAFT: Graeme to edit -->
 # ## Discussion
 #
-# * The validation window had no event week; the test window starts with two. Did the choice
-#   made on validation hold up on test? What would a fairer tuning window look like when the
-#   events you care about come once a year?
+# * The validation window had no event week, while the test window starts with two. Did the
+#   choice we made on validation hold up on test? What would a fairer tuning window look like
+#   when the events you care about come once a year?
 # * One Easter in training is one example. Can a network learn "Easter" from a single week, or
-#   is the dummy mostly noise until there are more years of data?
+#   is the dummy mostly noise until we have more years of data?
 # * A model that misses Easter may also misread a promotion that falls in it, and credit the
 #   holiday's lift to the price. Why does that matter for notebook 04?
 #

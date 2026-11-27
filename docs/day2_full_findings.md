@@ -1,4 +1,3 @@
-<!-- DRAFT: Graeme to edit -->
 # Day 2 on the full panel: what we did and what we found
 
 *Written 25 Nov 2026, after the GPU runs of 23–25 Nov; updated 26 Nov after 05c and the
@@ -9,34 +8,34 @@ and the model, and why, is explained for a general data-science reader in
 `docs/stability_choices.md`.*
 
 ## In one paragraph
-We rebuilt the Day 2 labs to train on every eligible series (17,241) instead of a sample, and
+We rebuilt the Day 2 labs to train on every eligible series (17,241) rather than a sample, and
 scored everything on the original labs' fixed 2,000-series evaluation sample. A global neural
-model (NBEATSx) trained with a careful recipe beats every baseline, LightGBM included. But the
-most accurate models are **zero-shot foundation models fed the price and promotion plan**,
-and the best of them, **t0-gamma, is the final model** (median RMSSE 0.501, against 0.520 for
-our best trained GFM and 0.572 for LightGBM). Averaging the three foundation models is better
-still (0.495 on held-out series). Making the GFM's calculations stable (cleaned prices, a
-floor on the scaler's spread, a clip on the scaled inputs, 05c) took it from 0.546 to 0.520,
-level with Timestral. Every model responds to a price cut in the right direction, but every
-one **under-responds**: for a one-week 20% cut the data imply a lift of about +125%, the GFM
-forecasts +50% and t0-gamma +30%. So use the foundation models to forecast and the GFM to ask
-what a new price would do, and treat neither as a price-response model.
+model (NBEATSx) trained with a careful recipe beats every baseline, LightGBM included. But our
+most accurate models are **zero-shot foundation models fed the price and promotion plan**, and
+the best of them, **t0-gamma, is our final model** (median RMSSE 0.501, against 0.520 for our
+best trained GFM and 0.572 for LightGBM). Averaging the three foundation models is better still
+(0.495 on held-out series). Making the GFM's calculations stable (cleaned prices, a floor on the
+scaler's spread and a clip on the scaled inputs, 05c) took it from 0.546 to 0.520, level with
+Timestral. Every model responds to a price cut in the right direction, but every one
+**under-responds**: for a one-week 20% cut the data imply a lift of about +125%, while the GFM
+forecasts +50% and t0-gamma +30%. So we would use the foundation models to forecast and the GFM
+to ask what a new price would do, and treat neither as a price-response model.
 
 ## How we worked
-- **One evaluation for everything.** Median RMSSE (mean alongside) on the same 2,000 series
-  and the same 14-week test window as the original labs. 10 compares on the 1,996 series
-  every model covers.
-- **Tune on validation, test once.** Every choice (settings, features, arms, the upper model
-  in 08, the main setup in 07b) is made on the validation window, with a rule written down
-  before the results. The test window only reports.
-- **A noise floor.** The same model trained with 3 seeds moves by about 0.005 in median
-  RMSSE (02). A smaller gap is a tie. In 07b a difference also needs a paired Wilcoxon test
-  at p < 0.05 to count as real.
-- **Configs carry decisions forward.** Each notebook reads the config before it and writes
-  its own. Train once on the GPU, then load from the cache on the day.
-- **Price response measured as the research's phase 7b does.** Shock the price, rebuild every
-  input derived from it (discount depth, ratio to the rolling mean) and read the forecast
-  lift. Also five random promotion calendars per series.
+- **One evaluation for everything.** We report median RMSSE (with the mean alongside) on the
+  same 2,000 series and the same 14-week test window as the original labs. 10 compares on the
+  1,996 series that every model covers.
+- **Tune on validation, test once.** We make every choice (settings, features, arms, the upper
+  model in 08, the main setup in 07b) on the validation window, with a rule written down before
+  the results. The test window only reports.
+- **A noise floor.** The same model trained with 3 seeds moves by about 0.005 in median RMSSE
+  (02), so we treat a smaller gap as a tie. In 07b a difference also needs a paired Wilcoxon
+  test at p < 0.05 to count as real.
+- **Configs carry decisions forward.** Each notebook reads the config before it and writes its
+  own. We train once on the GPU, and load from the cache on the day.
+- **Price response measured as our research's phase 7b does.** We shock the price, rebuild
+  every input derived from it (discount depth, ratio to the rolling mean) and read the forecast
+  lift, and we also run five random promotion calendars per series.
 
 ## The final standings (test, 1,996 series)
 | Model | Notebook | Median RMSSE | Mean | Price lift, 20% cut |
@@ -59,8 +58,8 @@ On the held-out half, the average of the top three (t0-gamma, Chronos-2, Timestr
 by more than the noise floor.
 
 ## Every series, not just the sample (11)
-The v1 labs score on all 17,238 scorable series, not the 2,000-series sample. 11 rescores our
-main models on all of them.
+The v1 labs score on all 17,238 scorable series, not on the 2,000-series sample, so 11
+rescores our main models on all of them.
 
 | Model | Median RMSSE, all / sample | WAPE, all / sample | v1 labs, all series |
 |---|---|---|---|
@@ -74,7 +73,7 @@ main models on all of them.
 | SeasonalNaive | 0.913 / 0.929 | 0.446 / 0.438 | 0.913 / 0.446 |
 
 Every model reads cleaned prices, and every forecast is capped at 3× the item's largest
-training week, as in 08. Before 05c the selected GFM scored 0.540 / WAPE 0.258 here.
+training week, as in 08. Before 05c, the selected GFM scored 0.540 / WAPE 0.258 here.
 
 - **The sample was a good stand-in.** Medians are within 0.03 (mostly 0.01) and the order of
   the models holds. WAPE moves by up to ≈ 5 points, because it follows the best sellers.
@@ -82,18 +81,19 @@ training week, as in 08. Before 05c the selected GFM scored 0.540 / WAPE 0.258 h
   decimals, LightGBM (on cleaned prices) to 0.001. Our neural models are better because they
   train ≈ 20× longer with the research recipe, over 3 seeds; the v1 labs use 500 steps and
   library defaults to suit a laptop.
-- **The GFM's sample WAPE (0.399) is far above its all-series WAPE (0.248).** Its one
-  remaining blow-up (one seed, `6653_S1`) is a best seller in the sample; even capped at 3×
-  its largest week it adds millions of units to a sample that sells far less than all series.
-  Uncapped, the GFM's all-series WAPE is 1.46. See *Things that went wrong*.
+- **The GFM's sample WAPE (0.399) is far above its all-series WAPE (0.248).** Its one remaining
+  blow-up (one seed, `6653_S1`) is a best seller in the sample, and even capped at 3× its
+  largest week it adds millions of units to a sample that sells far less than all series.
+  Uncapped, the GFM's all-series WAPE is 1.46; see *Things that went wrong*.
 
 ## Against Day 1, and the price "leak" (12)
-The Day 1 benchmarks use the same 2,000 series and test window and score identically through our
-code (Naive 0.771, SeasonalNaive 0.929 both ways). Day 1's best model that uses no future
-information (`lgbm_l1_cat_price_response`) scores 0.664; ours, given the future price plan,
-0.50–0.57. The Day 1 framework treats realized future prices as leaky: a week with no sales is
-recorded at exactly the regular price (85% of zero-sale test weeks). 12 measures it with the
-same trained models and three test-window price plans:
+The Day 1 benchmarks use the same 2,000 series and test window, and score identically through
+our code (Naive 0.771, SeasonalNaive 0.929 both ways). Day 1's best model that uses no future
+information (`lgbm_l1_cat_price_response`) scores 0.664, and ours, given the future price plan,
+0.50–0.57. The Day 1 framework treats realized future prices as leaky, because a week with no
+sales is recorded at exactly the regular price (85% of zero-sale test weeks). Being at the
+regular price makes a zero more likely, but it does not tell us what demand is, so 12 measures
+the effect with the same trained models and three test-window price plans:
 
 | Model | realized | without the zero-sales fingerprint | no future prices |
 |---|---|---|---|
@@ -104,24 +104,26 @@ same trained models and three test-window price plans:
 | LightGBM | 0.572 | 0.580 | 0.688 |
 
 - **The fingerprint is worth about one noise floor** (0.005–0.008) and changes no ranking.
-- **Knowing the price is worth 0.11–0.15**: that is what a production price plan supplies, and
+- **Knowing the price is worth 0.11–0.15.** That is what a production price plan supplies, and
   it is most of the covariates' value. Without any future price, every model is level with Day
   1's best (0.65–0.69 against 0.664).
-- In production the planned price is close to the realized one, so `no_fingerprint` is the
-  honest Day 2 number: ≈ 0.005–0.008 above the board.
+- In production we are given a planned price that is close to the realized one, so
+  `no_fingerprint` is the honest Day 2 number, ≈ 0.005–0.008 above the board.
 
 ## What each notebook found
 - **00 Baselines.** LightGBM 0.572 is the bar to beat (0.569 on raw prices); SeasonalNaive
   0.929.
-- **01 The recipe.** Training is most of the battle: NBEATSx off the shelf scores 0.773 (seed
-  spread 0.052), with the recipe 0.568 (spread 0.012). NHITS with the same recipe is better
-  (0.539) at half the cost; we kept NBEATSx for its exogenous stack.
-- **02 HPO round 1.** The recipe was already the best of 12 cells; nothing else was within
-  the noise floor.
-- **03 Calendar and hierarchy features.** Both hurt: Fourier and event inputs make the model
-  overfit (validation 0.70–0.72 against 0.61).
-- **04 Price.** CPI deflation helps accuracy and the price response; oversampling promotion
-  weeks steepens the response further (chosen arm, validation 0.593).
+- **01 The recipe.** Getting the training right is most of the battle: NBEATSx off the shelf
+  scores 0.773 (seed spread 0.052), and with our recipe 0.568 (spread 0.012). NHITS with the
+  same recipe is better (0.539) at half the cost, but we kept NBEATSx for its exogenous stack,
+  which reads our price plan directly.
+- **02 HPO round 1.** The recipe was already the best of 12 cells, and nothing else came within
+  the noise floor. Our settings came from research on a similar dataset, so the grid was
+  searching the neighbourhood of settings that were already tuned.
+- **03 Calendar and hierarchy features.** Both hurt: the Fourier and event inputs seem to make
+  the model overfit and respond to noise (validation 0.70–0.72 against 0.61).
+- **04 Price.** CPI deflation helps accuracy and the price response, and oversampling deepens
+  the response further (chosen arm, validation 0.593).
 - **05 HPO round 2.** The accuracy-optimal trial wins (test 0.546). Tuning moved accuracy,
   not the price response, which barely changes across the Pareto front.
 - **05c Stable calculations.** Cleaning placeholder and out-of-range prices, flooring the
@@ -131,13 +133,14 @@ same trained models and three test-window price plans:
   The rule's tie-break preferred clean + floor (0.562, a tie); we carry the clipped version
   forward for its stable training calculations. Every later model uses the cleaned prices,
   and the cap stays. Why and how: `docs/stability_choices.md`.
-- **05b Synthetic discounts.** Training copies with planted discounts did not help: tied on
-  the one-week cut, worse on validation (0.593 against 0.583). 05 goes forward.
+- **05b Synthetic discounts.** Adding synthetic price changes to the training data did not
+  help: tied on the one-week cut, and worse on validation (0.593 against 0.583). 05 goes
+  forward.
 - **06 Clusters.** One pooled model beats per-cluster models (0.520 against 0.542) and the
   cluster static (0.526); they lose most in the small clusters.
-- **07 Chronos-2.** Zero-shot with the price and promotion covariates it beats every trained
-  model (0.512 against the GFM's 0.520), with no training. The covariates are worth ≈ 0.13 of
-  RMSSE. Cleaning the prices did not change it.
+- **07 Chronos-2.** Zero-shot with the price and promotion covariates, it beats every trained
+  model (0.512 against the GFM's 0.520) with no training at all. The covariates are worth
+  ≈ 0.13 of RMSSE, and cleaning the prices did not change it.
 - **07b Newer foundation models.** t0-gamma beats Chronos-2 by twice the noise floor (p ≈ 0);
   Timestral does not differ from it, nor from the GFM. Event dummies and tree-style inputs
   change little.
@@ -172,13 +175,13 @@ same trained models and three test-window price plans:
 | LightGBM | +28% | 98% |
 | implied by the data | +125% | |
 
-- Every model is right-signed and too weak. The best gives back about 40% of the lift the
-  data imply.
+- Every model is right-signed but too weak; the best gives back about 40% of the lift the data
+  imply.
 - The trained GFMs are the most **consistent** (99% of random cuts lift the forecast). The
   foundation models learn each series' response from that series alone, and about 1 in 10
   cuts does not lift their forecast.
 - The **most accurate model responds least**. Accuracy rewards reading the usual pattern of
-  promotions; a probe asks what a new price would do.
+  promotions, whereas a probe asks what a new price would do.
 - Moving the price alone understates the response. LightGBM gives +5% with the price alone,
   +28% with the discount depth rebuilt. That is why the probes rebuild every input.
 
@@ -206,7 +209,7 @@ same trained models and three test-window price plans:
 ## Open questions
 - **Why does every model under-respond to price?** The data's elasticity (≈ −3.6) comes from
   short, deep promotional cuts; the models may be learning the promotion flag more than the
-  price. 05b's planted discounts did not close the gap.
+  price. 05b's synthetic price changes did not close the gap.
 - **The hierarchy rule.** It judges each method by its worst level, so the methods that win
   the department and class totals lose to BottomUp on a 0.1–1.6% item-level gap. A planner
   who cares most about department totals would choose differently.
