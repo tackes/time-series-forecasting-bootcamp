@@ -39,34 +39,34 @@
   },
   "scores": {
     "GFM_quantile": {
-      "coverage_80": 0.8639,
-      "width_80": 2.7188,
-      "interval_score_80": 3.6003,
-      "coverage_95": 0.9818,
-      "width_95": 6.4234,
-      "interval_score_95": 7.0806,
-      "crps_median": 0.3531,
-      "crps_mean": 2.0556
+      "coverage_80": 0.8498,
+      "width_80": 2.4364,
+      "interval_score_80": 3.1728,
+      "coverage_95": 0.9781,
+      "width_95": 5.3862,
+      "interval_score_95": 5.8909,
+      "crps_median": 0.3155,
+      "crps_mean": 1.6874
     },
     "GFM_conf_step": {
-      "coverage_80": 0.7912,
-      "width_80": 2.5579,
-      "interval_score_80": 3.5572,
-      "coverage_95": 0.9291,
-      "width_95": 11.2458,
-      "interval_score_95": 31.9429,
-      "crps_median": 0.6027,
-      "crps_mean": 2.3641
+      "coverage_80": 0.7911,
+      "width_80": 2.3592,
+      "interval_score_80": 3.3048,
+      "coverage_95": 0.9326,
+      "width_95": 11.9314,
+      "interval_score_95": 36.3763,
+      "crps_median": 0.6369,
+      "crps_mean": 2.5361
     },
     "GFM_conf_class": {
-      "coverage_80": 0.7937,
-      "width_80": 2.6209,
-      "interval_score_80": 3.6445,
+      "coverage_80": 0.7942,
+      "width_80": 2.4442,
+      "interval_score_80": 3.4223,
       "coverage_95": 0.9347,
-      "width_95": 10.718,
-      "interval_score_95": 65.6213,
-      "crps_median": 0.9683,
-      "crps_mean": 2.7322
+      "width_95": 11.1083,
+      "interval_score_95": 67.5875,
+      "crps_median": 0.9664,
+      "crps_mean": 2.8799
     },
     "ETS_conf": {
       "coverage_80": 0.6836,
@@ -81,40 +81,40 @@
   },
   "coverage_80_by_class": {
     "GFM_quantile": {
-      "A": 0.786,
-      "B": 0.971,
-      "C": 0.883,
-      "D": 0.783,
-      "E": 0.772,
-      "F": 0.89,
-      "G": 0.878,
-      "H": 0.843,
-      "I": 0.85,
-      "J": 0.871
+      "A": 0.857,
+      "B": 0.879,
+      "C": 0.835,
+      "D": 0.786,
+      "E": 0.776,
+      "F": 0.872,
+      "G": 0.879,
+      "H": 0.842,
+      "I": 0.855,
+      "J": 0.85
     },
     "GFM_conf_step": {
-      "A": 0.875,
-      "B": 0.943,
-      "C": 0.917,
-      "D": 0.91,
-      "E": 0.848,
-      "F": 0.906,
-      "G": 0.866,
-      "H": 0.852,
-      "I": 0.867,
-      "J": 0.75
+      "A": 0.679,
+      "B": 0.907,
+      "C": 0.925,
+      "D": 0.917,
+      "E": 0.865,
+      "F": 0.885,
+      "G": 0.871,
+      "H": 0.845,
+      "I": 0.864,
+      "J": 0.752
     },
     "GFM_conf_class": {
-      "A": 0.875,
-      "B": 0.943,
-      "C": 0.917,
-      "D": 0.91,
-      "E": 0.772,
-      "F": 0.843,
-      "G": 0.784,
-      "H": 0.822,
-      "I": 0.834,
-      "J": 0.776
+      "A": 0.679,
+      "B": 0.907,
+      "C": 0.925,
+      "D": 0.917,
+      "E": 0.803,
+      "F": 0.832,
+      "G": 0.799,
+      "H": 0.81,
+      "I": 0.813,
+      "J": 0.781
     },
     "ETS_conf": {
       "A": 0.5,
@@ -129,5 +129,5 @@
       "J": 0.672
     }
   },
-  "best_interval_score_80": "GFM_conf_step"
+  "best_interval_score_80": "GFM_quantile"
 }

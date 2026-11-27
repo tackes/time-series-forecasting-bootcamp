@@ -300,3 +300,5 @@ results/day1/exploratory_v1/
 models/
 results/day2_full_smoke/
 results/day2_full/gpu_logs/
+# code_full: caches superseded by the cleaned-price rerun (also in git history at b76e787)
+results/day2_full_archive_raw_prices/

@@ -341,7 +341,14 @@ scores.round(3)
 #
 # * Coverage first: is each method close to its promise (0.80 and 0.95)? Under-coverage means
 #   the intervals are too narrow to trust; over-coverage means they are wider than they need
-#   to be. The class × week conformal reaches ≈ 0.79 at 80%.
+#   to be. Both conformal methods reach ≈ 0.79 at 80%; the quantile GFM over-covers (≈ 0.85)
+#   and ETS under-covers (≈ 0.68).
+# * At 80% the quantile GFM has the best interval score (≈ 3.17) and CRPS (≈ 0.32 median),
+#   with its intervals barely wider than conformal's. With 05c's stability settings (cleaned
+#   prices, scaler floor, input clip) its intervals are narrower than 05's (width ≈ 2.44
+#   against ≈ 2.72) and closer to their promise (0.85 against 0.86).
+# * At 95% conformal's interval score is several times worse (≈ 36 and ≈ 68): a few large
+#   misses, past the widest error it has seen, dominate.
 # * Then the scores: among the methods that keep their promise, lower interval score and CRPS
 #   are better. Width alone is not a score.
 # * Expect `ETS_conf` to under-cover at 95%, for the reason given in section 4.

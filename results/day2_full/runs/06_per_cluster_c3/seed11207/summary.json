@@ -2,13 +2,13 @@
   "name": "06_per_cluster_c3",
   "seed": 11207,
   "alias": "GFM_per_cluster",
-  "fit_seconds": 69.2,
-  "max_steps": 2358,
-  "n_train_series": 3470,
-  "neg_share": 0.01348396501457726,
-  "oscillation": 0.006748363236911868,
-  "best_step": 1508,
-  "best_frac": 0.6395250212044106,
-  "best_valid": 2797.40966796875,
-  "final_over_best": 1.0622498841440053
+  "fit_seconds": 74.1,
+  "max_steps": 2359,
+  "n_train_series": 3471,
+  "neg_share": 0.02259475218658892,
+  "oscillation": 0.19037113660255844,
+  "best_step": 232,
+  "best_frac": 0.0983467571004663,
+  "best_valid": 2740.207763671875,
+  "final_over_best": 1.5323803483123632
 }

@@ -46,21 +46,21 @@
   "median_rmsse_valid": {
     "Chronos2": {
       "none": 0.701,
-      "price": 0.5748,
+      "price": 0.5744,
       "price_events": 0.5747,
       "everything": 0.581
     },
     "Timestral": {
       "none": 0.6878,
       "price": 0.5567,
-      "price_events": 0.5475,
+      "price_events": 0.5472,
       "everything": 0.5443
     },
     "T0gamma": {
       "none": 0.7027,
       "price": 0.5363,
-      "price_events": 0.5308,
-      "everything": 0.5468
+      "price_events": 0.532,
+      "everything": 0.5459
     }
   },
   "median_rmsse_test": {
@@ -68,17 +68,17 @@
       "none": 0.645,
       "price": 0.5122,
       "price_events": 0.5307,
-      "everything": 0.5365
+      "everything": 0.5353
     },
     "Timestral": {
       "none": 0.6391,
-      "price": 0.5225,
-      "price_events": 0.5181,
-      "everything": 0.5128
+      "price": 0.5211,
+      "price_events": 0.5175,
+      "everything": 0.5125
     },
     "T0gamma": {
       "none": 0.6515,
-      "price": 0.5023,
+      "price": 0.5018,
       "price_events": 0.5013,
       "everything": 0.5089
     }
@@ -87,112 +87,112 @@
     {
       "model": "Timestral_zs_cov",
       "against": "Chronos2_zs_cov",
-      "gap (median)": 0.0103,
-      "p (Wilcoxon)": 0.8826,
-      "share of series better": 0.4867,
+      "gap (median)": 0.0088,
+      "p (Wilcoxon)": 0.8409,
+      "share of series better": 0.4862,
       "real difference": false
     },
     {
       "model": "Timestral_zs_cov",
       "against": "GFM_selected",
-      "gap (median)": -0.0237,
-      "p (Wilcoxon)": 0.0,
-      "share of series better": 0.5433,
-      "real difference": true
+      "gap (median)": 0.0011,
+      "p (Wilcoxon)": 0.0906,
+      "share of series better": 0.5073,
+      "real difference": false
     },
     {
       "model": "T0gamma_zs_cov",
       "against": "Chronos2_zs_cov",
-      "gap (median)": -0.0099,
+      "gap (median)": -0.0104,
       "p (Wilcoxon)": 0.0,
-      "share of series better": 0.5408,
+      "share of series better": 0.5398,
       "real difference": true
     },
     {
       "model": "T0gamma_zs_cov",
       "against": "GFM_selected",
-      "gap (median)": -0.0439,
+      "gap (median)": -0.0181,
       "p (Wilcoxon)": 0.0,
-      "share of series better": 0.5868,
+      "share of series better": 0.5463,
       "real difference": true
     },
     {
       "model": "Timestral_zs_cov",
       "against": "T0gamma_zs_cov",
-      "gap (median)": 0.0202,
-      "p (Wilcoxon)": 0.0001,
-      "share of series better": 0.4592,
+      "gap (median)": 0.0192,
+      "p (Wilcoxon)": 0.0002,
+      "share of series better": 0.4607,
       "real difference": true
     }
   ],
   "hard_weeks": {
     "all weeks": {
       "weeks": 27986,
-      "Chronos2_zs_cov": 2.7453,
-      "Timestral_zs_cov": 2.5045,
-      "T0gamma_zs_cov": 2.7291,
-      "GFM_selected": 2.5356,
-      "LightGBM": 2.9699
+      "Chronos2_zs_cov": 2.7368,
+      "Timestral_zs_cov": 2.5,
+      "T0gamma_zs_cov": 2.7283,
+      "GFM_selected": 2.6556,
+      "LightGBM": 2.9707
     },
     "event weeks": {
       "weeks": 5997,
-      "Chronos2_zs_cov": 1.6088,
-      "Timestral_zs_cov": 1.4708,
-      "T0gamma_zs_cov": 1.4879,
-      "GFM_selected": 1.4488,
-      "LightGBM": 1.7607
+      "Chronos2_zs_cov": 1.608,
+      "Timestral_zs_cov": 1.4702,
+      "T0gamma_zs_cov": 1.4876,
+      "GFM_selected": 1.466,
+      "LightGBM": 1.757
     },
     "promo weeks": {
       "weeks": 6831,
-      "Chronos2_zs_cov": 3.6694,
-      "Timestral_zs_cov": 3.3553,
-      "T0gamma_zs_cov": 3.8102,
-      "GFM_selected": 3.4719,
-      "LightGBM": 3.9956
+      "Chronos2_zs_cov": 3.6683,
+      "Timestral_zs_cov": 3.3538,
+      "T0gamma_zs_cov": 3.8096,
+      "GFM_selected": 3.6401,
+      "LightGBM": 3.9988
     },
     "above the history": {
       "weeks": 943,
-      "Chronos2_zs_cov": 58.7819,
-      "Timestral_zs_cov": 52.1458,
-      "T0gamma_zs_cov": 60.6034,
-      "GFM_selected": 51.0059,
-      "LightGBM": 62.8745
+      "Chronos2_zs_cov": 58.7822,
+      "Timestral_zs_cov": 52.1456,
+      "T0gamma_zs_cov": 60.6033,
+      "GFM_selected": 56.0488,
+      "LightGBM": 62.7711
     },
     "classes A-I": {
       "weeks": 9520,
       "Chronos2_zs_cov": 0.6141,
       "Timestral_zs_cov": 0.6164,
       "T0gamma_zs_cov": 0.5832,
-      "GFM_selected": 0.7269,
-      "LightGBM": 0.785
+      "GFM_selected": 0.7081,
+      "LightGBM": 0.7867
     },
     "class J": {
       "weeks": 18466,
-      "Chronos2_zs_cov": 3.8441,
-      "Timestral_zs_cov": 3.4779,
-      "T0gamma_zs_cov": 3.8354,
-      "GFM_selected": 3.4681,
-      "LightGBM": 4.0963
+      "Chronos2_zs_cov": 3.8312,
+      "Timestral_zs_cov": 3.471,
+      "T0gamma_zs_cov": 3.8342,
+      "GFM_selected": 3.6596,
+      "LightGBM": 4.0966
     }
   },
   "history": {
     "Chronos2": {
-      "13 weeks": 0.5998,
-      "26 weeks": 0.5998,
-      "52 weeks": 0.534,
+      "13 weeks": 0.5988,
+      "26 weeks": 0.5988,
+      "52 weeks": 0.5333,
       "all weeks": 0.5122
     },
     "Timestral": {
       "13 weeks": 0.6297,
       "26 weeks": 0.6192,
       "52 weeks": 0.5339,
-      "all weeks": 0.5225
+      "all weeks": 0.5211
     },
     "T0gamma": {
       "13 weeks": 0.5935,
-      "26 weeks": 0.5937,
+      "26 weeks": 0.5929,
       "52 weeks": 0.5281,
-      "all weeks": 0.5023
+      "all weeks": 0.5018
     }
   },
   "probes": {
@@ -694,64 +694,64 @@
     },
     "GFM_selected": {
       "n": 680.0,
-      "median_elasticity": -1.7922,
-      "median_lift": 0.4909,
+      "median_elasticity": -1.8232,
+      "median_lift": 0.5026,
       "share_right_sign": 0.9971,
-      "share_at_bar": 0.9632,
-      "median_spill": 0.0034
+      "share_at_bar": 0.9824,
+      "median_spill": 0.0049
     }
   },
   "pairs": [
     {
       "pair": "Timestral_zs_cov + T0gamma_zs_cov",
-      "median RMSSE": 0.4934,
-      "better model alone": 0.5023,
-      "error correlation": 0.9923
+      "median RMSSE": 0.492,
+      "better model alone": 0.5018,
+      "error correlation": 0.9924
     },
     {
       "pair": "Timestral_zs_cov + Chronos2_zs_cov",
-      "median RMSSE": 0.4997,
+      "median RMSSE": 0.4992,
       "better model alone": 0.5122,
-      "error correlation": 0.9942
+      "error correlation": 0.9945
     },
     {
       "pair": "T0gamma_zs_cov + Chronos2_zs_cov",
-      "median RMSSE": 0.4919,
-      "better model alone": 0.5023,
-      "error correlation": 0.9964
+      "median RMSSE": 0.4908,
+      "better model alone": 0.5018,
+      "error correlation": 0.9971
     },
     {
       "pair": "Chronos2_zs_cov + GFM_selected",
-      "median RMSSE": 0.5066,
+      "median RMSSE": 0.4936,
       "better model alone": 0.5122,
-      "error correlation": 0.9926
+      "error correlation": 0.9931
     }
   ],
   "seconds": {
-    "Chronos2_none_valid": 2.491974182019476,
-    "Chronos2_price_valid": 2.5439700670249294,
-    "Chronos2_price_events_valid": 4.323820254008751,
-    "Chronos2_everything_valid": 7.893818970012944,
-    "Timestral_none_valid": 3.172441862989217,
-    "Timestral_price_valid": 12.289784624997992,
-    "Timestral_price_events_valid": 35.30009353297646,
-    "Timestral_everything_valid": 89.99332708999282,
-    "T0gamma_none_valid": 3.656455062009627,
-    "T0gamma_price_valid": 5.604431043000659,
-    "T0gamma_price_events_valid": 14.931631828017998,
-    "T0gamma_everything_valid": 31.48046407502261,
-    "Chronos2_none_test": 1.1662388450058643,
-    "Chronos2_price_test": 2.812776937003946,
-    "Chronos2_price_events_test": 4.952369156002533,
-    "Chronos2_everything_test": 8.49512612898252,
-    "Timestral_none_test": 1.2326650210015941,
-    "Timestral_price_test": 12.805304762994638,
-    "Timestral_price_events_test": 34.95443729200633,
-    "Timestral_everything_test": 89.4999724389927,
-    "T0gamma_none_test": 1.4506330409785733,
-    "T0gamma_price_test": 6.000870050978847,
-    "T0gamma_price_events_test": 15.224649213021621,
-    "T0gamma_everything_test": 31.7986403570103
+    "Chronos2_none_valid": 2.547707382007502,
+    "Chronos2_price_valid": 2.5550206170300953,
+    "Chronos2_price_events_valid": 4.395244685001671,
+    "Chronos2_everything_valid": 8.049281796033029,
+    "Timestral_none_valid": 3.4978267090045847,
+    "Timestral_price_valid": 12.34684173198184,
+    "Timestral_price_events_valid": 35.384166087023914,
+    "Timestral_everything_valid": 90.04510654998012,
+    "T0gamma_none_valid": 3.7690064850030467,
+    "T0gamma_price_valid": 5.650839919981081,
+    "T0gamma_price_events_valid": 15.015638541022781,
+    "T0gamma_everything_valid": 31.49943115998758,
+    "Chronos2_none_test": 1.1481717890128493,
+    "Chronos2_price_test": 2.7850799709558487,
+    "Chronos2_price_events_test": 4.921412228024565,
+    "Chronos2_everything_test": 8.455890244978946,
+    "Timestral_none_test": 1.2294170430395752,
+    "Timestral_price_test": 12.791921636962797,
+    "Timestral_price_events_test": 34.92122942500282,
+    "Timestral_everything_test": 89.43653993401676,
+    "T0gamma_none_test": 1.4564154550316744,
+    "T0gamma_price_test": 6.06823124398943,
+    "T0gamma_price_events_test": 15.37081665196456,
+    "T0gamma_everything_test": 31.913474586966913
   },
   "gpu": true,
   "licences": {

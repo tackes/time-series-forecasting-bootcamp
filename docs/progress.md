@@ -267,3 +267,118 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
 - **Board filter:** each notebook's board now shows only its own and earlier notebooks' rows
   (`gd.median_board("<NN>")`), and 07b's significance column is "real difference" (gap above
   the noise floor and p < 0.05).
+
+## Every series: 11 rescores the main models on all 17,238 (25 Nov)
+- **Same evaluation as the v1 labs:** the baselines, LightGBM and Chronos-2 match their
+  all-series numbers to three decimals, so the panel, filter, windows and WAPE are the same.
+- **Our lead is the training:** NHITS with our recipe (≈ 10k steps, Huber, warm-up, clip,
+  best weights, 3 seeds) scores WAPE 0.244 against the v1 NHITSx's 0.275 (500 steps, MAE,
+  standard scaler, 1 seed).
+- **Exploding N-BEATSx forecasts** outside the sample: every seed has some (65–129 items above
+  3× their largest week, up to ≈ 8,000×); the saved seed 46335 is worst (uncapped WAPE 0.699).
+  NHITS barely has them. Cap at 3× the item's largest training week (08's rule) applied to
+  every model in 11; on the sample the cap changes nothing at three decimals, so 00–10 stand.
+- **Refits repeat their originals:** GFM_selected seeds 11207, 90218 and the three NHITS seeds
+  reproduce the cached runs' sample scores to four decimals.
+- **Left out:** GFM_synthetic (its saved model predates 05b's final refit).
+- **Cost:** 30 min on one GPU (5 refits, 4–6 min each; foundation models and baselines are
+  minutes). Scores in `results/day2_full/leaderboard_all_series.csv`, forecasts in
+  `results/day2_full/all_series/`.
+
+
+## 05c: flooring the robust scaler's spread (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Diagnosis first (read-only script):** in exploding items, `promo` is often exactly flat
+  then moves, but the scaler's fallback keeps it near 1. `discount_depth` and `price_index`
+  are near-flat (spread ≈ 0.0004 and 0.001, from CPI drift), so a discount scales to hundreds
+  of units. Both move together on every discount, so dropping one would not help.
+- **Arm:** 05's settings with the robust scaler's spread floored at 0.01
+  (`gd.floor_robust_scaler`), 3 seeds on validation and 3 on the test window, all series.
+- **Result:** accuracy and price response pass (validation 0.574 against 0.583; one-week cut
+  elasticity −1.95 against −1.77); explosions only halve (466 → 236 item-weeks, 101 → 56
+  items), short of the rule's tenfold. **The cap stays.**
+- **Found on the way:** `1120_S1` has `price_index` values up to 29,000 (a price in the wrong
+  units); 29 series exceed 3 somewhere in training. With the floor it carries almost all of
+  the uncapped WAPE. One seed (90218) also blows up a normal-priced item (`6653_S1`, ≈ 550×).
+- **Open:** the floor plus the cap beats 05 (capped all-series median 0.511 against 0.540) but
+  was not in the rule; cleaning out-of-range prices would help every price-aware model.
+- **Cost:** 37 min on one GPU (6 fits of ≈ 6 min).
+
+## 05c part 2: cleaning the prices (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **`price_index`** = the week's price ÷ the series' median price before the cutoff (1 =
+  usual, 0.8 = 20% off). Bad prices: £0.01–0.05 placeholders (229 weeks, 79 series; they
+  look like 99% discounts) and prices beyond 6× or 1/6 of the usual price (196 series in
+  all). `gp.clean_prices` (config key `price_clean`) replaces them with the median of good
+  prices in the 9 weeks around; 828 weeks in 196 series, 40 weeks in the sample.
+- **Not missing** (N-BEATSx can't take missing future inputs) and **no +1 shift** (no price
+  is ≤ 0; a shift would shrink cheap items' discounts more than dear ones').
+- **Clean alone:** validation 0.599 against 05's 0.583 (fails), and *more* exploding items
+  (156 against 101): fewer fake discounts leave more near-flat windows.
+- **Clean + floor (recommended):** validation 0.562, elasticity −2.03 against −1.77; test,
+  capped, all series 0.514 / WAPE 0.256 (05: 0.540 / 0.258). Uncapped it still explodes
+  (WAPE 221, one item: `1120_S1`, real prices 2–5× its input window). The floor bounds small
+  moves, not large ones; clipping the scaled inputs would be the next arm. **Cap stays.**
+- **Cost:** 74 min on one GPU (12 fits of ≈ 6 min).
+
+## 05c part 3: clipping the scaled price inputs at ±50 (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Clip level from the inputs alone:** with the floor, the scaled `price_index` has a 99th
+  percentile of ≈ 43; ±10 would flatten 40% of series' real price signal, ±50 touches ≈ 0.5%
+  of item-weeks.
+- **Result:** validation 0.567 against clean + floor's 0.562 (a tie; the rule picks clean +
+  floor). Worst forecast 300× the item's largest week (clean + floor: 2 × 10⁸). Capped,
+  all-series WAPE 0.248, the best GFM.
+- **The last explosion is inside the network:** seed 46335 forecasts `6653_S1` (a best
+  seller) at ≈ 900× with every scaled input within ±5. No input fix can reach it, so the cap
+  stays as the guard.
+- **Cost:** 36 min on one GPU (6 fits).
+
+## Carrying clean + floor + clip forward; 00 and 06–11 on cleaned prices (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Choice:** clean + floor + clip, with the cap, over the rule's tie-break (clean + floor,
+  0.005 better on validation, inside the noise floor), for stable training calculations.
+  Recorded in `05c_input_clip` (`use`, `chosen_by`, `choice_reason`); reasons and the effect
+  of clipping on the loss surface in `docs/stability_choices.md`.
+- **Plumbing:** `gd.selected_config()` returns 05c's arm (floor and clip in `params`, applied
+  by `gd.build_nbeatsx`); saved models carry `stability.json`, reapplied by `gd.load_model`;
+  `gp.PRICE_CLEAN` for LightGBM (00, 04, 11) and NHITS (11); `gp.selected_gfm_probes` for
+  07/07b; 11 uses 05c's all-series fits instead of refits. The selected model's saved
+  forecasts and board row are capped (`05c_selected` saved for 08, 09, 11).
+- **Old caches:** the raw-price tables/runs of 00, 04's LightGBM and 06–11 moved to
+  `results/day2_full_archive_raw_prices/` (gitignored; in git at `b76e787`).
+- **Results (test, sample):** t0-gamma 0.501 (final, unchanged), Chronos-2 0.512, **GFM
+  selected 0.520** (05: 0.546), Timestral 0.521, LightGBM 0.572 (0.569 raw). Top-3 average
+  0.495 held out. All series, capped: GFM 0.513 / WAPE 0.248 (was 0.540 / 0.258). GFM price
+  lift +50% (−1.82), 99.4% right-signed. Foundation models unchanged by cleaning (≤ 0.002).
+- **Remaining weak spot:** seed 46335 (also the saved model) blows up `6653_S1`; capped, it
+  still makes the sample WAPE 0.399 and 08's GFM bottom-up total ≈ 4% too high.
+- **Cost:** ≈ 2.5 h on one GPU (06 ≈ 1 h, 09 25 min, 08 21 min, 11 16 min, 07b 11 min).
+
+## Day 1 comparison and the price-plan leak test, 12 (26 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **Nothing new from Day 1 on GitHub:** `day1-framework`'s tip (19 Nov) is already in our
+  branch; `main`'s only new change is the v1 Day 2 update (it moves `bootcamp.py` to
+  `day2_neural/v1/code/`, same scoring; merging needs `gd_helpers.py` repointed).
+- **Same scoring as Day 1:** Naive 0.771 and SeasonalNaive 0.929 on the 2,000 series both ways.
+  Day 1's best no-future-information LightGBM: 0.664 / WAPE 0.344.
+- **The fingerprint:** 85% of zero-sale test weeks are priced exactly at the regular price;
+  weeks at regular have no sales 66% of the time, others 1.7%.
+- **12's result:** removing it (zero-sale weeks at regular take last week's price; 4.5% of test
+  weeks) costs 0.005–0.008 of median RMSSE for every model; no future prices at all costs
+  0.11–0.15 more (0.65–0.69, level with Day 1). Rankings unchanged.
+- **Cost:** ≈ 5 minutes on one GPU (inference only, LightGBM refit on CPU).
+
+## Merged `main`: the v1 Day 2 update (27 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **What moved:** the original labs, `bootcamp.py` and the v1 deck now live in
+  `day2_neural/v1/`. `gd_helpers.py` and `slides_full/make_figures.py` import from
+  `day2_neural/v1/code/`; `bc.RAW_DIR` is pointed at `results/day2_full/raw`.
+- **Sample pinned:** `bootcamp.N_SERIES` now defaults to 0 (all series), so the evaluation
+  sample uses `EVAL_N_SERIES = 2000`. Rebuilt from scratch, it matches `results/eval_ids.csv`.
+- **New dependency:** the harness imports `wape` from `utilsforecast`, first in 0.2.17
+  (5 Oct 2026); the venv was 0.2.15. Neuralforecast, statsforecast, mlforecast and
+  hierarchicalforecast all accept it.
+- **Same numbers:** cached forecasts (00, 10) re-scored with the old and new harness agree
+  exactly (WAPE to 1e-16). The new `summarise` adds `median_mase` and `bias_pct` columns.
+  No rerun needed.

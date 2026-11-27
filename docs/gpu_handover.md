@@ -38,7 +38,7 @@ For a coding agent (or person) picking up the Day 2 `code_full` work on the Linu
    - ask before pushing.
 
 ## Don't
-- **Don't edit `day2_neural/code/`.** It is the original labs and is read-only. Never write to `results/day2/`.
+- **Don't edit `day2_neural/v1/code/`.** It is the original labs and is read-only. Never write to `results/day2/`.
 - **Don't push** without asking. Commit locally as you go, with small, descriptive messages.
 - **Don't commit** `models/`, `.claude/`, session files, `.env`, or anything with personal details. This is a public repo. No client names, internal system names, people's names or usernames in code, docs or commit messages.
 - **Don't change a model choice to make a result look better.** If a number looks wrong, report it with the evidence.

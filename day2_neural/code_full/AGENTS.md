@@ -6,7 +6,7 @@ Notes for anyone (person or coding agent) editing these notebooks.
 A full-data version of the Day 2 labs. Each notebook trains on **every eligible series** (≈17,241) and scores on the **fixed 2,000-series evaluation sample** used by `day2_neural/code`. Each one builds on the config written by the one before. The research behind the choices is summarised in `docs/gfm_learnings.md`.
 
 ## Ground rules
-- **`day2_neural/code/` is read-only.** `bootcamp.py` is imported, never edited. `gd_helpers.py` points its paths at `results/day2_full/`; nothing is ever written to `results/day2/`.
+- **`day2_neural/v1/code/` is read-only** (it was `day2_neural/code/` before the v1 update). `bootcamp.py` is imported, never edited. `gd_helpers.py` points its paths at `results/day2_full/`; nothing is ever written to `results/day2/`.
 - **Same evaluation.**
   - Score with `gd.record` / `gd.score`. They restrict `bc.record` / `bc.score` to the eval ids.
   - Sort and discuss the board by **median** RMSSE, with the mean alongside.
@@ -61,6 +61,10 @@ A full-data version of the Day 2 labs. Each notebook trains on **every eligible 
   setup (the price covariates) was fixed before the results and goes on the board; the
   other setups stay in 07b's tables. Timestral's weights are not free for commercial use
   above $20M monthly revenue.
+- **All series (11).** 11 rescores the main models on all 17,238 scorable series and writes
+  its own board (`leaderboard_all_series.csv`) and forecasts (`results/day2_full/all_series/`),
+  never `forecasts/` (10 would read them). Every model there is capped at 3× the item's
+  largest training week, as in 08: some N-BEATSx forecasts explode outside the sample.
 - **Public repo.** No client names, internal system names, people's names or client-identifying figures.
 
 ## Style
@@ -95,10 +99,16 @@ Every notebook reads the config(s) before it and writes its own to `results/day2
 | `04_price` | 04 | `params`, ★`features`, ★`futr_exog`, ★`y_shift`, ★`oversample` (`rule`, `cap`, `multiplier`) or null, `price_channel`, `elasticity` (arm → test report), `elasticity_valid` (arm → validation report), `median_rmsse`, `median_rmsse_valid`, `empirical`, `empirical_band`, `selected_arm` (chosen on validation), `max_steps`, `seeds` |
 | `05_selected` | 05 | `params`, ★`features`, ★`futr_exog`, ★`oversample`, ★`y_shift`, `max_steps`, `seeds`, `trial`, `role` (chosen on validation), `selection_rule`, `confirm`, `saved_model`, `forecasts`, `forecast_column` |
 | `05b_synthetic` | 05b | as `05_selected`, plus ★`synthetic` (`cuts_per_copy`), `use` (`"05"` or `"05b"`, chosen on validation with the phase 7b probes), `checks`, `checks_test`, `probes`, `calendar`, `probe_runs` (runs holding 3-seed probes of 05 and 05b), `forecasts`, `forecast_column` |
+| `05c_scaler_floor` | 05c | as `05_selected`, plus `scale_floor` (0.01), `use` (`"floor"` or `"cap"`), `checks`, `valid`, `explosions` (item-weeks above the cap, every series), `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` (`GFM_floor`) |
+| `05c_price_clean` | 05c | as `05_selected`, plus ★`price_clean` (`k`, `floor`: `gp.clean_prices`), `scale_floor`, `replaced`, `recommended` (`"clean"`, `"clean_floor"` or `"05"`), `cap_kept`, `checks`, `valid`, `explosions`, `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` |
+| `05c_input_clip` | 05c | as `05c_price_clean`, plus `input_clip` (50: `gd.floor_robust_scaler(model, floor, clip=)`), `recommended` (the rule's pick: `"clean_floor"`), ★`use` (`"clean_floor_clip"`: carried forward, `chosen_by`, `choice_reason`), `saved_model` (`05c_selected`), `checks`, `valid`, `explosions`, `test_scores`, `test_response`, `runs`, `forecasts`, `forecast_column` |
 | `07b_new_foundation` | 07b | `models`, `setups`, `main_setup`, `board_columns`, `chronos_gap_to_07`, `median_rmsse_valid` / `median_rmsse_test` (model → setup), `wilcoxon`, `hard_weeks`, `history`, `probes`, `calendar`, `headline`, `pairs`, `seconds`, `licences` |
 | `06_clusters`, `07_foundation`, `08_reconcile`, `09_intervals`, `10_final` | 06–10 | free-form, documented in the notebook |
+| `11_all_series` | 11 | `models`, `cap`, `repeat_check`, `scores_all`, `scores_sample`, `scores_all_no_cap`, `versus_v1`, `left_out` |
+| `12_price_plan` | 12 | `plans` (`realized`, `no_fingerprint`, `no_change`), `share_changed`, `check_realized_vs_board`, `median_rmsse` per model and plan, `fingerprint_matters`, `scores`. Report only |
 
-Notebooks after 05 call `gd.selected_config()`, which returns `05b_synthetic` if its `use` is `"05b"` and `05_selected` otherwise.
-- **Forecasts:** read them with `gd.selected_forecasts()`, which returns the column as `GFM_selected` whichever notebook won. 05b saves its own file and column (`GFM_synthetic`), named in its config's `forecasts` and `forecast_column` keys.
+Notebooks after 05 call `gd.selected_config()`. It returns 05c's chosen arm if `05c_input_clip` has a `use` (05's config plus `price_clean`, `scale_floor` and `input_clip` in `params`, `saved_model: 05c_selected`, `selected_runs`), else `05b_synthetic` if its `use` is `"05b"`, else `05_selected`; `selected_from` says which. `gd.build_nbeatsx` applies `scale_floor`/`input_clip` from `params`; `gd.save_model` writes `stability.json` next to a patched model and `gd.load_model` reapplies it.
+- **Cleaned prices everywhere after 05:** every model in the final comparison reads prices cleaned with `gp.PRICE_CLEAN` (LightGBM in 00, 04 and 11 via `gp.clean_prices`; everything built from `gp.prepare(selected_config())`). 01–05 keep raw prices. Why: `docs/stability_choices.md`. The raw-price caches of 00, 04's LightGBM and 06–11 are in git at `b76e787` (and locally in `results/day2_full_archive_raw_prices/`).
+- **Forecasts:** read them with `gd.selected_forecasts()`, which returns the column as `GFM_selected` whichever notebook won. 05b saves its own file and column (`GFM_synthetic`). `gd.floor_robust_scaler(model, floor)` floors the robust scaler's spread on a built model (05c); it patches the instance, so a model loaded from disk needs it applied again, named in its config's `forecasts` and `forecast_column` keys.
 - **Tuning data:** use `gp.prepare(cfg, cutoff=bc.VALID_START)`. It returns the pre-validation training rows and the validation window, with every per-series statistic computed before the cutoff.
 - **Cached runs go stale.** Runs and tables are cached by name, not by config. If an upstream config changes, delete the cached `runs/` and `tables/` entries of every later notebook before retraining. On the GPU box, always run the notebooks in order.

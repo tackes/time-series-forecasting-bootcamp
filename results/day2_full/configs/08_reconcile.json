@@ -1,19 +1,19 @@
 {
-  "selected_from": "05_selected",
-  "bottom_model": "05_selected",
+  "selected_from": "05c_clean_floor_clip",
+  "bottom_model": "05c_selected",
   "item_models": {
-    "GFM": "05_selected",
+    "GFM": "05c_selected",
     "Chronos": "Chronos2_zs_cov (zero-shot)"
   },
   "item_cap": {
     "multiple_of_train_max": 3,
     "GFM": {
-      "item_weeks": 568,
-      "items": 135
+      "item_weeks": 201,
+      "items": 57
     },
     "Chronos": {
-      "item_weeks": 253,
-      "items": 46
+      "item_weeks": 250,
+      "items": 44
     }
   },
   "upper_inputs": [
@@ -33,23 +33,23 @@
   "upper_valid": {
     "total": {
       "ETS": 0.5744,
-      "ARIMAX": 1.3831,
-      "Chronos": 0.5982
+      "ARIMAX": 1.3826,
+      "Chronos": 0.601
     },
     "department": {
       "ETS": 1.0032,
-      "ARIMAX": 0.7819,
+      "ARIMAX": 0.7715,
       "Chronos": 0.7203
     },
     "class": {
       "ETS": 0.9869,
-      "ARIMAX": 0.7894,
-      "Chronos": 0.7154
+      "ARIMAX": 0.7851,
+      "Chronos": 0.7159
     },
     "subclass": {
       "ETS": 1.0216,
-      "ARIMAX": 0.8073,
-      "Chronos": 0.7535
+      "ARIMAX": 0.8042,
+      "Chronos": 0.7544
     }
   },
   "upper_rule": "smallest worst-level ratio to ETS (median RMSSE, validation); ties within 1% -> ETS, ARIMAX, Chronos",
@@ -95,85 +95,85 @@
     "GFM": {
       "total": {
         "Base (incoherent)": 0.8909,
-        "BottomUp": 0.8432,
+        "BottomUp": 0.853,
         "TopDown": 0.8909,
         "MiddleOut": 1.0094,
         "MinT-ols": 0.8916,
-        "MinT-wls_struct": 0.9266,
-        "MinT-wls_var": 0.8572,
-        "MinT-shrink-sub": 0.6595
+        "MinT-wls_struct": 0.9182,
+        "MinT-wls_var": 0.7491,
+        "MinT-shrink-sub": 0.6799
       },
       "department": {
         "Base (incoherent)": 0.9638,
-        "BottomUp": 0.8108,
+        "BottomUp": 0.807,
         "TopDown": 0.9583,
         "MiddleOut": 0.9565,
-        "MinT-ols": 1.1111,
-        "MinT-wls_struct": 0.8798,
-        "MinT-wls_var": 0.8293,
-        "MinT-shrink-sub": 0.8097
+        "MinT-ols": 1.1104,
+        "MinT-wls_struct": 0.8987,
+        "MinT-wls_var": 0.8021,
+        "MinT-shrink-sub": 0.7949
       },
       "class": {
         "Base (incoherent)": 0.911,
-        "BottomUp": 0.8215,
+        "BottomUp": 0.7823,
         "TopDown": 0.911,
         "MiddleOut": 0.911,
-        "MinT-ols": 1.2097,
-        "MinT-wls_struct": 0.8745,
-        "MinT-wls_var": 0.8108,
-        "MinT-shrink-sub": 0.786
+        "MinT-ols": 1.2103,
+        "MinT-wls_struct": 0.8729,
+        "MinT-wls_var": 0.7638,
+        "MinT-shrink-sub": 0.7562
       },
       "subclass": {
         "Base (incoherent)": 0.8926,
-        "BottomUp": 0.7783,
+        "BottomUp": 0.7396,
         "TopDown": 0.8911,
         "MiddleOut": 0.9088,
-        "MinT-ols": 1.0974,
-        "MinT-wls_struct": 0.8457,
-        "MinT-wls_var": 0.7512,
-        "MinT-shrink-sub": 0.7745
+        "MinT-ols": 1.0999,
+        "MinT-wls_struct": 0.8302,
+        "MinT-wls_var": 0.7365,
+        "MinT-shrink-sub": 0.7597
       },
       "item": {
-        "Base (incoherent)": 0.7247,
-        "BottomUp": 0.7247,
-        "TopDown": 0.7962,
-        "MiddleOut": 0.7987,
-        "MinT-ols": 1.0073,
-        "MinT-wls_struct": 0.8928,
-        "MinT-wls_var": 0.7271,
-        "MinT-shrink-sub": 0.7308
+        "Base (incoherent)": 0.6825,
+        "BottomUp": 0.6825,
+        "TopDown": 0.769,
+        "MiddleOut": 0.7734,
+        "MinT-ols": 0.974,
+        "MinT-wls_struct": 0.8664,
+        "MinT-wls_var": 0.684,
+        "MinT-shrink-sub": 0.6935
       }
     },
     "Chronos": {
       "total": {
         "Base (incoherent)": 0.8909,
-        "BottomUp": 0.7672,
+        "BottomUp": 0.7671,
         "TopDown": 0.8909,
         "MiddleOut": 1.0094,
         "MinT-ols": 0.8916,
         "MinT-wls_struct": 0.9211,
         "MinT-wls_var": 0.8214,
-        "MinT-shrink-sub": 0.7659
+        "MinT-shrink-sub": 0.767
       },
       "department": {
         "Base (incoherent)": 0.9638,
-        "BottomUp": 0.693,
+        "BottomUp": 0.6932,
         "TopDown": 0.9583,
         "MiddleOut": 0.9565,
         "MinT-ols": 1.109,
-        "MinT-wls_struct": 0.8537,
-        "MinT-wls_var": 0.74,
-        "MinT-shrink-sub": 0.7575
+        "MinT-wls_struct": 0.8538,
+        "MinT-wls_var": 0.7399,
+        "MinT-shrink-sub": 0.7554
       },
       "class": {
         "Base (incoherent)": 0.911,
-        "BottomUp": 0.6838,
+        "BottomUp": 0.681,
         "TopDown": 0.911,
         "MiddleOut": 0.911,
-        "MinT-ols": 1.2084,
-        "MinT-wls_struct": 0.8371,
+        "MinT-ols": 1.2083,
+        "MinT-wls_struct": 0.8388,
         "MinT-wls_var": 0.7131,
-        "MinT-shrink-sub": 0.742
+        "MinT-shrink-sub": 0.7419
       },
       "subclass": {
         "Base (incoherent)": 0.8926,
@@ -182,18 +182,18 @@
         "MiddleOut": 0.9088,
         "MinT-ols": 1.1069,
         "MinT-wls_struct": 0.8288,
-        "MinT-wls_var": 0.7056,
-        "MinT-shrink-sub": 0.7256
+        "MinT-wls_var": 0.7047,
+        "MinT-shrink-sub": 0.7215
       },
       "item": {
-        "Base (incoherent)": 0.6764,
-        "BottomUp": 0.6764,
-        "TopDown": 0.8005,
-        "MiddleOut": 0.8064,
-        "MinT-ols": 1.0179,
-        "MinT-wls_struct": 0.8797,
+        "Base (incoherent)": 0.6762,
+        "BottomUp": 0.6762,
+        "TopDown": 0.8008,
+        "MiddleOut": 0.806,
+        "MinT-ols": 1.0177,
+        "MinT-wls_struct": 0.8798,
         "MinT-wls_var": 0.6816,
-        "MinT-shrink-sub": 0.7037
+        "MinT-shrink-sub": 0.7033
       }
     }
   },
@@ -201,105 +201,105 @@
     "GFM": {
       "total": {
         "Base (incoherent)": 0.8909,
-        "BottomUp": 0.8432,
+        "BottomUp": 0.853,
         "TopDown": 0.8909,
         "MiddleOut": 1.0094,
         "MinT-ols": 0.8916,
-        "MinT-wls_struct": 0.9266,
-        "MinT-wls_var": 0.8572,
-        "MinT-shrink-sub": 0.6595
+        "MinT-wls_struct": 0.9182,
+        "MinT-wls_var": 0.7491,
+        "MinT-shrink-sub": 0.6799
       },
       "department": {
         "Base (incoherent)": 1.337,
-        "BottomUp": 1.2373,
+        "BottomUp": 1.1826,
         "TopDown": 1.3168,
         "MiddleOut": 1.3121,
-        "MinT-ols": 1.9254,
-        "MinT-wls_struct": 1.2347,
-        "MinT-wls_var": 1.2023,
-        "MinT-shrink-sub": 1.1694
+        "MinT-ols": 1.9245,
+        "MinT-wls_struct": 1.2189,
+        "MinT-wls_var": 1.1632,
+        "MinT-shrink-sub": 1.1348
       },
       "class": {
         "Base (incoherent)": 1.2776,
-        "BottomUp": 1.2401,
+        "BottomUp": 1.1354,
         "TopDown": 1.2771,
         "MiddleOut": 1.2776,
-        "MinT-ols": 2.1083,
-        "MinT-wls_struct": 1.3165,
-        "MinT-wls_var": 1.1549,
-        "MinT-shrink-sub": 1.1534
+        "MinT-ols": 2.105,
+        "MinT-wls_struct": 1.3233,
+        "MinT-wls_var": 1.1056,
+        "MinT-shrink-sub": 1.1073
       },
       "subclass": {
         "Base (incoherent)": 1.2954,
-        "BottomUp": 1.2007,
+        "BottomUp": 1.1502,
         "TopDown": 1.3022,
         "MiddleOut": 1.3065,
-        "MinT-ols": 2.0768,
-        "MinT-wls_struct": 1.3314,
-        "MinT-wls_var": 1.1559,
-        "MinT-shrink-sub": 1.171
+        "MinT-ols": 2.0938,
+        "MinT-wls_struct": 1.3573,
+        "MinT-wls_var": 1.125,
+        "MinT-shrink-sub": 1.1344
       },
       "item": {
-        "Base (incoherent)": 1.8531,
-        "BottomUp": 1.8531,
-        "TopDown": 1.9579,
-        "MiddleOut": 1.9606,
-        "MinT-ols": 6.7637,
-        "MinT-wls_struct": 5.0602,
-        "MinT-wls_var": 1.8639,
-        "MinT-shrink-sub": 1.8607
+        "Base (incoherent)": 1.8131,
+        "BottomUp": 1.8131,
+        "TopDown": 1.9209,
+        "MiddleOut": 1.922,
+        "MinT-ols": 6.8263,
+        "MinT-wls_struct": 5.0985,
+        "MinT-wls_var": 1.8113,
+        "MinT-shrink-sub": 1.822
       }
     },
     "Chronos": {
       "total": {
         "Base (incoherent)": 0.8909,
-        "BottomUp": 0.7672,
+        "BottomUp": 0.7671,
         "TopDown": 0.8909,
         "MiddleOut": 1.0094,
         "MinT-ols": 0.8916,
         "MinT-wls_struct": 0.9211,
         "MinT-wls_var": 0.8214,
-        "MinT-shrink-sub": 0.7659
+        "MinT-shrink-sub": 0.767
       },
       "department": {
         "Base (incoherent)": 1.337,
-        "BottomUp": 0.9436,
+        "BottomUp": 0.944,
         "TopDown": 1.3168,
         "MiddleOut": 1.3121,
         "MinT-ols": 1.92,
-        "MinT-wls_struct": 1.1676,
-        "MinT-wls_var": 1.0523,
-        "MinT-shrink-sub": 1.0459
+        "MinT-wls_struct": 1.1674,
+        "MinT-wls_var": 1.0522,
+        "MinT-shrink-sub": 1.0453
       },
       "class": {
         "Base (incoherent)": 1.2776,
-        "BottomUp": 0.9806,
+        "BottomUp": 0.9811,
         "TopDown": 1.2771,
         "MiddleOut": 1.2776,
         "MinT-ols": 2.0743,
-        "MinT-wls_struct": 1.2476,
-        "MinT-wls_var": 1.0294,
-        "MinT-shrink-sub": 1.0356
+        "MinT-wls_struct": 1.2477,
+        "MinT-wls_var": 1.0293,
+        "MinT-shrink-sub": 1.0357
       },
       "subclass": {
         "Base (incoherent)": 1.2954,
-        "BottomUp": 1.0188,
+        "BottomUp": 1.0194,
         "TopDown": 1.3022,
         "MiddleOut": 1.3065,
-        "MinT-ols": 2.1545,
-        "MinT-wls_struct": 1.3911,
-        "MinT-wls_var": 1.0489,
-        "MinT-shrink-sub": 1.0637
+        "MinT-ols": 2.1544,
+        "MinT-wls_struct": 1.3919,
+        "MinT-wls_var": 1.0493,
+        "MinT-shrink-sub": 1.0644
       },
       "item": {
-        "Base (incoherent)": 1.8314,
-        "BottomUp": 1.8314,
-        "TopDown": 2.0953,
-        "MiddleOut": 2.0987,
-        "MinT-ols": 7.7721,
-        "MinT-wls_struct": 5.7656,
-        "MinT-wls_var": 1.8393,
-        "MinT-shrink-sub": 1.8923
+        "Base (incoherent)": 1.8311,
+        "BottomUp": 1.8311,
+        "TopDown": 2.0872,
+        "MiddleOut": 2.0914,
+        "MinT-ols": 7.7713,
+        "MinT-wls_struct": 5.7658,
+        "MinT-wls_var": 1.8389,
+        "MinT-shrink-sub": 1.8916
       }
     }
   },
@@ -307,53 +307,53 @@
     "GFM": {
       "total": {
         "Base (incoherent)": 0.0155,
-        "BottomUp": 0.0346,
+        "BottomUp": 0.0429,
         "TopDown": 0.0155,
         "MiddleOut": 0.0371,
         "MinT-ols": 0.0157,
-        "MinT-wls_struct": 0.0325,
-        "MinT-wls_var": 0.0334,
-        "MinT-shrink-sub": 0.0065
+        "MinT-wls_struct": 0.0342,
+        "MinT-wls_var": 0.024,
+        "MinT-shrink-sub": 0.0102
       },
       "department": {
         "Base (incoherent)": 0.0437,
-        "BottomUp": 0.0346,
+        "BottomUp": 0.0429,
         "TopDown": 0.0155,
         "MiddleOut": 0.0371,
         "MinT-ols": 0.0169,
-        "MinT-wls_struct": 0.0325,
-        "MinT-wls_var": 0.0334,
-        "MinT-shrink-sub": 0.0066
+        "MinT-wls_struct": 0.0342,
+        "MinT-wls_var": 0.024,
+        "MinT-shrink-sub": 0.0102
       },
       "class": {
         "Base (incoherent)": 0.0371,
-        "BottomUp": 0.0346,
+        "BottomUp": 0.0429,
         "TopDown": 0.0155,
         "MiddleOut": 0.0371,
         "MinT-ols": 0.0194,
-        "MinT-wls_struct": 0.0325,
-        "MinT-wls_var": 0.0334,
-        "MinT-shrink-sub": 0.0068
+        "MinT-wls_struct": 0.0342,
+        "MinT-wls_var": 0.024,
+        "MinT-shrink-sub": 0.0103
       },
       "subclass": {
         "Base (incoherent)": 0.0317,
-        "BottomUp": 0.0346,
+        "BottomUp": 0.0429,
         "TopDown": 0.0155,
         "MiddleOut": 0.0371,
-        "MinT-ols": 0.0219,
-        "MinT-wls_struct": 0.0327,
-        "MinT-wls_var": 0.0335,
-        "MinT-shrink-sub": 0.0074
+        "MinT-ols": 0.022,
+        "MinT-wls_struct": 0.0344,
+        "MinT-wls_var": 0.024,
+        "MinT-shrink-sub": 0.0118
       },
       "item": {
-        "Base (incoherent)": 0.0346,
-        "BottomUp": 0.0346,
+        "Base (incoherent)": 0.0429,
+        "BottomUp": 0.0429,
         "TopDown": 0.0155,
         "MiddleOut": 0.0371,
-        "MinT-ols": 0.0516,
-        "MinT-wls_struct": 0.0469,
-        "MinT-wls_var": 0.0356,
-        "MinT-shrink-sub": 0.0074
+        "MinT-ols": 0.0619,
+        "MinT-wls_struct": 0.055,
+        "MinT-wls_var": 0.0253,
+        "MinT-shrink-sub": 0.0118
       }
     },
     "Chronos": {
@@ -365,7 +365,7 @@
         "MinT-ols": 0.0157,
         "MinT-wls_struct": 0.0298,
         "MinT-wls_var": 0.0264,
-        "MinT-shrink-sub": 0.0264
+        "MinT-shrink-sub": 0.0266
       },
       "department": {
         "Base (incoherent)": 0.0437,
@@ -375,7 +375,7 @@
         "MinT-ols": 0.0169,
         "MinT-wls_struct": 0.0298,
         "MinT-wls_var": 0.0264,
-        "MinT-shrink-sub": 0.0264
+        "MinT-shrink-sub": 0.0267
       },
       "class": {
         "Base (incoherent)": 0.0371,
@@ -385,7 +385,7 @@
         "MinT-ols": 0.0193,
         "MinT-wls_struct": 0.0299,
         "MinT-wls_var": 0.0264,
-        "MinT-shrink-sub": 0.0265
+        "MinT-shrink-sub": 0.0268
       },
       "subclass": {
         "Base (incoherent)": 0.0317,
@@ -395,7 +395,7 @@
         "MinT-ols": 0.0218,
         "MinT-wls_struct": 0.03,
         "MinT-wls_var": 0.0264,
-        "MinT-shrink-sub": 0.0266
+        "MinT-shrink-sub": 0.0269
       },
       "item": {
         "Base (incoherent)": 0.0211,
@@ -405,28 +405,28 @@
         "MinT-ols": 0.0511,
         "MinT-wls_struct": 0.0439,
         "MinT-wls_var": 0.027,
-        "MinT-shrink-sub": 0.0266
+        "MinT-shrink-sub": 0.0269
       }
     }
   },
   "worst_level_ratio": {
     "GFM": {
       "BottomUp": 1.0,
-      "TopDown": 1.0986,
-      "MiddleOut": 1.133,
-      "MinT-ols": 1.3899,
-      "MinT-wls_struct": 1.232,
-      "MinT-wls_var": 1.0033,
-      "MinT-shrink-sub": 1.0085
+      "TopDown": 1.1267,
+      "MiddleOut": 1.1331,
+      "MinT-ols": 1.427,
+      "MinT-wls_struct": 1.2694,
+      "MinT-wls_var": 1.0022,
+      "MinT-shrink-sub": 1.0161
     },
     "Chronos": {
       "BottomUp": 1.0,
-      "TopDown": 1.1835,
-      "MiddleOut": 1.1922,
-      "MinT-ols": 1.505,
-      "MinT-wls_struct": 1.3007,
-      "MinT-wls_var": 1.0078,
-      "MinT-shrink-sub": 1.0403
+      "TopDown": 1.1842,
+      "MiddleOut": 1.192,
+      "MinT-ols": 1.5051,
+      "MinT-wls_struct": 1.3011,
+      "MinT-wls_var": 1.008,
+      "MinT-shrink-sub": 1.0401
     }
   },
   "rule": "per item model: smallest worst-level ratio to base (median RMSSE); ties within 1% -> MiddleOut",

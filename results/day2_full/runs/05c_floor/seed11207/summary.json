@@ -1,0 +1,14 @@
+{
+  "name": "05c_floor",
+  "seed": 11207,
+  "alias": "GFM_floor",
+  "fit_seconds": 359.8,
+  "max_steps": 11718,
+  "n_train_series": 40079,
+  "neg_share": 0.03851284728264022,
+  "oscillation": 0.03177586469023019,
+  "best_step": 3504,
+  "best_frac": 0.29902713773681516,
+  "best_valid": 2960.78466796875,
+  "final_over_best": 1.0871526680054562
+}

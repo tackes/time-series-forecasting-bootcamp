@@ -2,13 +2,13 @@
   "name": "09_calibration",
   "seed": 11207,
   "alias": "GFM_selected",
-  "fit_seconds": 359.5,
+  "fit_seconds": 357.3,
   "max_steps": 11718,
-  "n_train_series": 38251,
-  "neg_share": 0.03478571428571429,
-  "oscillation": 0.023795663612813968,
-  "best_step": 6716,
-  "best_frac": 0.5731353473288957,
-  "best_valid": 3775.1376953125,
-  "final_over_best": 1.1251281449015855
+  "n_train_series": 38236,
+  "neg_share": 0.05253571428571428,
+  "oscillation": 0.015175086456217029,
+  "best_step": 10512,
+  "best_frac": 0.8970814132104454,
+  "best_valid": 3541.45849609375,
+  "final_over_best": 1.0614781769571842
 }

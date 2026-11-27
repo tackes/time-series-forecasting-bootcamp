@@ -422,8 +422,13 @@ pd.DataFrame(transfer_rows).set_index("arm").round(4)
 # trained on the full panel. We move `price_index` alone, over a wider range of shifts, and
 # check how much of the tree's split gain the price and promo features carry.
 
+# LightGBM gets the cleaned prices, as in 00 and every model in the final comparison
+# (`gp.PRICE_CLEAN`, `docs/stability_choices.md`); the GFM arms above keep the raw ones.
+
 # %%
 LGBM_EXOG = ["promo", "price_index", "discount_depth", "price_ratio_to_rolling_mean"]
+_, lgbm_train, lgbm_test, _ = gp.prepare({"futr_exog": bc.FUTR_EXOG_COLS,
+                                         "price_clean": gp.PRICE_CLEAN}, panel=raw)
 LGBM_SHIFTS = (0.02, 0.05, 0.10, 0.20, 0.30)
 
 
@@ -442,7 +447,7 @@ def fit_lgbm() -> MLForecast:
         date_features=["month", "week"], target_transforms=[LocalStandardScaler()],
     )
     with bc.Timer() as t:
-        mlf.fit(bc.to_nixtla(train_a, LGBM_EXOG), static_features=[])
+        mlf.fit(bc.to_nixtla(lgbm_train, LGBM_EXOG), static_features=[])
     print(f"LightGBM fit: {t.seconds / 60:.1f} min")
     return mlf
 
@@ -450,7 +455,7 @@ def fit_lgbm() -> MLForecast:
 def lgbm_sweep() -> pd.DataFrame:
     """Total forecast units per report series at base price and at ±each shift."""
     mlf = fit_lgbm()
-    future = gd.only(bc.to_nixtla(test_a, LGBM_EXOG).drop(columns="y"), report_ids)
+    future = gd.only(bc.to_nixtla(lgbm_test, LGBM_EXOG).drop(columns="y"), report_ids)
     shifts = [0.0]
     for m in LGBM_SHIFTS:
         shifts += [-m, m]
@@ -627,8 +632,8 @@ probe_table.round(3)
 # results go to 10's final price-response table.
 
 # %%
-lgbm_hist = gd.only(bc.to_nixtla(train_a, LGBM_EXOG), report_ids)
-lgbm_futr = gd.only(bc.to_nixtla(test_a, LGBM_EXOG).drop(columns="y"), report_ids)
+lgbm_hist = gd.only(bc.to_nixtla(lgbm_train, LGBM_EXOG), report_ids)
+lgbm_futr = gd.only(bc.to_nixtla(lgbm_test, LGBM_EXOG).drop(columns="y"), report_ids)
 lgbm_calendars = gp.promo_calendars(lgbm_futr, report_ids)
 print("price inputs rebuilt, largest gap from the data:",
       gp.rebuild_check(lgbm_hist, lgbm_futr))

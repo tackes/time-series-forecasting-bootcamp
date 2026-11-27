@@ -51,7 +51,7 @@ from scipy.sparse.linalg import LinearOperator
 
 CODE_FULL = Path(__file__).resolve().parent
 ROOT = CODE_FULL.parents[1]
-sys.path.insert(0, str(ROOT / "day2_neural" / "code"))
+sys.path.insert(0, str(ROOT / "day2_neural" / "v1" / "code"))
 
 import bootcamp as bc  # noqa: E402  (the shared Day 2 harness; needs the path above)
 
@@ -92,6 +92,7 @@ SEEDS = [46335, 11207, 90218] if not SMOKE else [46335, 11207]
 N_JOBS = int(os.environ.get("GD_N_JOBS", 1 if SMOKE else -1))   # StatsForecast workers
 SMOKE_N_SERIES = 150          # training series in a smoke run
 SMOKE_N_EVAL = 60             # of which scored
+EVAL_N_SERIES = 2000         # the original labs' sample (bc.N_SERIES now defaults to 0)
 SMOKE_MAX_STEPS = 20
 
 OUT_DIR = ROOT / "results" / ("day2_full_smoke" if SMOKE else "day2_full")
@@ -111,6 +112,7 @@ for _d in (CONFIG_DIR, FORECAST_DIR, TABLE_DIR, RUNS_DIR, MODEL_DIR):
 bc.DATA_DIR = ROOT / "data"
 bc.RESULTS_DIR = OUT_DIR
 bc.FORECAST_DIR = FORECAST_DIR
+bc.RAW_DIR = OUT_DIR / "raw"
 bc.LEADERBOARD_PATH = OUT_DIR / "leaderboard.csv"
 bc.DAY1_LEADERBOARD_PATH = OUT_DIR / "no_day1_leaderboard.csv"   # Day 1 has no RMSSE board
 
@@ -140,7 +142,7 @@ def eval_ids() -> list[str]:
             n_more = max(0, min(len(rest), SMOKE_N_EVAL - len(ids)))
             ids += rng.choice(rest, size=n_more, replace=False).tolist()
         else:
-            ids = bc.load_panel(n_series=bc.N_SERIES, seed=bc.RANDOM_SEED)["unique_id"].unique()
+            ids = bc.load_panel(n_series=EVAL_N_SERIES, seed=bc.RANDOM_SEED)["unique_id"].unique()
             ids = ids.to_list()
         pd.DataFrame({"unique_id": sorted(ids)}).to_csv(EVAL_IDS_PATH, index=False)
     return pd.read_csv(EVAL_IDS_PATH)["unique_id"].astype(str).tolist()
@@ -371,14 +373,37 @@ def cached(name: str, compute) -> pd.DataFrame:
     return out
 
 
+STABILITY_CONFIG = "05c_input_clip"     # 05c's choice of price cleaning, floor and clip
+
+
 def selected_config() -> dict:
-    """The model every notebook after 05 builds on: 05b's if it won, otherwise 05's."""
+    """The model every notebook after 05 builds on.
+
+    05c's chosen arm if it has one (05's settings with cleaned prices, the scaler floor and,
+    for ``clean_floor_clip``, the input clip: ``docs/stability_choices.md``); otherwise 05b's
+    if it won; otherwise 05's. ``selected_from`` says which. The floor and clip travel in
+    ``params`` (``scale_floor``, ``input_clip``), so ``build_nbeatsx`` applies them to every
+    refit of the selected model.
+    """
+    if (CONFIG_DIR / f"{STABILITY_CONFIG}.json").exists():
+        stable = load_config(STABILITY_CONFIG)
+        arm = stable.get("use")
+        if arm in ("clean_floor", "clean_floor_clip"):
+            base = load_config("05_selected")              # 05c's arms are built on 05
+            clip = stable["input_clip"] if arm == "clean_floor_clip" else None
+            alias = "GFM_" + arm
+            return {**base, "price_clean": stable["price_clean"],
+                    "params": {**base["params"], "scale_floor": stable["scale_floor"],
+                               "input_clip": clip},
+                    "selected_from": "05c", "use": arm, "forecasts": f"05c_{arm}",
+                    "forecast_column": alias, "saved_model": "05c_selected",
+                    "selected_runs": f"05c_{arm}"}
     synthetic = CONFIG_DIR / "05b_synthetic.json"
     if synthetic.exists():
         cfg = load_config("05b_synthetic")
         if cfg.get("use") == "05b":
-            return cfg
-    return load_config("05_selected")
+            return {**cfg, "selected_from": "05b"}
+    return {**load_config("05_selected"), "selected_from": "05"}
 
 
 def selected_forecasts(cfg: dict | None = None) -> pd.DataFrame:
@@ -414,6 +439,9 @@ def save_model(nf, name: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     with _atomic(path) as tmp:
         nf.save(str(tmp), save_dataset=False, overwrite=True)
+        stability = _stability_of(nf.models[0])
+        if stability:                 # the library does not save a patched scaler: note it
+            (Path(tmp) / STABILITY_FILE).write_text(json.dumps(stability))
     return path
 
 
@@ -432,7 +460,12 @@ def load_model(name: str):
     path = MODEL_DIR / name
     if not path.exists():
         raise FileNotFoundError(f"{path} missing: download the models or run with GD_TRAIN=1.")
-    return NeuralForecast.load(str(path))
+    nf = NeuralForecast.load(str(path))
+    if (path / STABILITY_FILE).exists():  # reapply the scaler floor and clip it was fitted with
+        stability = json.loads((path / STABILITY_FILE).read_text())
+        for model in nf.models:
+            floor_robust_scaler(model, stability["scale_floor"], clip=stability["input_clip"])
+    return nf
 
 
 # ============================================================================
@@ -541,17 +574,76 @@ NBEATSX_DEFAULTS = {
 }
 
 
+def _floored_robust_statistics(x, mask, dim=-1, eps=1e-6, floor: float = 0.0):
+    """The library's robust statistics, with the spread never below ``floor``."""
+    from neuralforecast.common._scalers import robust_statistics
+
+    median, spread = robust_statistics(x, mask, dim=dim, eps=eps)
+    return median, spread.clamp(min=floor)
+
+
+def _clipped_robust_scaler(x, x_median, x_mad, clip: float = float("inf")):
+    """The library's robust scaling, with every channel but the first (the target) clipped
+    to ``[-clip, clip]``. Windows are ``[batch, time, channel]``, the target first."""
+    z = (x - x_median) / x_mad
+    return torch.cat([z[:, :, :1], z[:, :, 1:].clamp(-clip, clip)], dim=2)
+
+
+def floor_robust_scaler(model, floor: float, clip: float | None = None):
+    """Floor the robust window scaler's spread at ``floor`` in ``model``, in place.
+
+    ``clip`` also bounds the scaled covariates (not the target) at ``±clip``, so a large real
+    price move cannot reach the exogenous stack at any size.
+
+    The library scales each input over the input weeks by its median and MAD. A covariate
+    that barely moved there (a price drifting by 0.001 with CPI) gets a tiny spread, so a
+    discount in the forecast weeks becomes hundreds of scaled units. The floor bounds that.
+    The patch is on the model instance, so it survives the copy ``NeuralForecast.fit`` makes,
+    but a model loaded from disk has the library's scaler again.
+    """
+    from neuralforecast.common._scalers import TemporalNorm
+
+    norms = [m for m in model.modules()
+             if isinstance(m, TemporalNorm) and m.scaler_type == "robust"]
+    if not norms:
+        raise ValueError("floor_robust_scaler: the model has no robust scaler")
+    for norm in norms:
+        norm.compute_statistics = partial(_floored_robust_statistics, floor=floor)
+        if clip is not None:
+            norm.scaler = partial(_clipped_robust_scaler, clip=clip)
+    return model
+
+
+STABILITY_FILE = "stability.json"     # next to a saved model: the floor and clip to reapply
+
+
+def _stability_of(model) -> dict | None:
+    """``{"scale_floor", "input_clip"}`` if ``floor_robust_scaler`` patched ``model``."""
+    from neuralforecast.common._scalers import TemporalNorm
+
+    for m in model.modules():
+        stats = getattr(m, "compute_statistics", None) if isinstance(m, TemporalNorm) else None
+        if isinstance(stats, partial) and stats.func is _floored_robust_statistics:
+            scaler = m.scaler
+            clip = scaler.keywords["clip"] if isinstance(scaler, partial) else None
+            return {"scale_floor": stats.keywords["floor"], "input_clip": clip}
+    return None
+
+
 def build_nbeatsx(params: dict, data: NixtlaData, max_steps: int, seed: int, alias: str,
                   recipe: bool = True, loss=None, valid_loss=None):
     """An NBEATSx from a params dict (as stored in configs) plus the training recipe.
 
     ``mlp_size`` and ``mlp_depth`` give every stack the same MLP: ``[[size] * depth] * stacks``.
+    ``scale_floor`` and ``input_clip`` (05c) floor the robust scaler's spread and clip the
+    scaled covariates (``floor_robust_scaler``).
     ``loss`` and ``valid_loss`` replace the recipe's losses when given (e.g. a multi-quantile
     loss for intervals); everything else in the recipe stays.
     """
     from neuralforecast.models import NBEATSx
 
     p = {**NBEATSX_DEFAULTS, **params}
+    floor, clip = p.pop("scale_floor", None), p.pop("input_clip", None)
     mlp_units = [[p.pop("mlp_size")] * p.pop("mlp_depth")] * len(p["stack_types"])
     if not data.futr_exog:            # the exogenous stack needs future covariates
         p["stack_types"] = [s for s in p["stack_types"] if s != "exogenous"]
@@ -562,9 +654,12 @@ def build_nbeatsx(params: dict, data: NixtlaData, max_steps: int, seed: int, ali
         train_kwargs["loss"] = loss
     if valid_loss is not None:
         train_kwargs["valid_loss"] = valid_loss
-    return NBEATSx(h=bc.H, futr_exog_list=data.futr_exog or None,
-                   stat_exog_list=data.stat_exog or None, mlp_units=mlp_units,
-                   random_seed=seed, alias=alias, **p, **train_kwargs)
+    model = NBEATSx(h=bc.H, futr_exog_list=data.futr_exog or None,
+                    stat_exog_list=data.stat_exog or None, mlp_units=mlp_units,
+                    random_seed=seed, alias=alias, **p, **train_kwargs)
+    if floor is not None:             # 05c's scaler floor (and clip): docs/stability_choices.md
+        floor_robust_scaler(model, floor, clip=clip)
+    return model
 
 
 # ============================================================================

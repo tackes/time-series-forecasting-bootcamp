@@ -76,6 +76,64 @@ def price_index(df: pl.DataFrame, cutoff=bc.TEST_START) -> pl.DataFrame:
             .drop("_ref"))
 
 
+PRICE_CLEAN_WINDOW = 9        # weeks, centred: the neighbourhood a bad price is replaced from
+# 05c's cleaning rule, fixed before any fit: placeholders at or below £0.05, and prices more
+# than 6x above or below the usual price. Every model in the final comparison uses it
+# (docs/stability_choices.md); the GFM development notebooks 01-05 used raw prices.
+PRICE_CLEAN = {"k": 6.0, "floor": 0.05}
+
+
+def _bad_price(col: str, cutoff, k: float, floor: float) -> tuple[pl.Expr, pl.Expr]:
+    """(is the week's ``col`` bad, the series' median of good ``col`` before ``cutoff``).
+
+    A series with no good price before ``cutoff`` falls back to its good prices in any week:
+    prices are a known plan, and the alternative is a placeholder as the usual price.
+    """
+    placeholder = pl.col(col) <= floor
+    good_before = pl.col(col).filter(~placeholder & (pl.col("ds") < cutoff)).median()
+    median = pl.coalesce(good_before.over("unique_id"),
+                         pl.col(col).filter(~placeholder).median().over("unique_id"))
+    ratio = pl.col(col) / median
+    return placeholder | (ratio > k) | (ratio < 1 / k), median
+
+
+def bad_price_weeks(df: pl.DataFrame, cutoff=bc.TEST_START, k: float = 6.0,
+                    floor: float = 0.05) -> pl.DataFrame:
+    """The weeks ``clean_prices`` would replace: placeholder or out-of-range sale prices."""
+    bad, median = _bad_price("sale_price", cutoff, k, floor)
+    return (df.with_columns(median.alias("usual_price"), bad.alias("_bad"))
+            .filter(pl.col("_bad")).drop("_bad")
+            .select("unique_id", "ds", "y", "sale_price", "usual_price"))
+
+
+def clean_prices(df: pl.DataFrame, cutoff=bc.TEST_START, k: float = 6.0,
+                 floor: float = 0.05) -> pl.DataFrame:
+    """Replace placeholder and out-of-range prices, then rebuild every price feature.
+
+    A week's price is bad if it is at most ``floor`` (the data's £0.01 placeholders) or more
+    than ``k`` times above or below the series' usual price: the median of its good prices
+    before ``cutoff``. The ratio rule is unit-free, so a cheap item is judged against itself.
+    A bad price is replaced by the median of the good prices in the ``PRICE_CLEAN_WINDOW``
+    weeks around it (prices are a known plan, so the window may look ahead), or by the usual
+    price when the window has none. ``sale_price`` and ``regular_price`` are cleaned the same
+    way, each against its own usual price; ``y`` is untouched.
+    """
+    out = df.sort(["unique_id", "ds"])
+    for col in ("sale_price", "regular_price"):
+        if col not in out.columns:
+            continue
+        bad, median = _bad_price(col, cutoff, k, floor)
+        good = pl.when(bad).then(None).otherwise(pl.col(col))
+        nearby = good.rolling_median(window_size=PRICE_CLEAN_WINDOW, min_samples=1,
+                                     center=True).over("unique_id")
+        out = out.with_columns(
+            pl.when(bad).then(pl.coalesce(nearby, median, pl.col(col)))
+            .otherwise(pl.col(col)).alias(col))
+    out = bc._add_price_features(out.drop("price_ratio_to_rolling_mean", "price_pct_change_1w",
+                                          "discount_depth", strict=False))
+    return price_index(out, cutoff)
+
+
 def deflate_prices(df: pl.DataFrame, path=gd.CPI_PATH, cutoff=bc.TEST_START) -> pl.DataFrame:
     """Divide prices by the CPI deflator for their week, then rebuild the price features.
 
@@ -192,6 +250,7 @@ def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | 
 
     - ``features``: ``{"deflate": bool, "events": bool, "fourier_k": int,
       "hierarchy_level": str | None}``;
+    - ``price_clean``: ``{"k": float, "floor": float}`` (``clean_prices``, before deflation);
     - ``futr_exog``: future covariates (default ``bc.FUTR_EXOG_COLS``);
     - ``oversample``: ``{"rule": "rolling" | "regular", "cap": int, "multiplier": int}``;
     - ``synthetic``: ``{"cuts_per_copy": int}`` (needs ``oversample``);
@@ -202,6 +261,8 @@ def prepare(cfg: dict, panel: pl.DataFrame | None = None, synthetic_seed: int | 
     """
     feats = cfg.get("features", {})
     panel = panel if panel is not None else gd.train_panel()
+    if cfg.get("price_clean"):
+        panel = clean_prices(panel, cutoff=cutoff, **cfg["price_clean"])
     if feats.get("deflate"):
         panel = deflate_prices(panel, cutoff=cutoff)
     elif cutoff != bc.TEST_START:
@@ -852,3 +913,19 @@ def aggregate_covariates(items: pl.DataFrame, levels: list[list[str]], cutoff=bc
     if events:
         out = add_events(out)
     return out.to_pandas()
+
+
+def selected_gfm_probes(cfg: dict | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(probe report, calendar report) of the selected GFM's 3-seed probes, test window.
+
+    05c's chosen arm is probed in its own test fits (``selected_runs``); 05 and 05b were
+    probed in 05b, which stores the reports in its config.
+    """
+    cfg = cfg or gd.selected_config()
+    if cfg.get("selected_from") == "05c":
+        runs = gd.load_runs(cfg["selected_runs"])
+        return (probe_report(seed_mean_q([r["probe7b"] for r in runs], PROBE_KEYS)),
+                calendar_report(seed_mean_q([r["calendar"] for r in runs], CAL_KEYS)))
+    synthetic = gd.load_config("05b_synthetic")
+    key = synthetic.get("use", "05")
+    return pd.DataFrame(synthetic["probes"][key]), pd.DataFrame(synthetic["calendar"][key])
