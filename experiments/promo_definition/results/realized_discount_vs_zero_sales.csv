@@ -1,0 +1,5 @@
+promotional,sales,share_pct,rows
+flagged promotional,sales > 0,79.155,39454
+flagged promotional,zero sales,79.79,3335
+not flagged,sales > 0,16.192,109693
+not flagged,zero sales,0.009,32818

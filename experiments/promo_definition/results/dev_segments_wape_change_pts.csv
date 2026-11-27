@@ -1,0 +1,9 @@
+split,segment,A_control,B_adj10,B_adj15,B_adj20,B_adj5,C_adj10,C_adj15,C_adj20,C_adj5,ref_B_placebo,ref_C_placebo
+product_type,always promotional,0.0,-0.0,0.22,0.21,0.13,-0.04,-0.06,-0.2,0.05,-0.0,0.01
+product_type,never promotional,0.0,0.13,0.02,0.13,0.14,0.07,0.05,0.06,0.09,0.1,0.09
+product_type,sometimes promotional,0.0,-0.21,-0.25,-0.12,-0.04,-0.3,-0.38,-0.43,-0.15,0.13,-0.22
+realized_discount,realized discount < 10%,0.0,-0.34,-0.6,-0.37,-0.07,-0.51,-0.68,-0.74,-0.19,0.62,-0.22
+realized_discount,realized discount >= 10%,0.0,-0.04,0.05,0.1,0.03,-0.08,-0.09,-0.14,-0.05,-0.14,-0.12
+week_type,not promotional,0.0,-0.14,-0.3,-0.16,0.03,-0.29,-0.37,-0.44,-0.12,0.43,-0.15
+week_type,"promotional, kept at 10%",0.0,-0.14,-0.02,0.03,-0.03,-0.14,-0.2,-0.25,-0.1,-0.18,-0.17
+week_type,"promotional, reclassified at 10%",0.0,-0.11,-0.23,0.05,-0.04,-0.33,-0.38,-0.2,0.26,-0.18,-0.01

@@ -1,0 +1,19 @@
+data,definition,threshold,promo_share_pct,original_promo_reclassified_pct,non_promo_now_flagged_pct,always_promo_products,never_promo_products,sometimes_promo_products,volume_weighted_promo_share_pct,non_promo_discount_over_threshold_pct,invalid_regular_price_rows
+"teaching sample (2,000 series)",original flag,,23.092,0.0,0.0,78,567,1355,50.208,,2
+"teaching sample (2,000 series)",B: flag and discount,0.05,21.298,7.768,0.0,63,609,1328,48.554,17.73,2
+"teaching sample (2,000 series)",D: discount only (realized),0.05,35.251,7.768,18.143,105,185,1710,72.461,0.0,2
+"teaching sample (2,000 series)",B: flag and discount,0.1,18.29,20.795,0.0,44,686,1270,45.981,11.732,2
+"teaching sample (2,000 series)",D: discount only (realized),0.1,27.876,20.795,12.465,76,328,1596,64.696,0.0,2
+"teaching sample (2,000 series)",B: flag and discount,0.15,13.677,40.772,0.0,20,781,1199,41.458,7.805,2
+"teaching sample (2,000 series)",D: discount only (realized),0.15,20.414,40.772,8.76,38,464,1498,55.301,0.0,2
+"teaching sample (2,000 series)",B: flag and discount,0.2,10.222,55.734,0.0,12,893,1095,36.898,5.171,2
+"teaching sample (2,000 series)",D: discount only (realized),0.2,14.864,55.734,6.036,21,621,1358,44.966,0.0,2
+full dataset,original flag,,22.027,0.0,0.0,712,5934,12046,45.939,,151
+full dataset,B: flag and discount,0.05,20.313,7.78,0.0,585,6300,11807,43.573,15.972,151
+full dataset,D: discount only (realized),0.05,33.04,7.78,16.323,943,2571,15178,65.009,0.0,151
+full dataset,B: flag and discount,0.1,17.265,21.618,0.0,403,6918,11371,40.216,10.67,151
+full dataset,D: discount only (realized),0.1,26.093,21.618,11.321,636,3872,14184,57.086,0.0,151
+full dataset,B: flag and discount,0.15,12.573,42.918,0.0,210,7853,10629,33.929,7.113,151
+full dataset,D: discount only (realized),0.15,18.792,42.918,7.976,341,5112,13239,46.838,0.0,151
+full dataset,B: flag and discount,0.2,9.61,56.37,0.0,116,8904,9672,28.66,4.809,151
+full dataset,D: discount only (realized),0.2,13.957,56.37,5.575,180,6516,11996,37.271,0.0,151

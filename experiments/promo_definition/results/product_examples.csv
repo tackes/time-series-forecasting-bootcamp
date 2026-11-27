@@ -1,0 +1,5 @@
+unique_id,why,plot_cutoff,promo_weeks,reclassified_weeks,dev_mae_A_control,dev_mae_B_adj10,dev_mae_C_adj10
+3947_S1,"sometimes promotional, low volume",2024-10-09,61,59,90.0,77.6,88.4
+2197_S1,"sometimes promotional, mid volume",2024-07-17,106,77,309.0,330.4,307.2
+14681_S1,"sometimes promotional, high volume",2024-07-17,81,63,1720.7,1669.5,1643.2
+10211_S1,always promotional,2024-07-17,95,95,179.1,192.0,186.5

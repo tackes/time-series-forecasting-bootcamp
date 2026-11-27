@@ -18,18 +18,43 @@ One long table. Every model, cutoff and horizon is a set of rows.
 
 Actuals are never stored with forecasts. They come from the prepared panel and are joined on `unique_id` and `ds`.
 
-## Information tiers
+## Information
 
-From least to most information used. Tiers are reported in separate tables and never ranked together.
+`information_tier` records what a forecast needs to know on its cutoff date, from least to most. Notebooks display the business description.
 
-| tier | meaning |
-|---|---|
-| `historical_only` | only data observed on or before the cutoff |
-| `planned_scenario` | also a promotion plan. The dataset has no real plan, so realized promotion flags for the first four forecast weeks stand in for one. That is an assumption, not a measured capability. |
-| `oracle` | realized promotions for the whole horizon |
-| `leaky_diagnostic` | realized future selling prices (a realized average price reveals sales: 84% of weeks priced exactly at the regular price have zero sales, against 2% of other weeks), or candidates chosen with the final-window actuals |
+| `information_tier` | shown as | meaning |
+|---|---|---|
+| `history` | Sales history and calendar only | sales up to the cutoff, calendar terms and fixed item attributes (department, class, subclass) |
+| `historical_drivers` | Historical exogenous features | also past prices and promotions, each observed on or before the cutoff (lag 14 or more, or the regular price carried forward from the cutoff) |
+| `partial_future_drivers` | Partial future-driver visibility | also the promotion plan for the first four forecast weeks (optional section of notebook 03) |
+| `future_drivers` | Full future-driver visibility | also the price and promotion plan for all 14 weeks: promotion flag, regular price and promotional discount |
+| `leakage_diagnostic` | Leakage diagnostic | uses what was not available on the cutoff or is derived from the target: the realized selling price (a week with no sales gets the regular price, so the price reveals the zeros), or candidates chosen with the final-window actuals |
+
+The dataset has no copy of the plans as they stood on each cutoff, so recorded promotion flags, regular prices and promotional prices stand in for them. Future-driver scores are conditional on the plan being carried out as recorded. In promotion weeks the realized selling price has the same distribution with or without sales, so it stands in for the promotional price; outside promotion weeks it is never used as a plan (`add_drivers` in `features.py`).
 
 A selection strategy or average takes the highest tier among its candidate pool (`combine_tiers`).
+
+### Scenarios
+
+A business scenario decides which tiers a deployable forecast may use (`SCENARIOS`, `eligible`, `scenario_pool`):
+
+| scenario | example | may use |
+|---|---|---|
+| `no_future_drivers` | a manufacturer without the retailer's price and promotion plans | `history`, `historical_drivers` |
+| `future_drivers` | a retailer forecasting its own sales | everything up to `future_drivers` |
+
+Leakage diagnostics are never eligible. Model selection (notebook 07) builds each scenario's candidate pool with `scenario_pool`, so a strategy is compared only with models whose information requirements the scenario meets. Rows with different information may sit side by side to show what the information is worth, never to compare architectures.
+
+## Driver features (`features.py`)
+
+| function | builds |
+|---|---|
+| `add_drivers` | `promo`, `regular_price`, `discount` (promotional discount, 0 outside promotions), `planned_price`, `price_index` (planned price over the median regular price of the 52 weeks ending 14 weeks earlier), and the realized `rel_price` |
+| `future_drivers` | the plan columns plus promotion-calendar features (`promo_features`) for every week |
+| `partial_plan` | the plan for the first `plan_weeks` forecast weeks, then no promotion at the cutoff's regular price |
+| `historical_drivers`, `historical_future` | promotion and price history as of 14 weeks before each week, and the regular price; `historical_future` builds `X_df` with the regular price carried forward from the cutoff |
+| `realized_drivers`, `day2_covariates` | leakage diagnostics: the plan's price columns from the realized selling price, and the Day 2 neural covariates |
+| `item_attributes`, `in_horizon` | static attributes per series; the 14 weeks after a cutoff |
 
 ## Windows
 
@@ -96,5 +121,6 @@ python -m pytest shared
 ```
 
 - `test_framework.py`: WAPE, bias and RMSSE by hand; WAPE and bias as portfolio ratios, not SKU averages; grouped scores against direct `utilsforecast` calls; RMSSE against `utilsforecast.rmsse`, including the undefined-scale case; RMSSE scale from history up to the cutoff only; scoring on common rows; APC edge cases and common support; conversion of the committed baseline outputs.
-- `test_tiers.py`: tier propagation, tier labels on saved forecasts, price features confined to the leaky model, evidence completeness on each decision date.
-- `test_leakage.py`: reruns notebooks 03, 03b and 07 after scrambling what the decision date should not see (slow, a few minutes).
+- `test_information.py`: historical drivers and their `X_df` unchanged when everything after the cutoff is scrambled; future frames with one row per series and forecast week, the expected columns and no missing plan values; planned drivers unchanged when the realized selling price outside promotions is scrambled (the diagnostics must change); the partial plan.
+- `test_tiers.py`: tier order and propagation, scenario eligibility and pools, tier labels on saved forecasts, every selection's SKU forecasts drawn from eligible candidates, evidence completeness on each decision date, the Day 2 files and leaderboard flags consistent with the saved forecasts.
+- `test_leakage.py`: reruns the modeling cells of notebooks 03 (with its optional sections), 03b and 03c after scrambling sales, realized prices or the plan after the cutoff, and checks each forecast against its own tier; reruns notebook 07 after scrambling sales after a decision date (slow, several minutes).
