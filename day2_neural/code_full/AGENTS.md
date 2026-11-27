@@ -6,7 +6,7 @@ Notes for anyone (person or coding agent) editing these notebooks.
 A full-data version of the Day 2 labs. Each notebook trains on **every eligible series** (≈17,241) and scores on the **fixed 2,000-series evaluation sample** used by `day2_neural/code`. Each one builds on the config written by the one before. The research behind the choices is summarised in `docs/gfm_learnings.md`.
 
 ## Ground rules
-- **`day2_neural/code/` is read-only.** `bootcamp.py` is imported, never edited. `gd_helpers.py` points its paths at `results/day2_full/`; nothing is ever written to `results/day2/`.
+- **`day2_neural/v1/code/` is read-only** (it was `day2_neural/code/` before the v1 update). `bootcamp.py` is imported, never edited. `gd_helpers.py` points its paths at `results/day2_full/`; nothing is ever written to `results/day2/`.
 - **Same evaluation.**
   - Score with `gd.record` / `gd.score`. They restrict `bc.record` / `bc.score` to the eval ids.
   - Sort and discuss the board by **median** RMSSE, with the mean alongside.

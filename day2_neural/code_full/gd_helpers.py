@@ -51,7 +51,7 @@ from scipy.sparse.linalg import LinearOperator
 
 CODE_FULL = Path(__file__).resolve().parent
 ROOT = CODE_FULL.parents[1]
-sys.path.insert(0, str(ROOT / "day2_neural" / "code"))
+sys.path.insert(0, str(ROOT / "day2_neural" / "v1" / "code"))
 
 import bootcamp as bc  # noqa: E402  (the shared Day 2 harness; needs the path above)
 
@@ -92,6 +92,7 @@ SEEDS = [46335, 11207, 90218] if not SMOKE else [46335, 11207]
 N_JOBS = int(os.environ.get("GD_N_JOBS", 1 if SMOKE else -1))   # StatsForecast workers
 SMOKE_N_SERIES = 150          # training series in a smoke run
 SMOKE_N_EVAL = 60             # of which scored
+EVAL_N_SERIES = 2000         # the original labs' sample (bc.N_SERIES now defaults to 0)
 SMOKE_MAX_STEPS = 20
 
 OUT_DIR = ROOT / "results" / ("day2_full_smoke" if SMOKE else "day2_full")
@@ -111,6 +112,7 @@ for _d in (CONFIG_DIR, FORECAST_DIR, TABLE_DIR, RUNS_DIR, MODEL_DIR):
 bc.DATA_DIR = ROOT / "data"
 bc.RESULTS_DIR = OUT_DIR
 bc.FORECAST_DIR = FORECAST_DIR
+bc.RAW_DIR = OUT_DIR / "raw"
 bc.LEADERBOARD_PATH = OUT_DIR / "leaderboard.csv"
 bc.DAY1_LEADERBOARD_PATH = OUT_DIR / "no_day1_leaderboard.csv"   # Day 1 has no RMSSE board
 
@@ -140,7 +142,7 @@ def eval_ids() -> list[str]:
             n_more = max(0, min(len(rest), SMOKE_N_EVAL - len(ids)))
             ids += rng.choice(rest, size=n_more, replace=False).tolist()
         else:
-            ids = bc.load_panel(n_series=bc.N_SERIES, seed=bc.RANDOM_SEED)["unique_id"].unique()
+            ids = bc.load_panel(n_series=EVAL_N_SERIES, seed=bc.RANDOM_SEED)["unique_id"].unique()
             ids = ids.to_list()
         pd.DataFrame({"unique_id": sorted(ids)}).to_csv(EVAL_IDS_PATH, index=False)
     return pd.read_csv(EVAL_IDS_PATH)["unique_id"].astype(str).tolist()

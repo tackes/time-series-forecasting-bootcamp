@@ -368,3 +368,17 @@ forecasts exactly). Four covariate setups; the main one (`price`: `promo`, `disc
   weeks) costs 0.005–0.008 of median RMSSE for every model; no future prices at all costs
   0.11–0.15 more (0.65–0.69, level with Day 1). Rankings unchanged.
 - **Cost:** ≈ 5 minutes on one GPU (inference only, LightGBM refit on CPU).
+
+## Merged `main`: the v1 Day 2 update (27 Nov)
+<!-- DRAFT: Graeme to edit -->
+- **What moved:** the original labs, `bootcamp.py` and the v1 deck now live in
+  `day2_neural/v1/`. `gd_helpers.py` and `slides_full/make_figures.py` import from
+  `day2_neural/v1/code/`; `bc.RAW_DIR` is pointed at `results/day2_full/raw`.
+- **Sample pinned:** `bootcamp.N_SERIES` now defaults to 0 (all series), so the evaluation
+  sample uses `EVAL_N_SERIES = 2000`. Rebuilt from scratch, it matches `results/eval_ids.csv`.
+- **New dependency:** the harness imports `wape` from `utilsforecast`, first in 0.2.17
+  (5 Oct 2026); the venv was 0.2.15. Neuralforecast, statsforecast, mlforecast and
+  hierarchicalforecast all accept it.
+- **Same numbers:** cached forecasts (00, 10) re-scored with the old and new harness agree
+  exactly (WAPE to 1e-16). The new `summarise` adds `median_mase` and `bias_pct` columns.
+  No rerun needed.

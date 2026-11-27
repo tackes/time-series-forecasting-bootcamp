@@ -325,7 +325,7 @@ def crps():
 def demand_types():
     """Syntetos–Boylan quadrants for every eligible series (training weeks)."""
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "v1" / "code"))
     import bootcamp as bc
     info = bc.series_info(bc.load_panel()).to_pandas()
     colors = {"smooth": GREEN, "erratic": BLUE, "intermittent": ORANGE, "lumpy": INK}
