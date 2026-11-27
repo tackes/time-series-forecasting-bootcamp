@@ -1,0 +1,14 @@
+{
+  "name": "01_nhits_recipe",
+  "seed": 46335,
+  "alias": "NHITS_recipe",
+  "fit_seconds": 247.4,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.023678571428571427,
+  "oscillation": 0.016212990424372697,
+  "best_step": 10804,
+  "best_frac": 0.92200034135518,
+  "best_valid": 1078.0833740234375,
+  "final_over_best": 1.0181943166057477
+}

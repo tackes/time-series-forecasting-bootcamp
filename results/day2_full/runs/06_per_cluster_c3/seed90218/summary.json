@@ -1,0 +1,14 @@
+{
+  "name": "06_per_cluster_c3",
+  "seed": 90218,
+  "alias": "GFM_per_cluster",
+  "fit_seconds": 74.3,
+  "max_steps": 2359,
+  "n_train_series": 3471,
+  "neg_share": 0.009110787172011662,
+  "oscillation": 0.06796228555979217,
+  "best_step": 638,
+  "best_frac": 0.27045358202628234,
+  "best_valid": 2899.127197265625,
+  "final_over_best": 1.754217177937359
+}

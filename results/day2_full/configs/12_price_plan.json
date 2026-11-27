@@ -1,0 +1,206 @@
+{
+  "plans": [
+    "realized",
+    "no_fingerprint",
+    "no_change"
+  ],
+  "share_changed": {
+    "realized": 0.0,
+    "no_fingerprint": 0.04510714285714286,
+    "no_change": 0.91525
+  },
+  "noise_floor": 0.004767416900440408,
+  "check_realized_vs_board": {
+    "GFM": {
+      "here": 0.5259,
+      "board": 0.5259
+    },
+    "T0gamma": {
+      "here": 0.5018,
+      "board": 0.5018
+    },
+    "Chronos2": {
+      "here": 0.5122,
+      "board": 0.5122
+    },
+    "Timestral": {
+      "here": 0.5211,
+      "board": 0.5211
+    },
+    "LightGBM": {
+      "here": 0.572,
+      "board": 0.572
+    }
+  },
+  "median_rmsse": {
+    "Chronos2": {
+      "realized": 0.5122,
+      "no_fingerprint": 0.5178,
+      "no_change": 0.6695
+    },
+    "GFM": {
+      "realized": 0.5259,
+      "no_fingerprint": 0.5322,
+      "no_change": 0.6705
+    },
+    "LightGBM": {
+      "realized": 0.572,
+      "no_fingerprint": 0.5799,
+      "no_change": 0.6883
+    },
+    "T0gamma": {
+      "realized": 0.5018,
+      "no_fingerprint": 0.5068,
+      "no_change": 0.6495
+    },
+    "Timestral": {
+      "realized": 0.5211,
+      "no_fingerprint": 0.5275,
+      "no_change": 0.6662
+    }
+  },
+  "fingerprint_matters": {
+    "Chronos2": true,
+    "GFM": true,
+    "LightGBM": true,
+    "T0gamma": true,
+    "Timestral": true
+  },
+  "scores": [
+    {
+      "model": "GFM",
+      "plan": "realized",
+      "median_rmsse": 0.5259,
+      "mean_rmsse": 1.0933,
+      "wape": 0.409,
+      "mean forecast, zero-sale weeks": 207.1037,
+      "zero-sale weeks forecast < 1": 0.3557
+    },
+    {
+      "model": "GFM",
+      "plan": "no_fingerprint",
+      "median_rmsse": 0.5322,
+      "mean_rmsse": 1.1005,
+      "wape": 0.421,
+      "mean forecast, zero-sale weeks": 578.3667,
+      "zero-sale weeks forecast < 1": 0.2857
+    },
+    {
+      "model": "GFM",
+      "plan": "no_change",
+      "median_rmsse": 0.6705,
+      "mean_rmsse": 1.2437,
+      "wape": 0.5809,
+      "mean forecast, zero-sale weeks": 311.5348,
+      "zero-sale weeks forecast < 1": 0.3632
+    },
+    {
+      "model": "T0gamma",
+      "plan": "realized",
+      "median_rmsse": 0.5018,
+      "mean_rmsse": 1.0597,
+      "wape": 0.2053,
+      "mean forecast, zero-sale weeks": 766.2228,
+      "zero-sale weeks forecast < 1": 0.3332
+    },
+    {
+      "model": "T0gamma",
+      "plan": "no_fingerprint",
+      "median_rmsse": 0.5068,
+      "mean_rmsse": 1.0693,
+      "wape": 0.2095,
+      "mean forecast, zero-sale weeks": 908.34,
+      "zero-sale weeks forecast < 1": 0.2903
+    },
+    {
+      "model": "T0gamma",
+      "plan": "no_change",
+      "median_rmsse": 0.6495,
+      "mean_rmsse": 1.2047,
+      "wape": 0.3419,
+      "mean forecast, zero-sale weeks": 442.6298,
+      "zero-sale weeks forecast < 1": 0.3332
+    },
+    {
+      "model": "Chronos2",
+      "plan": "realized",
+      "median_rmsse": 0.5122,
+      "mean_rmsse": 1.0715,
+      "wape": 0.2164,
+      "mean forecast, zero-sale weeks": 554.021,
+      "zero-sale weeks forecast < 1": 0.3729
+    },
+    {
+      "model": "Chronos2",
+      "plan": "no_fingerprint",
+      "median_rmsse": 0.5178,
+      "mean_rmsse": 1.0804,
+      "wape": 0.2221,
+      "mean forecast, zero-sale weeks": 743.3611,
+      "zero-sale weeks forecast < 1": 0.3057
+    },
+    {
+      "model": "Chronos2",
+      "plan": "no_change",
+      "median_rmsse": 0.6695,
+      "mean_rmsse": 1.2274,
+      "wape": 0.3616,
+      "mean forecast, zero-sale weeks": 318.7856,
+      "zero-sale weeks forecast < 1": 0.3743
+    },
+    {
+      "model": "Timestral",
+      "plan": "realized",
+      "median_rmsse": 0.5211,
+      "mean_rmsse": 1.0362,
+      "wape": 0.2267,
+      "mean forecast, zero-sale weeks": 797.0125,
+      "zero-sale weeks forecast < 1": 0.3954
+    },
+    {
+      "model": "Timestral",
+      "plan": "no_fingerprint",
+      "median_rmsse": 0.5275,
+      "mean_rmsse": 1.0474,
+      "wape": 0.2294,
+      "mean forecast, zero-sale weeks": 863.7458,
+      "zero-sale weeks forecast < 1": 0.3486
+    },
+    {
+      "model": "Timestral",
+      "plan": "no_change",
+      "median_rmsse": 0.6662,
+      "mean_rmsse": 1.2079,
+      "wape": 0.35,
+      "mean forecast, zero-sale weeks": 192.0144,
+      "zero-sale weeks forecast < 1": 0.4462
+    },
+    {
+      "model": "LightGBM",
+      "plan": "realized",
+      "median_rmsse": 0.572,
+      "mean_rmsse": 1.1613,
+      "wape": 0.2974,
+      "mean forecast, zero-sale weeks": 1022.661,
+      "zero-sale weeks forecast < 1": 0.0822
+    },
+    {
+      "model": "LightGBM",
+      "plan": "no_fingerprint",
+      "median_rmsse": 0.5799,
+      "mean_rmsse": 1.1698,
+      "wape": 0.3006,
+      "mean forecast, zero-sale weeks": 1143.1185,
+      "zero-sale weeks forecast < 1": 0.0726
+    },
+    {
+      "model": "LightGBM",
+      "plan": "no_change",
+      "median_rmsse": 0.6883,
+      "mean_rmsse": 1.2939,
+      "wape": 0.4092,
+      "mean forecast, zero-sale weeks": 839.1946,
+      "zero-sale weeks forecast < 1": 0.0901
+    }
+  ]
+}

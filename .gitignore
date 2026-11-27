@@ -257,6 +257,7 @@ lightning_logs/
 mlruns/
 wandb/
 runs/
+!results/day2_full/runs/
 checkpoints/
 
 # Temporary forecasting outputs
@@ -294,3 +295,10 @@ catboost_info/
 
 # Superseded first-round leaderboards (kept locally, not published)
 results/day1/exploratory_v1/
+
+# code_full: saved models (hosted outside the repo) and smoke-test output
+models/
+results/day2_full_smoke/
+results/day2_full/gpu_logs/
+# code_full: caches superseded by the cleaned-price rerun (also in git history at b76e787)
+results/day2_full_archive_raw_prices/

@@ -1,0 +1,14 @@
+{
+  "name": "09_calibration",
+  "seed": 46335,
+  "alias": "GFM_selected",
+  "fit_seconds": 363.1,
+  "max_steps": 11718,
+  "n_train_series": 38236,
+  "neg_share": 0.047714285714285716,
+  "oscillation": 0.0075600591188995855,
+  "best_step": 9928,
+  "best_frac": 0.8472435569209763,
+  "best_valid": 3540.800048828125,
+  "final_over_best": 1.0046272811561818
+}

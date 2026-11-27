@@ -1,0 +1,14 @@
+{
+  "name": "04_valid_A_features",
+  "seed": 11207,
+  "alias": "NBEATSx_A_features",
+  "fit_seconds": 487.9,
+  "max_steps": 11718,
+  "n_train_series": 17241,
+  "neg_share": 0.03167857142857143,
+  "oscillation": 0.005793843388430605,
+  "best_step": 11096,
+  "best_frac": 0.9469192694999147,
+  "best_valid": 1435.006591796875,
+  "final_over_best": 1.0020720383368775
+}

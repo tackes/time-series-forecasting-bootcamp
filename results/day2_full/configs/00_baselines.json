@@ -1,0 +1,37 @@
+{
+  "n_train_series": 17241,
+  "n_eval_series": 2000,
+  "eval_ids_path": "results/eval_ids.csv",
+  "examples": {
+    "high": [
+      "13833_S1",
+      "1155_S1"
+    ],
+    "medium": [
+      "15539_S1",
+      "11566_S1"
+    ],
+    "low": [
+      "3703_S1",
+      "11467_S1"
+    ]
+  },
+  "baselines": [
+    "Naive",
+    "SeasonalNaive",
+    "AutoETS",
+    "LightGBM"
+  ],
+  "median_rmsse": {
+    "Naive": 0.7708,
+    "SeasonalNaive": 0.9289,
+    "AutoETS": 0.7081,
+    "LightGBM": 0.572
+  },
+  "mean_rmsse": {
+    "Naive": 1.3321,
+    "SeasonalNaive": 1.5248,
+    "AutoETS": 1.2851,
+    "LightGBM": 1.1613
+  }
+}

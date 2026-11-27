@@ -1,0 +1,14 @@
+{
+  "name": "05_trial_c2090cb5b9",
+  "seed": 11207,
+  "alias": "GFM_selected",
+  "fit_seconds": 408.3,
+  "max_steps": 11718,
+  "n_train_series": 38251,
+  "neg_share": 0.04253571428571429,
+  "oscillation": 0.13199079521484375,
+  "best_step": 4088,
+  "best_frac": 0.34886499402628435,
+  "best_valid": 3772.80712890625,
+  "final_over_best": 1.0487922477732758
+}

@@ -1,0 +1,14 @@
+{
+  "name": "04_valid_C_cpi_over",
+  "seed": 11207,
+  "alias": "NBEATSx_C_cpi_over",
+  "fit_seconds": 560.2,
+  "max_steps": 11718,
+  "n_train_series": 38251,
+  "neg_share": 0.024392857142857143,
+  "oscillation": 0.00419687098271622,
+  "best_step": 10804,
+  "best_frac": 0.92200034135518,
+  "best_valid": 3742.170166015625,
+  "final_over_best": 1.0070231927613966
+}

@@ -1,0 +1,134 @@
+{
+  "selected_from": "05c_clean_floor_clip",
+  "features": [
+    "log_mean_units",
+    "zero_share",
+    "log_cv2_nonzero",
+    "promo_share",
+    "discount_share",
+    "recent_trend",
+    "yearly_acf"
+  ],
+  "k_range": [
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "k": 5,
+  "silhouette": [
+    {
+      "k": 4,
+      "silhouette": 0.2644,
+      "inertia": 66928.0106
+    },
+    {
+      "k": 5,
+      "silhouette": 0.2662,
+      "inertia": 60578.397
+    },
+    {
+      "k": 6,
+      "silhouette": 0.2191,
+      "inertia": 54881.6624
+    },
+    {
+      "k": 7,
+      "silhouette": 0.2295,
+      "inertia": 50268.6134
+    },
+    {
+      "k": 8,
+      "silhouette": 0.2178,
+      "inertia": 47199.6447
+    }
+  ],
+  "cluster_sizes": {
+    "0": 2475,
+    "1": 3335,
+    "2": 7164,
+    "3": 1926,
+    "4": 2341
+  },
+  "cluster_max_steps": {
+    "0": 3126,
+    "1": 12165,
+    "2": 7978,
+    "3": 2359,
+    "4": 2000
+  },
+  "seeds": [
+    46335,
+    11207,
+    90218
+  ],
+  "median_rmsse": {
+    "GFM_pooled": 0.52,
+    "GFM_cluster_static": 0.5263,
+    "GFM_per_cluster": 0.5417
+  },
+  "mean_rmsse": {
+    "GFM_pooled": 1.0784,
+    "GFM_cluster_static": 1.0919,
+    "GFM_per_cluster": 1.098
+  },
+  "seed_medians": [
+    {
+      "arm": "GFM_cluster_static",
+      "seed": "46335",
+      "median_rmsse": 0.5332
+    },
+    {
+      "arm": "GFM_cluster_static",
+      "seed": "11207",
+      "median_rmsse": 0.5392
+    },
+    {
+      "arm": "GFM_cluster_static",
+      "seed": "90218",
+      "median_rmsse": 0.5401
+    },
+    {
+      "arm": "GFM_per_cluster",
+      "seed": "46335",
+      "median_rmsse": 0.5393
+    },
+    {
+      "arm": "GFM_per_cluster",
+      "seed": "11207",
+      "median_rmsse": 0.5504
+    },
+    {
+      "arm": "GFM_per_cluster",
+      "seed": "90218",
+      "median_rmsse": 0.5448
+    }
+  ],
+  "median_rmsse_by_cluster": {
+    "GFM_pooled": {
+      "0": 0.5372,
+      "1": 0.3987,
+      "2": 0.573,
+      "3": 0.3041,
+      "4": 0.8039
+    },
+    "GFM_cluster_static": {
+      "0": 0.533,
+      "1": 0.3875,
+      "2": 0.5866,
+      "3": 0.3151,
+      "4": 0.7949
+    },
+    "GFM_per_cluster": {
+      "0": 0.5508,
+      "1": 0.4131,
+      "2": 0.5863,
+      "3": 0.3615,
+      "4": 0.839
+    }
+  },
+  "noise_floor": 0.004767416900440408,
+  "rule": "a cluster arm wins only if its test median RMSSE beats pooled by > noise floor",
+  "winner": "GFM_pooled"
+}

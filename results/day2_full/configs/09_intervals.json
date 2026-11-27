@@ -1,0 +1,133 @@
+{
+  "levels": [
+    80,
+    95
+  ],
+  "quantile_model": {
+    "loss": "HuberMQLoss",
+    "valid_loss": "MQLoss",
+    "seeds": [
+      46335
+    ],
+    "saved_model": "09_quantile",
+    "y_shift": 1.0
+  },
+  "conformal": {
+    "point_model": "GFM_selected",
+    "calibration": {
+      "train_before": "2025-01-08",
+      "window": "valid",
+      "seeds": [
+        46335,
+        11207,
+        90218
+      ],
+      "n_errors": 28000
+    },
+    "score": "signed error / mean absolute week-on-week change",
+    "groups": {
+      "GFM_conf_step": [
+        "step"
+      ],
+      "GFM_conf_class": [
+        "sale_class",
+        "step"
+      ]
+    },
+    "min_group": 40,
+    "n_small_groups": 56
+  },
+  "scores": {
+    "GFM_quantile": {
+      "coverage_80": 0.8498,
+      "width_80": 2.4364,
+      "interval_score_80": 3.1728,
+      "coverage_95": 0.9781,
+      "width_95": 5.3862,
+      "interval_score_95": 5.8909,
+      "crps_median": 0.3155,
+      "crps_mean": 1.6874
+    },
+    "GFM_conf_step": {
+      "coverage_80": 0.7911,
+      "width_80": 2.3592,
+      "interval_score_80": 3.3048,
+      "coverage_95": 0.9326,
+      "width_95": 11.9314,
+      "interval_score_95": 36.3763,
+      "crps_median": 0.6369,
+      "crps_mean": 2.5361
+    },
+    "GFM_conf_class": {
+      "coverage_80": 0.7942,
+      "width_80": 2.4442,
+      "interval_score_80": 3.4223,
+      "coverage_95": 0.9347,
+      "width_95": 11.1083,
+      "interval_score_95": 67.5875,
+      "crps_median": 0.9664,
+      "crps_mean": 2.8799
+    },
+    "ETS_conf": {
+      "coverage_80": 0.6836,
+      "width_80": 2.0845,
+      "interval_score_80": 4.0186,
+      "coverage_95": 0.7455,
+      "width_95": 2.5199,
+      "interval_score_95": 6.8854,
+      "crps_median": 0.3852,
+      "crps_mean": 2.5539
+    }
+  },
+  "coverage_80_by_class": {
+    "GFM_quantile": {
+      "A": 0.857,
+      "B": 0.879,
+      "C": 0.835,
+      "D": 0.786,
+      "E": 0.776,
+      "F": 0.872,
+      "G": 0.879,
+      "H": 0.842,
+      "I": 0.855,
+      "J": 0.85
+    },
+    "GFM_conf_step": {
+      "A": 0.679,
+      "B": 0.907,
+      "C": 0.925,
+      "D": 0.917,
+      "E": 0.865,
+      "F": 0.885,
+      "G": 0.871,
+      "H": 0.845,
+      "I": 0.864,
+      "J": 0.752
+    },
+    "GFM_conf_class": {
+      "A": 0.679,
+      "B": 0.907,
+      "C": 0.925,
+      "D": 0.917,
+      "E": 0.803,
+      "F": 0.832,
+      "G": 0.799,
+      "H": 0.81,
+      "I": 0.813,
+      "J": 0.781
+    },
+    "ETS_conf": {
+      "A": 0.5,
+      "B": 0.75,
+      "C": 0.774,
+      "D": 0.756,
+      "E": 0.708,
+      "F": 0.666,
+      "G": 0.683,
+      "H": 0.725,
+      "I": 0.706,
+      "J": 0.672
+    }
+  },
+  "best_interval_score_80": "GFM_quantile"
+}
