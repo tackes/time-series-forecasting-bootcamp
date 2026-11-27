@@ -15,11 +15,16 @@ What changed from the v1 deck:
 - the PDF and the 53-slide `day2_slides_full.md` are not in this copy (they carry v1 numbers);
   the theory slides and figures are the v1 deck's, unchanged.
 
-Rebuild:
+**`day2_slides.pptx` is now edited by hand** (27 Nov 2026: slides 1–21 rewritten, 37 slides in
+all), so it is the master copy. `day2_slides.md` is the earlier generated source and no longer
+matches it. Don't rebuild the pptx from the markdown, or the hand edits are lost; write a
+rebuilt deck to another file name instead.
+
+Figures:
 
     .venv/bin/python day2_neural/slides_full/make_result_figures.py   # result charts
     .venv/bin/python day2_neural/slides_full/make_figures.py          # theory figures
-    node day2_neural/slides_full/build_pptx.js day2_slides.md day2_slides.pptx   # from this folder
+    node day2_neural/slides_full/build_pptx.js day2_slides.md day2_slides_generated.pptx   # from this folder
 
 `build_pptx.js` needs `pptxgenjs@3.12.0`, patched as its first comment says (write the
 paragraph properties for the first run of a line only). A PDF needs `marp-cli` and a browser:
