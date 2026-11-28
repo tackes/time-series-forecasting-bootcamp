@@ -39,6 +39,32 @@ def test_scenario_pool_keeps_leakage_out():
     assert scenario_pool(tier_of, "future_drivers", ["c", "b"]) == ["b"]
 
 
+def test_usable_models_and_strategy_information():
+    from shared.model_selection import information_of, usable_models
+    tiers = {"e": "partial_future_drivers", "c": LEAKAGE, "b": "future_drivers", "a": "history", "d": "historical_drivers"}
+    fcst = pd.DataFrame({"model": list(tiers) * 2, "information_tier": list(tiers.values()) * 2})
+    assert usable_models(fcst, future_drivers=False) == ["a", "d"]
+    assert usable_models(fcst, future_drivers=True) == ["a", "b", "d", "e"]
+    assert information_of(fcst, ["a", "d"]) == "historical_drivers"
+    assert information_of(fcst, ["a"]) == "history"
+
+
+def test_leakage_diagnostics_never_enter_selections_or_ensembles():
+    from shared.diagnostics import LEAKAGE_MODELS
+    from shared.model_selection import usable_models
+    fcst = load_forecasts()
+    assert set(LEAKAGE_MODELS) <= set(fcst.model)
+    for future_drivers in (False, True):
+        assert not set(LEAKAGE_MODELS) & set(usable_models(fcst, future_drivers))
+    strategies = fcst[fcst.experiment == "07_model_selection"].drop_duplicates("model").set_index("model").information_tier
+    assert set(strategies[strategies == LEAKAGE].index) == {"Best_in_hindsight_sku"}
+
+
+def test_saved_forecasts_use_only_known_tiers():
+    for path in (FOLDER / "forecasts").glob("*.parquet"):
+        assert set(pd.read_parquet(path, columns=["information_tier"]).information_tier) <= set(TIERS), path.name
+
+
 def expected_tier(model):
     """Tier implied by a model's name, for individual models and the strategies of notebook 07."""
     if model.endswith("_leaky") or model.startswith("Best_in_hindsight"):

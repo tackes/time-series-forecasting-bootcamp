@@ -83,6 +83,8 @@ def load_forecasts(names=None):
     files = [f for f in files if names is None or f.stem in names]
     fcst = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     assert not fcst.duplicated(KEY).any(), "same model saved twice"
+    unknown = sorted(set(fcst["information_tier"]) - set(TIERS))
+    assert not unknown, f"unknown information tier {unknown}: rerun the notebook that saved it with the current shared code"
     return fcst
 
 

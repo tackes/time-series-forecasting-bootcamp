@@ -10,7 +10,7 @@ The session takes the notebooks in numerical order.
 |---|---|---|---|
 | 1 | `01_baselines` | all | 15 min |
 | 2 | `02_ml_baseline` | all | 25 min |
-| 3 | `03_exogenous_features` | sections 1 to 6: static features, future drivers, historical drivers, planned or realized price | 35 min |
+| 3 | `03_exogenous_features` | sections 1 to 10: price and promotion features, future drivers, historical drivers, results | 35 min |
 | 4 | `04_global_vs_specialized` | up to "Optional" | 20 min |
 | 5 | `05_horizon_strategies` | all | 20 min |
 | 6 | `06_objectives` | sections 1 to 7 | 25 min |
@@ -29,13 +29,14 @@ Each notebook reads the forecasts that earlier notebooks saved in `results/day1/
 
 - `03b_promotion_spikes`: what happens around promotions, and spike-adjusted training with the promotion plan.
 - `03c_behavior_features`: demand-distribution, promotion-response, price-response and hierarchy-demand features on top of the historical drivers of 03.
-- Optional sections of 03, 04 and 07: a four-week promotion plan, CatBoost, partitioned models, hierarchy-level selection, candidate pools, ensembles.
+- `03d_catboost_and_categorical_features`: CatBoost against LightGBM on the same features, with item attributes as native categories.
+- Optional sections of 03, 04 and 07: a four-week promotion plan, the leakage diagnostics kept for Day 2 comparisons, partitioned models, and in 07 sections A to F (selection levels and costs, penalties, candidate pools, hindsight bound, ensembles). Notebook 07's executed outputs can be read without running them.
 
 ## Running the notebooks
 
 - **Colab**: open a notebook and run the first cell. It clones the repository, installs the pinned packages and moves to the repository root. The repository must be public.
 - **Locally**: install `requirements.txt` (Python 3.12), start Jupyter in the repository root or in `day1_ml/`, and run the cells in order.
 
-Full run times on the development machine (all sections, including the optional ones): 01 under a minute, 02 about one, 03 about 11 (about three without the optional partial-plan and CatBoost sections), 03b about one, 03c about five, 04 about eight, 05 about three, 06 about two, 07 about 36 (about five for the live sections) and 08 under two.
+Full run times from a fresh kernel on the development machine (all sections, including the optional ones): 01 under a minute, 02 under a minute, 03 about three, 03b about one, 03c about three and a half, 03d about nine, 04 about three and a half, 05 about one and a half, 06 about two, 07 about 19 (about four for sections 1 to 5) and 08 about one. The whole sequence takes about 45 minutes.
 
 Results, the leaderboard and the Day 2 handoff files are described in `results/day1/README.md`; the shared code in `shared/README.md`.

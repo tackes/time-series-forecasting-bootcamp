@@ -6,9 +6,10 @@
 |---|---|
 | `leaderboard.csv` | notebook 08: every model and strategy on the final 14 weeks, with `information`, `information_tier` and the scenario flags `without_future_drivers` and `with_future_drivers` |
 | `forecasts/01_baselines.parquet` ... `07_model_selection.parquet` | notebooks 01 to 07 (`03b_promotion_spikes` from notebook 03b, `03c_behavior_features` from 03c) |
-| `forecasts/03_exogenous.parquet` | notebook 03: `lgbm_categorical`, the five `lgbm_future_*` plan models, `lgbm_hist_drivers`, and the leakage diagnostics `lgbm_realized_price_leaky` and `lgbm_day2_covariates_leaky` |
+| `forecasts/03_exogenous.parquet` | notebook 03: `lgbm_categorical`, the five `lgbm_future_*` plan models and `lgbm_hist_drivers` |
+| `forecasts/03_leakage_diagnostics.parquet` | notebook 03, optional section 12 (`shared/diagnostics.py`): the leakage diagnostics `lgbm_realized_price_leaky` and `lgbm_day2_covariates_leaky`, for comparison with Day 2 models that use realized-price covariates. Never selection candidates |
 | `forecasts/03_partial_plan.parquet` | notebook 03, optional: `lgbm_partial_plan4`, the plan for the first four weeks only |
-| `forecasts/03_catboost.parquet` | notebook 03, optional: three CatBoost models, `lgbm_hist_exog` and `lgbm_exog_categorical` |
+| `forecasts/03_catboost.parquet` | notebook 03d: three CatBoost models, `lgbm_hist_exog` and `lgbm_exog_categorical` |
 | `forecasts/04_partition_granularity.parquet` | notebook 04, optional section: one LightGBM per department, class or subclass (groups under 10 series use the global model) |
 | `forecasts/04_limited_history.parquet` | notebook 04: 400 products, shortened history. Partial coverage; not in the leaderboards |
 | `forecasts/06_l1_features.parquet` | notebook 06, section 7: the main notebook 03 models refit with the L1 objective |

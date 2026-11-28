@@ -43,7 +43,7 @@ A business scenario decides which tiers a deployable forecast may use (`SCENARIO
 | `no_future_drivers` | a manufacturer without the retailer's price and promotion plans | `history`, `historical_drivers` |
 | `future_drivers` | a retailer forecasting its own sales | everything up to `future_drivers` |
 
-Leakage diagnostics are never eligible. Model selection (notebook 07) builds each scenario's candidate pool with `scenario_pool`, so a strategy is compared only with models whose information requirements the scenario meets. Rows with different information may sit side by side to show what the information is worth, never to compare architectures.
+Leakage diagnostics are never eligible. Model selection (notebook 07) builds each scenario's candidate pool with `usable_models` in `model_selection.py` (a wrapper around `eligible`), so a strategy is compared only with models whose information requirements the scenario meets. Rows with different information may sit side by side to show what the information is worth, never to compare architectures.
 
 ## Driver features (`features.py`)
 
@@ -96,7 +96,30 @@ APC is custom (`apc`), because it compares forecasts from two origins and `utils
 
 `model, information_tier, experiment, wape, accuracy, bias, mean_rmsse, median_rmsse, apc, apc_median, apc_coverage, coverage, eligible_series, series, rows, mae, zero_base`
 
-`breakdown` runs `score` by horizon or by a segment column. Notebook 07's selection cost calls `evaluate()` with `mae` and `bias` directly, with the selection group as the id.
+`breakdown` runs `score` by horizon or by a segment column.
+
+`load_forecasts` rejects a file whose `information_tier` is not in `TIERS`, so a file saved by an older version of this code fails on load instead of being relabeled in a notebook.
+
+## Model selection (`model_selection.py`)
+
+The selection and averaging machinery of notebook 07. Every function takes its data as arguments.
+
+| function | does |
+|---|---|
+| `usable_models(forecasts, future_drivers)` | the models a deployable forecast may use without, or with, the price and promotion plan |
+| `hierarchy(panel)` | portfolio, department, class, subclass and SKU of every series |
+| `selection_evidence(forecasts, actuals, models)` | development forecasts of a candidate pool with actuals, on the rows every candidate forecasts |
+| `cost_table`, `choose` | selection cost per group and candidate (`evaluate()` with `mae` and `bias`, the group as the id), and the chosen model per series with the portfolio fallback |
+| `strategy` | the chosen forecasts at each decision date, using only the runs completed by then (`completed_runs`) |
+| `average`, `top3`, `best_individual` | equal-weight averages, the three best models on given runs, the best single model on a decision date |
+| `wape_by_cutoff` | WAPE per model and cutoff, each cutoff on its own common rows |
+| `ensemble_evidence`, `residuals`, `ensemble_rules`, `mean_correlation` | the ensemble experiments: leave-one-out top-three evidence, error matrices, and the diversity rules C to F |
+
+A strategy or average takes the highest tier of its candidates (`information_of`).
+
+## Leakage diagnostics (`diagnostics.py`)
+
+`leakage_diagnostics(panel, cutoffs)` fits the two models that read the realized selling price, `lgbm_realized_price_leaky` and `lgbm_day2_covariates_leaky` (notebook 03, optional section 12), with the notebook 03 model setup. Their forecasts carry `leakage_diagnostic`, so `usable_models` never offers them to model selection; they exist for like-for-like comparisons with Day 2 models whose covariates come from the realized price.
 
 ## Using it from Day 2
 
@@ -122,5 +145,5 @@ python -m pytest shared
 
 - `test_framework.py`: WAPE, bias and RMSSE by hand; WAPE and bias as portfolio ratios, not SKU averages; grouped scores against direct `utilsforecast` calls; RMSSE against `utilsforecast.rmsse`, including the undefined-scale case; RMSSE scale from history up to the cutoff only; scoring on common rows; APC edge cases and common support; conversion of the committed baseline outputs.
 - `test_information.py`: historical drivers and their `X_df` unchanged when everything after the cutoff is scrambled; future frames with one row per series and forecast week, the expected columns and no missing plan values; planned drivers unchanged when the realized selling price outside promotions is scrambled (the diagnostics must change); the partial plan.
-- `test_tiers.py`: tier order and propagation, scenario eligibility and pools, tier labels on saved forecasts, every selection's SKU forecasts drawn from eligible candidates, evidence completeness on each decision date, the Day 2 files and leaderboard flags consistent with the saved forecasts.
-- `test_leakage.py`: reruns the modeling cells of notebooks 03 (with its optional sections), 03b and 03c after scrambling sales, realized prices or the plan after the cutoff, and checks each forecast against its own tier; reruns notebook 07 after scrambling sales after a decision date (slow, several minutes).
+- `test_tiers.py`: tier order and propagation, scenario eligibility and pools, tier labels on saved forecasts, every selection's SKU forecasts drawn from eligible candidates, leakage diagnostics absent from every selection and ensemble, evidence completeness on each decision date, the Day 2 files and leaderboard flags consistent with the saved forecasts.
+- `test_leakage.py`: reruns the modeling cells of notebooks 03 (with its optional sections, including the leakage diagnostics), 03b, 03c and 03d after scrambling sales, realized prices or the plan after the cutoff, and checks each forecast against its own tier; reruns notebook 07 after scrambling sales after a decision date (slow, several minutes).

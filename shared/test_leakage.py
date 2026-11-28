@@ -26,6 +26,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SAVED = ROOT / "results" / "day1" / "forecasts"
 HOOK = "panel = add_drivers(panel)"
+LOAD = "panel = load_panel()"      # hook for notebooks that build the driver columns step by step
 SKIP = ("google.colab", "plt.", "save_forecasts(", "leaderboard(", "breakdown(", "origin_wape", "score(")
 STATIC = ("history", "historical_drivers")
 PLANNED = ("partial_future_drivers", "future_drivers")
@@ -39,24 +40,39 @@ def saved_forecasts_unchanged():
     assert {f.name: f.stat().st_mtime_ns for f in SAVED.glob("*.parquet")} == before
 
 
+CELL = "\n# --- next cell ---\n"
+
+
 def notebook_source(name, stop, skip=SKIP):
     """Code cells up to the one containing `stop`, without plotting, saving and scoring cells."""
     cells = json.loads((ROOT / "day1_ml" / name).read_text(encoding="utf8"))["cells"]
     code = ["".join(c["source"]) for c in cells if c["cell_type"] == "code"]
     code = code[: next(i for i, c in enumerate(code) if stop in c) + 1]
-    return "\n".join(c for c in code if stop in c or not any(marker in c for marker in skip))
+    return CELL.join(c for c in code if stop in c or not any(marker in c for marker in skip))
 
 
 def run(source):
+    """Execute the cells in order.
+
+    An exploratory cell may use a name defined only in a skipped plotting or scoring cell. Such a NameError is
+    tolerated in every cell except the last (the one that produces the results); a modeling cell that fails this
+    way still fails the test, because the forecasts it should produce are then missing.
+    """
     os.chdir(ROOT)
     sys.path.insert(0, str(ROOT))
     namespace = {"__name__": "notebook", "display": lambda *args, **kwargs: None}
-    exec(source, namespace)
+    cells = source.split(CELL)
+    for i, cell in enumerate(cells):
+        try:
+            exec(cell, namespace)
+        except NameError:
+            if i == len(cells) - 1:
+                raise
     return namespace
 
 
 def scramble(kind):
-    """Code that scrambles the raw panel before add_drivers."""
+    """Code that scrambles the raw panel, before any driver column is built from it."""
     after = {"sales and realized price": 0, "plan after 4 weeks": 4, "everything": 0}[kind]
     return f'''
 rng = np.random.default_rng(1)
@@ -71,25 +87,28 @@ if kind in ("plan after 4 weeks", "everything"):
     panel.loc[late, "is_promotional"] = rng.random(late.sum()) < 0.3
     panel.loc[late, "regular_price"] = panel.loc[late, "regular_price"] * rng.uniform(0.8, 1.25, late.sum())
     panel.loc[late, "sale_price"] = panel.loc[late, "regular_price"] * np.where(panel.loc[late, "is_promotional"], rng.uniform(0.5, 0.95, late.sum()), 1.0)
-{HOOK}
 '''
 
 
-def forecasts(name, stop, results, kind=None, extra=""):
+def forecasts(name, stop, results, kind=None, extra="", hook=HOOK):
     source = notebook_source(name, stop)
-    assert HOOK in source, name
+    assert hook in source, name
     source = source.replace("for cutoff in ALL_CUTOFFS:", "for cutoff in [TEST_CUTOFF]:")
-    source = source.replace(HOOK, (scramble(kind) if kind else HOOK) + extra, 1)
+    scrambled = scramble(kind) if kind else ""
+    if hook == LOAD:   # right after loading, before the notebook derives anything from the panel
+        source = source.replace(hook, hook + "\n" + scrambled + extra, 1)
+    else:              # just before add_drivers
+        source = source.replace(hook, scrambled + hook + extra, 1)
     namespace = run(source)
     out = pd.concat([namespace[r] for r in results])
     return out.set_index(["unique_id", "ds", "model"]).yhat, out.drop_duplicates("model").set_index("model").information_tier
 
 
-def check(name, stop, results, expectations, extra=""):
+def check(name, stop, results, expectations, extra="", hook=HOOK):
     """expectations: scramble kind -> {tier: True if forecasts must move, False if they must not, absent: either}."""
-    normal, tiers = forecasts(name, stop, results, extra=extra)
+    normal, tiers = forecasts(name, stop, results, extra=extra, hook=hook)
     for kind, expected in expectations.items():
-        changed, _ = forecasts(name, stop, results, kind, extra=extra)
+        changed, _ = forecasts(name, stop, results, kind, extra=extra, hook=hook)
         for model, tier in tiers.items():
             if tier not in expected:
                 continue
@@ -108,14 +127,14 @@ WITHOUT_PLAN = {"everything": {"history": False, "historical_drivers": False}}
 
 def test_exogenous_notebook_uses_only_what_each_tier_allows():
     # best_future is chosen on the development scores, which this rerun skips; use the largest feature set
-    check("03_exogenous_features.ipynb", "partial_forecasts = pd.concat(partial_forecasts)",
-          ["forecasts", "leak_forecasts", "partial_forecasts"], EVERY_TIER,
-          extra='\nbest_future = "lgbm_future_price_levels"\n')
+    # notebook 03 builds its driver columns step by step, so the raw panel is scrambled right after loading
+    check("03_exogenous_features.ipynb", "leak_forecasts = leakage_diagnostics(panel, ALL_CUTOFFS)",
+          ["forecasts", "partial_forecasts", "leak_forecasts"], EVERY_TIER,
+          extra='\nbest_future = "lgbm_future_price_levels"\n', hook=LOAD)
 
 
 def test_catboost_models_use_no_future_information():
-    check("03_exogenous_features.ipynb", "boost_forecasts = pd.concat(boost_forecasts)", ["boost_forecasts"], WITHOUT_PLAN,
-          extra='\nbest_future = "lgbm_future_price_levels"\n')
+    check("03d_catboost_and_categorical_features.ipynb", "boost_forecasts = pd.concat(boost_forecasts)", ["boost_forecasts"], WITHOUT_PLAN)
 
 
 def test_spike_models_read_the_plan_and_nothing_else():
